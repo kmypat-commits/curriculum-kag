@@ -21,6 +21,36 @@ from app.planner.verifier import TOTAL_CREDIT_TOLERANCE, verify_curriculum_plan
 from app.planner.goso import merge_goso_items
 
 
+def _remove_item_once(items: List[Dict], item: Dict) -> bool:
+    """Remove an item only if it is still present in the source list."""
+    try:
+        items.remove(item)
+        return True
+    except ValueError:
+        return False
+
+
+def _move_item(schedule: Dict[int, List[Dict]], source: int, target: int, item: Dict) -> bool:
+    """Move an item between semesters without crashing on stale candidates."""
+    if source == target:
+        return False
+    if not _remove_item_once(schedule[source], item):
+        return False
+    schedule[target].append(item)
+    return True
+
+
+def _swap_items(schedule: Dict[int, List[Dict]], left_semester: int, left_item: Dict, right_semester: int, right_item: Dict) -> bool:
+    """Swap two semester items only when both are still present."""
+    if left_item not in schedule[left_semester] or right_item not in schedule[right_semester]:
+        return False
+    schedule[left_semester].remove(left_item)
+    schedule[right_semester].remove(right_item)
+    schedule[left_semester].append(right_item)
+    schedule[right_semester].append(left_item)
+    return True
+
+
 def _title_key(title: str | None) -> str:
     """Canonical course title used to prevent semantic duplicates."""
     value = title or ""
@@ -519,9 +549,9 @@ def _relocate_bounded_bridges(schedule: Dict[int, List[Dict]], num_semesters: in
             target = candidates[0]
             if target == current_semester:
                 continue
-            schedule[current_semester].remove(item)
+            if not _move_item(schedule, current_semester, target, item):
+                continue
             loads[current_semester] -= credits
-            schedule[target].append(item)
             loads[target] += credits
     return schedule
 
@@ -585,8 +615,8 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     child_semesters = [course_semesters.get(child_id, num_semesters + 1) for child_id in child_map.get(cid, [])]
                     if child_semesters and min(child_semesters) <= target:
                         continue
-                    schedule[donor].remove(item)
-                    schedule[target].append(item)
+                    if not _move_item(schedule, donor, target, item):
+                        continue
                     moved = True
                     break
                 if moved:
@@ -629,8 +659,8 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     child_semesters = [course_semesters.get(child_id, num_semesters + 1) for child_id in child_map.get(cid, [])]
                     if child_semesters and min(child_semesters) <= target:
                         continue
-                    schedule[donor].remove(item)
-                    schedule[target].append(item)
+                    if not _move_item(schedule, donor, target, item):
+                        continue
                     moved = True
                     break
                 if moved:
@@ -699,10 +729,8 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                             overrides[int(target_item["course_id"])] = donor
                         if not can_place(donor_item, target, overrides) or not can_place(target_item, donor, overrides):
                             continue
-                        schedule[donor].remove(donor_item)
-                        schedule[target].remove(target_item)
-                        schedule[donor].append(target_item)
-                        schedule[target].append(donor_item)
+                        if not _swap_items(schedule, donor, donor_item, target, target_item):
+                            continue
                         swapped = True
                         break
                     if swapped:
@@ -782,8 +810,8 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
                     continue
                 targets.sort(key=lambda semester: (abs(semester - int(item.get("recommended_semester") or semester)), current.get(semester, 0)))
                 target = targets[0]
-                schedule[donor].remove(item)
-                schedule[target].append(item)
+                if not _move_item(schedule, donor, target, item):
+                    continue
                 current[donor] -= credits
                 current[target] += credits
                 moved = True
@@ -855,10 +883,11 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
                                     overrides[int(displaced["course_id"])] = receiver
                                 if not can_place(donor_item, target, overrides) or not can_place(displaced, receiver, overrides):
                                     continue
-                                schedule[donor].remove(donor_item)
-                                schedule[target].remove(displaced)
-                                schedule[target].append(donor_item)
-                                schedule[receiver].append(displaced)
+                                if not _move_item(schedule, donor, target, donor_item):
+                                    continue
+                                if not _move_item(schedule, target, receiver, displaced):
+                                    _move_item(schedule, target, donor, donor_item)
+                                    continue
                                 cascaded = True
                                 break
                             if cascaded:
@@ -970,8 +999,8 @@ def _repair_semester_appropriateness(
                     and loads[target] + credits <= upper_load
                 ):
                     candidate = {semester: list(items) for semester, items in schedule.items()}
-                    candidate[current].remove(item)
-                    candidate[target].append(item)
+                    if not _move_item(candidate, current, target, item):
+                        continue
                     if prerequisites_valid(candidate):
                         schedule = candidate
                         loads[current] -= credits
@@ -993,10 +1022,8 @@ def _repair_semester_appropriateness(
                     if not (other_lower <= current <= other_upper):
                         continue
                     candidate = {semester: list(items) for semester, items in schedule.items()}
-                    candidate[current].remove(item)
-                    candidate[target].remove(other)
-                    candidate[current].append(other)
-                    candidate[target].append(item)
+                    if not _swap_items(candidate, current, item, target, other):
+                        continue
                     if prerequisites_valid(candidate):
                         schedule = candidate
                         loads[current] = new_current_load
@@ -1059,12 +1086,12 @@ def _repair_semester_appropriateness(
                             ):
                                 continue
                             candidate = {semester: list(items) for semester, items in schedule.items()}
-                            candidate[current].remove(item)
-                            candidate[target].remove(displaced)
-                            candidate[receiver].remove(third)
-                            candidate[target].append(item)
-                            candidate[receiver].append(displaced)
-                            candidate[current].append(third)
+                            if not _move_item(candidate, current, target, item):
+                                continue
+                            if not _move_item(candidate, target, receiver, displaced):
+                                continue
+                            if not _move_item(candidate, receiver, current, third):
+                                continue
                             if not prerequisites_valid(candidate):
                                 continue
                             schedule = candidate
@@ -1356,8 +1383,7 @@ def _repair_underloaded_semesters_with_bridges(
         )
         if whole_bridge_donors:
             donor_semester, whole_bridge = whole_bridge_donors[0]
-            schedule[donor_semester].remove(whole_bridge)
-            schedule[target_semester].append(whole_bridge)
+            _move_item(schedule, donor_semester, target_semester, whole_bridge)
             current = loads()
             need = max(0, lower - current.get(target_semester, 0))
             if need <= 0:
@@ -4274,7 +4300,8 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                     child_semesters = [semester_by_course.get(d, num_semesters + 1) for d in dependents.get(item.get("course_id"), [])]
                     if parent_semesters and max(parent_semesters) >= target_semester: continue
                     if child_semesters and min(child_semesters) <= target_semester: continue
-                    schedule[donor_semester].remove(item); schedule[target_semester].append(item)
+                    if not _move_item(schedule, donor_semester, target_semester, item):
+                        continue
                     loads[donor_semester] -= credits; loads[target_semester] += credits
                     changed = True; break
                 if changed: break

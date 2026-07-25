@@ -9,12 +9,6 @@ from app.config import settings
 SentenceTransformer = None
 SBERT_INSTALLED = importlib.util.find_spec("sentence_transformers") is not None
 HAS_TRANSFORMERS = False
-if settings.ENABLE_SBERT:
-    try:
-        from sentence_transformers import SentenceTransformer
-        HAS_TRANSFORMERS = True
-    except ImportError:
-        SentenceTransformer = None
 
 class EmbeddingService:
     def __init__(self):
@@ -27,20 +21,27 @@ class EmbeddingService:
         self._cache_limit = 8192
 
     def _ensure_model_loaded(self):
-        if self._load_attempted or not (HAS_TRANSFORMERS and settings.ENABLE_SBERT):
+        if self._load_attempted or not (SBERT_INSTALLED and settings.ENABLE_SBERT):
             return
         self._load_attempted = True
         self._load_model()
 
     def _load_model(self):
+        global SentenceTransformer, HAS_TRANSFORMERS
         try:
+            if SentenceTransformer is None:
+                from sentence_transformers import SentenceTransformer as _SentenceTransformer
+                SentenceTransformer = _SentenceTransformer
+                HAS_TRANSFORMERS = True
             device = None if settings.SBERT_DEVICE == "auto" else settings.SBERT_DEVICE
             self.model = SentenceTransformer(
                 self.model_name,
                 device=device,
                 local_files_only=True,
             )
-        except Exception as exc: self.load_error = str(exc); self.model = None
+        except BaseException as exc:
+            self.load_error = str(exc)
+            self.model = None
     def encode(self, text: str) -> np.ndarray:
         if not text or not text.strip(): return np.zeros(settings.EMBEDDING_DIMENSION, dtype=np.float32)
         cache_key = hashlib.sha256(text.encode("utf-8")).hexdigest()
