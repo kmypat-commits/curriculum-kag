@@ -2453,12 +2453,17 @@ async def bridge_replacement_apply_all(
         course = courses[candidate["course_id"]]
         previous_bridge_id = item.bridge_module_id
         used_course_ids.add(course.id)
+        item.course_id = course.id
+        item.bridge_module_id = None
+        item.credits = int(course.credits or item.credits)
+        item.course_type = course.cycle_component
+        item.prerequisites_snapshot = []
         replacements.append({
             "bridge_item_id": item.id,
             "previous_bridge_module_id": previous_bridge_id,
             "course_id": course.id,
             "course_title": course.title,
-            "credits": int(course.credits or item.credits),
+            "credits": int(item.credits or course.credits or 0),
         })
 
     if replacements:
@@ -2468,6 +2473,7 @@ async def bridge_replacement_apply_all(
             confirmed[str(replacement["previous_bridge_module_id"])] = replacement["course_id"]
         constraints["confirmed_bridge_replacements"] = confirmed
         plan.project_version.project.constraints_json = constraints
+        plan.metrics_json = dict(plan.metrics_json or {})
         db.commit()
     return {
         "status": "replaced" if replacements else "no_candidates",
@@ -2481,7 +2487,7 @@ async def bridge_replacement_apply_all(
         "metrics_recalculated": False,
         "metrics": None,
         "message": (
-            f"Заменено bridge-модулей: {len(replacements)}. Перегенерируйте A/B/C для полного пересчёта."
+            f"Заменено bridge-модулей в текущем плане: {len(replacements)}. Перегенерируйте A/B/C для полного пересчёта метрик."
             if replacements else
             "Сильных уникальных замен пока нет. Bridge-модули оставлены без изменений."
         ),
