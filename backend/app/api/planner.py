@@ -1804,7 +1804,20 @@ async def get_variants(
                     return max(float(row.score or 0), float(evidence.get("epvo_expert_score") or 0), corrected)
 
                 trustworthy_matches.sort(key=effective_match_score, reverse=True)
-                for row in trustworthy_matches[:3]:
+                display_matches = trustworthy_matches[:3]
+                if not display_matches and match_rows:
+                    display_matches = sorted(
+                        [
+                            row for row in match_rows
+                            if not (
+                                latest_feedback_by_pair.get((row.course_id, row.lo_id))
+                                and latest_feedback_by_pair[(row.course_id, row.lo_id)].verdict == "incorrect"
+                            )
+                        ],
+                        key=effective_match_score,
+                        reverse=True,
+                    )[:1]
+                for row in display_matches:
                     lo = lo_by_id.get(row.lo_id)
                     if not lo:
                         continue
@@ -1824,6 +1837,7 @@ async def get_variants(
                         "effective_score": effective_score,
                         "ai_score": ai_score,
                         "expert_score": expert_score,
+                        "weak_evidence": row not in trustworthy_matches,
                         "source": evidence.get("source") or evidence.get("label") or row.model_name,
                         "expert_feedback": (
                             {

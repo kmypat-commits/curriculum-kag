@@ -1415,6 +1415,11 @@ export default function PlanBuilder() {
                                                                                                     {localText('bridge', 'bridge', 'bridge')}
                                                                                                 </small>
                                                                                             )}
+                                                                                            {lo.weak_evidence && (
+                                                                                                <small style={{ marginLeft: 5, color: '#b26a00' }}>
+                                                                                                    {localText('слабая связь', 'әлсіз байланыс', 'weak link')}
+                                                                                                </small>
+                                                                                            )}
                                                                                             {(matchFeedbackState[`${c.course_id}:${lo.lo_id}`] || lo.expert_feedback?.verdict) && (
                                                                                                 <small style={{ marginLeft: 5, color: '#1b5e20' }}>✓ {matchFeedbackState[`${c.course_id}:${lo.lo_id}`] || lo.expert_feedback?.verdict}</small>
                                                                                             )}
