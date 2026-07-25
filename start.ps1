@@ -169,10 +169,18 @@ if (-not $configuredDatabaseUrl) {
         }
     }
 }
-if ($configuredDatabaseUrl -match '^postgresql' -and -not (Test-NetConnection -ComputerName localhost -Port 5432 -InformationLevel Quiet -WarningAction SilentlyContinue)) {
-    $sqlitePath = (Join-Path $backendDir "curriculum_kag.db").Replace('\', '/')
-    $env:DATABASE_URL = "sqlite:///$sqlitePath"
-    Write-Host "PostgreSQL is unavailable; using the local SQLite database." -ForegroundColor Yellow
+if ($configuredDatabaseUrl -match '^postgresql') {
+    $postgresHost = "localhost"
+    $postgresPort = 5432
+    if ($configuredDatabaseUrl -match '@([^/:]+)(?::(\d+))?/') {
+        $postgresHost = $Matches[1]
+        if ($Matches[2]) { $postgresPort = [int]$Matches[2] }
+    }
+    if (-not (Test-NetConnection -ComputerName $postgresHost -Port $postgresPort -InformationLevel Quiet -WarningAction SilentlyContinue)) {
+        $sqlitePath = (Join-Path $backendDir "curriculum_kag.db").Replace('\', '/')
+        $env:DATABASE_URL = "sqlite:///$sqlitePath"
+        Write-Host "PostgreSQL ${postgresHost}:${postgresPort} is unavailable; using the local SQLite database." -ForegroundColor Yellow
+    }
 }
 
 $pids = @{}
