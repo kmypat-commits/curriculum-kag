@@ -2771,7 +2771,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             selected_ids.add(candidate.id)
             for code in still_missing:
                 coverage[code] = max(coverage.get(code, 0.0), float(evidence["max"]))
-            missing = [code for code, score in coverage.items() if score < 0.5]
+            missing = [code for code, score in coverage.items() if score < required_coverage]
             if not missing:
                 return _unique_items_by_title(normalized)
 
