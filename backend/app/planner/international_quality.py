@@ -11,6 +11,19 @@ from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 
 
+def _is_kz_regulatory_course(course: Course) -> bool:
+    """ГОСО РК units are mandatory scaffolding, not profile mismatches."""
+    code = str(course.course_id or "").upper()
+    ctype = str(course.cycle_component or "").lower()
+    title = str(course.title or "").lower()
+    markers = (
+        "goso", "practice", "final", "attestation", "research",
+        "практика", "итоговая", "аттестация", "диплом", "диссертац",
+        "нирм", "нирд", "эирм", "эирд",
+    )
+    return code.startswith("GOSO-KZ-") or any(marker in ctype or marker in title for marker in markers)
+
+
 def _score_item(passed: bool, name: str, evidence: str, recommendation: str) -> Dict:
     return {
         "name": name,
@@ -78,16 +91,18 @@ def project_course_relevance(project_version: ProjectVersion, courses: List[Cour
     goso_applies = str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
     regulatory_ids = {
         int(course.id) for course in courses
-        if goso_applies and str(course.course_id or "").startswith("GOSO-KZ-")
+        if goso_applies and _is_kz_regulatory_course(course)
     }
     relevant_ids = scope_ids | lo_ids_by_course | domain_ids | regulatory_ids
+    unsupported_ids = course_ids - relevant_ids
     return {
         "relevant_ids": relevant_ids,
         "scope_ids": scope_ids,
         "lo_ids": lo_ids_by_course,
         "domain_ids": domain_ids,
         "regulatory_ids": regulatory_ids,
-        "unsupported_ids": course_ids - relevant_ids,
+        "unsupported_ids": unsupported_ids,
+        "replaceable_unsupported_ids": unsupported_ids - regulatory_ids,
     }
 
 

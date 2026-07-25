@@ -1139,8 +1139,10 @@ async def apply_quality_improvements(
         int(value) for value in (constraints.get("excluded_course_ids") or [])
         if str(value).isdigit()
     }
-    newly_excluded = set(relevance["unsupported_ids"]) - old_excluded
-    constraints["excluded_course_ids"] = sorted(old_excluded | set(relevance["unsupported_ids"]))
+    replaceable_unsupported = set(relevance.get("replaceable_unsupported_ids") or relevance["unsupported_ids"])
+    protected_regulatory = set(relevance.get("regulatory_ids") or set())
+    newly_excluded = replaceable_unsupported - old_excluded
+    constraints["excluded_course_ids"] = sorted(old_excluded | replaceable_unsupported)
     project.constraints_json = constraints
 
     bridge_code = f"QUALITY_BRIDGE_{project_version_id}"
@@ -1172,6 +1174,8 @@ async def apply_quality_improvements(
         db.add(bridge)
         db.flush()
 
+    requires_rebuild = bool(newly_excluded or bridge_created)
+
     db.add(AuditEvent(
         user_id=current_user.id,
         action="apply_international_quality_improvements",
@@ -1182,6 +1186,8 @@ async def apply_quality_improvements(
             "bridge_created": bridge_created,
             "bridge_module_id": bridge.id if bridge else None,
             "excluded_irrelevant_course_ids": sorted(newly_excluded),
+            "protected_regulatory_course_ids": sorted(protected_regulatory),
+            "requires_rebuild": requires_rebuild,
         },
     ))
     db.commit()
@@ -1190,7 +1196,9 @@ async def apply_quality_improvements(
         "bridge_created": bridge_created,
         "bridge_module_id": bridge.id if bridge else None,
         "excluded_irrelevant_courses": len(newly_excluded),
-        "requires_rebuild": True,
+        "protected_regulatory_courses": len(protected_regulatory),
+        "still_requires_expert_review": len(replaceable_unsupported) == 0 and bool(relevance["unsupported_ids"]),
+        "requires_rebuild": requires_rebuild,
     }
 
 

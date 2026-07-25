@@ -327,7 +327,18 @@ export default function PlanBuilder() {
             setBuilding(true)
             setBuildProgress(5)
             setBuildStatus({ state: 'running', stage: 'epvo_repository', progress: 5 })
-            await axios.post(`/api/planner/${versionId}/apply-quality-improvements`)
+            const applyResponse = await axios.post(`/api/planner/${versionId}/apply-quality-improvements`)
+            if (!applyResponse.data?.requires_rebuild) {
+                await fetchVariants(versionId)
+                setBuildProgress(100)
+                setBuildStatus({ state: 'complete', stage: 'complete', progress: 100 })
+                const protectedCount = applyResponse.data?.protected_regulatory_courses || 0
+                const message = protectedCount
+                    ? `${t('quality_improvements_applied')} ${protectedCount} ГОСО-компонентов защищены; пересборка не требуется.`
+                    : `${t('quality_improvements_applied')} Пересборка не требуется.`
+                setQualityNotice({ type: 'success', text: message })
+                return
+            }
             const progressTimer = window.setInterval(async () => {
                 try { await pollBuildStatus(versionId) } catch (_) { /* build request handles errors */ }
             }, 1200)
