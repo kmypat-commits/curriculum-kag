@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+os.environ.setdefault(
+    "DATABASE_URL",
+    f"sqlite:///{Path(__file__).resolve().parents[1] / 'curriculum_kag.db'}",
+)
 
 from sqlalchemy import create_engine, func, select, text
 from app.database import Base
