@@ -1,6 +1,8 @@
 param(
     [switch]$NoBrowser,
-    [switch]$Rebuild
+    [switch]$Rebuild,
+    [ValidateSet("auto", "sqlite", "postgres-shadow", "postgres")]
+    [string]$Database = "auto"
 )
 
 $ErrorActionPreference = "Stop"
@@ -155,6 +157,15 @@ Build-FrontendIfNeeded
 
 # Keep the one-click local launch usable when the optional PostgreSQL service is
 # not running. Environment variables override backend/.env for the child process.
+$sqlitePath = (Join-Path $backendDir "curriculum_kag.db").Replace('\', '/')
+if ($Database -eq "sqlite") {
+    $env:DATABASE_URL = "sqlite:///$sqlitePath"
+    Write-Host "Using SQLite database." -ForegroundColor Cyan
+}
+elseif ($Database -eq "postgres-shadow") {
+    $env:DATABASE_URL = "postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5433/curriculum_kag_shadow"
+    Write-Host "Using shadow PostgreSQL database on localhost:5433." -ForegroundColor Cyan
+}
 $configuredDatabaseUrl = $env:DATABASE_URL
 if (-not $configuredDatabaseUrl) {
     $envFiles = @(
@@ -177,7 +188,9 @@ if ($configuredDatabaseUrl -match '^postgresql') {
         if ($Matches[2]) { $postgresPort = [int]$Matches[2] }
     }
     if (-not (Test-NetConnection -ComputerName $postgresHost -Port $postgresPort -InformationLevel Quiet -WarningAction SilentlyContinue)) {
-        $sqlitePath = (Join-Path $backendDir "curriculum_kag.db").Replace('\', '/')
+        if ($Database -in @("postgres", "postgres-shadow")) {
+            throw "PostgreSQL ${postgresHost}:${postgresPort} is unavailable. Start Docker/PostgreSQL or use -Database sqlite."
+        }
         $env:DATABASE_URL = "sqlite:///$sqlitePath"
         Write-Host "PostgreSQL ${postgresHost}:${postgresPort} is unavailable; using the local SQLite database." -ForegroundColor Yellow
     }
