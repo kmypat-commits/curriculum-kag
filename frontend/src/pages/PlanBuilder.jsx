@@ -1224,6 +1224,43 @@ export default function PlanBuilder() {
                                         {qualityNotice.text}
                                     </div>
                                 )}
+                                {currentPlan.metrics.international_quality.relevance && (
+                                    <div style={{
+                                        marginBottom: '14px',
+                                        padding: '12px',
+                                        borderRadius: '10px',
+                                        background: '#f5f7fb',
+                                        border: '1px solid #dfe7f3',
+                                        fontSize: '13px',
+                                        color: '#344054'
+                                    }}>
+                                        {(() => {
+                                            const rel = currentPlan.metrics.international_quality.relevance
+                                            return (
+                                                <>
+                                                    <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                                                        {localText('Что проверяет система', 'Жүйе нені тексереді', 'What the system checks')}
+                                                    </div>
+                                                    <div>
+                                                        {localText('Релевантные дисциплины', 'Сәйкес пәндер', 'Relevant courses')}: {rel.relevant_courses}/{rel.total_courses}.
+                                                        {' '}{localText('Из них защищены как ГОСО РК', 'Оның ішінде ҚР МЖМБС ретінде қорғалған', 'Protected as RK regulatory')}: {rel.regulatory_protected_courses}.
+                                                        {' '}{localText('Можно заменить без риска', 'Қауіпсіз ауыстыруға болады', 'Safely replaceable')}: {rel.replaceable_unsupported_courses}.
+                                                    </div>
+                                                    {rel.regulatory_examples?.length > 0 && (
+                                                        <div style={{ marginTop: 6, color: '#475467' }}>
+                                                            {localText('ГОСО не удаляется', 'МЖМБС жойылмайды', 'Regulatory courses are not removed')}: {rel.regulatory_examples.slice(0, 3).map(row => row.title).join('; ')}
+                                                        </div>
+                                                    )}
+                                                    {rel.unsupported_examples?.length > 0 && (
+                                                        <div style={{ marginTop: 6, color: '#8a4b00' }}>
+                                                            {localText('Кандидаты на замену', 'Ауыстыруға үміткерлер', 'Replacement candidates')}: {rel.unsupported_examples.slice(0, 3).map(row => row.title).join('; ')}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )
+                                        })()}
+                                    </div>
+                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
                                     {currentPlan.metrics.international_quality.checks?.map((check, idx) => (
                                         <div key={idx} style={{

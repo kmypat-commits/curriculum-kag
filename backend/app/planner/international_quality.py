@@ -135,6 +135,37 @@ def evaluate_international_quality(
     bridges = db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids or [-1])).all()
 
     relevance = project_course_relevance(project_version, courses, db)
+    courses_by_id = {int(course.id): course for course in courses}
+    relevance_details = {
+        "relevant_courses": len(relevance["relevant_ids"]),
+        "total_courses": len(courses),
+        "epvo_scope_courses": len(relevance["scope_ids"]),
+        "lo_supported_courses": len(relevance["lo_ids"]),
+        "domain_supported_courses": len(relevance["domain_ids"]),
+        "regulatory_protected_courses": len(relevance["regulatory_ids"]),
+        "unsupported_courses": len(relevance["unsupported_ids"]),
+        "replaceable_unsupported_courses": len(relevance["replaceable_unsupported_ids"]),
+        "unsupported_examples": [
+            {
+                "id": course_id,
+                "title": courses_by_id[course_id].title,
+                "credits": courses_by_id[course_id].credits,
+                "cycle_component": courses_by_id[course_id].cycle_component,
+            }
+            for course_id in sorted(relevance["replaceable_unsupported_ids"])
+            if course_id in courses_by_id
+        ][:8],
+        "regulatory_examples": [
+            {
+                "id": course_id,
+                "title": courses_by_id[course_id].title,
+                "credits": courses_by_id[course_id].credits,
+                "cycle_component": courses_by_id[course_id].cycle_component,
+            }
+            for course_id in sorted(relevance["regulatory_ids"])
+            if course_id in courses_by_id
+        ][:8],
+    }
     interdisciplinary_count = len(bridges) + sum(
         1 for course in courses if "interdisciplinary" in (course.domain or "").lower()
     )
@@ -246,6 +277,7 @@ def evaluate_international_quality(
     return {
         "score": score,
         "passed": score >= 80,
+        "relevance": relevance_details,
         "frameworks": [
             "Outcome-Based Education",
             "ABET-style continuous improvement",

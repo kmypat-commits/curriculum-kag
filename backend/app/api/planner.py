@@ -1108,7 +1108,7 @@ async def apply_quality_improvements(
         raise HTTPException(status_code=404, detail="Версия проекта не найдена")
 
     from app.models.plan import Plan, PlanItem
-    from app.planner.international_quality import project_course_relevance
+    from app.planner.international_quality import evaluate_international_quality, project_course_relevance
 
     project = version.project
     plan = db.query(Plan).filter(
@@ -1175,6 +1175,22 @@ async def apply_quality_improvements(
         db.flush()
 
     requires_rebuild = bool(newly_excluded or bridge_created)
+    metrics_refreshed = False
+    if plan and not requires_rebuild:
+        plan_items = db.query(PlanItem).filter(PlanItem.plan_id == plan.id).all()
+        schedule = {}
+        for item in plan_items:
+            schedule.setdefault(int(item.semester or 1), []).append({
+                "course_id": item.course_id,
+                "bridge_module_id": item.bridge_module_id,
+                "credits": int(item.credits or 0),
+            })
+        metrics = dict(plan.metrics_json or {})
+        verification = metrics.get("verification") or {}
+        if verification:
+            metrics["international_quality"] = evaluate_international_quality(schedule, version, db, verification)
+            plan.metrics_json = metrics
+            metrics_refreshed = True
 
     db.add(AuditEvent(
         user_id=current_user.id,
@@ -1188,6 +1204,7 @@ async def apply_quality_improvements(
             "excluded_irrelevant_course_ids": sorted(newly_excluded),
             "protected_regulatory_course_ids": sorted(protected_regulatory),
             "requires_rebuild": requires_rebuild,
+            "metrics_refreshed": metrics_refreshed,
         },
     ))
     db.commit()
@@ -1199,6 +1216,7 @@ async def apply_quality_improvements(
         "protected_regulatory_courses": len(protected_regulatory),
         "still_requires_expert_review": len(replaceable_unsupported) == 0 and bool(relevance["unsupported_ids"]),
         "requires_rebuild": requires_rebuild,
+        "metrics_refreshed": metrics_refreshed,
     }
 
 
