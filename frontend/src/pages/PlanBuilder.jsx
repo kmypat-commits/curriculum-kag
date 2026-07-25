@@ -529,6 +529,22 @@ export default function PlanBuilder() {
         }
     }
 
+    const confirmSuspiciousCourse = async (courseId, title) => {
+        const versionId = project?.latest_version?.id
+        if (!versionId || !courseId) return
+        try {
+            const response = await axios.post(`/api/planner/${versionId}/confirm-suspicious-course`, {
+                course_id: courseId,
+                reason: 'expert_confirmed_in_planner',
+            })
+            setExcludedCourses(current => ({ ...current, [courseId]: false }))
+            setBuildNotice({ type: 'success', text: response.data?.message || `${title}: подтверждено экспертом` })
+            await fetchVariants(versionId)
+        } catch (err) {
+            setBuildNotice({ type: 'error', text: localText('Не удалось подтвердить дисциплину', 'Пәнді растау мүмкін болмады', 'Could not confirm the course') + ': ' + (errorMessage(err)) })
+        }
+    }
+
     const loadCourseReplacements = async courseId => {
         const versionId = project?.latest_version?.id
         if (!versionId) return
@@ -1082,6 +1098,13 @@ export default function PlanBuilder() {
                                                             {matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'confirmed' ? '✓ ' : ''}
                                                             {localText('Подтвердить связь', 'Байланысты растау', 'Confirm link')}
                                                         </button>}
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ padding: '5px 8px', fontSize: 11, borderColor: '#2e7d32', color: '#2e7d32' }}
+                                                            onClick={() => confirmSuspiciousCourse(row.course_id, row.title)}
+                                                        >
+                                                            {localText('Оставить в плане', 'Жоспарда қалдыру', 'Keep in plan')}
+                                                        </button>
                                                         <button
                                                             className="btn btn-secondary"
                                                             style={{ padding: '5px 8px', fontSize: 11, borderColor: '#c17b00' }}

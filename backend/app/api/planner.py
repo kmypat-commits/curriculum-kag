@@ -1574,6 +1574,10 @@ async def get_variants(
         items = items_by_plan.get(plan.id, [])
         project = plan.project_version.project
         constraints = project.constraints_json or {}
+        confirmed_suspicious_course_ids = {
+            int(value) for value in (constraints.get("confirmed_suspicious_course_ids") or [])
+            if str(value).isdigit()
+        }
         primary_group = str(constraints.get("group_code") or "").strip()
         secondary_group = str(constraints.get("secondary_group_code") or "").strip()
         primary_direction = str(constraints.get("direction_code") or "").strip()
@@ -1754,7 +1758,12 @@ async def get_variants(
                     "too_early_for_complexity" in reasons
                     or ("not_core_for_program" in reasons and "weak_lo_evidence" in reasons)
                 )
-                if reasons and high_risk and not academic_metadata["protected_by_goso"]:
+                if (
+                    reasons
+                    and high_risk
+                    and not academic_metadata["protected_by_goso"]
+                    and int(item.course_id) not in confirmed_suspicious_course_ids
+                ):
                     reason_details = {
                         "wrong_education_level": "Дисциплина относится к другому уровню образования в ЕПВО.",
                         "not_core_for_program": "Дисциплина не относится к выбранному направлению/группе ОП как ядро программы.",
@@ -2633,6 +2642,58 @@ async def update_course_exclusion(
             if excluded else
             "Исключение снято. Дисциплина снова может участвовать в следующем построении."
         ),
+    }
+
+
+@router.post("/{project_version_id}/confirm-suspicious-course")
+async def confirm_suspicious_course(
+    project_version_id: int,
+    course_id: int = Body(...),
+    reason: str = Body("expert_confirmed"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Expert-confirm a course that the automatic audit marked as suspicious."""
+    version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Версия проекта не найдена")
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Дисциплина не найдена")
+    constraints = dict(version.project.constraints_json or {})
+    confirmed = {
+        int(value) for value in (constraints.get("confirmed_suspicious_course_ids") or [])
+        if str(value).isdigit()
+    }
+    excluded = {
+        int(value) for value in (constraints.get("excluded_course_ids") or [])
+        if str(value).isdigit()
+    }
+    confirmed.add(course.id)
+    excluded.discard(course.id)
+    constraints["confirmed_suspicious_course_ids"] = sorted(confirmed)
+    constraints["excluded_course_ids"] = sorted(excluded)
+    version.project.constraints_json = constraints
+    db.add(AuditEvent(
+        user_id=current_user.id,
+        action="confirm_suspicious_course",
+        entity_type="course",
+        entity_id=course.id,
+        details_json={
+            "project_version_id": project_version_id,
+            "course_title": course.title,
+            "reason": reason,
+        },
+    ))
+    db.commit()
+    return {
+        "status": "confirmed",
+        "course_id": course.id,
+        "course_title": course.title,
+        "confirmed_suspicious_course_ids": sorted(confirmed),
+        "excluded_course_ids": sorted(excluded),
+        "requires_regeneration": False,
+        "message": "Эксперт подтвердил дисциплину. Она останется в плане и больше не будет показываться как сомнительная.",
     }
 
 
