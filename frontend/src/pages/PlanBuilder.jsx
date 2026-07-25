@@ -1049,6 +1049,18 @@ export default function PlanBuilder() {
                                                     {row.top_lo_code && <div style={{ marginTop: 4, color: '#5d6470' }} title={row.top_lo_text || row.top_lo_code}>
                                                         {localText('Лучшая связь', 'Ең жақсы байланыс', 'Best link')}: {row.top_lo_code} · {Math.round((row.max_score || 0) * 100)}%
                                                     </div>}
+                                                    {row.reason_details?.length > 0 && (
+                                                        <div style={{ marginTop: 4, color: '#6d4c41', lineHeight: 1.35 }}>
+                                                            {row.reason_details.map((reason, reasonIndex) => (
+                                                                <div key={reasonIndex}>• {reason}</div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {row.recommendation && (
+                                                        <div style={{ marginTop: 4, color: '#39704c', lineHeight: 1.35 }}>
+                                                            {row.recommendation}
+                                                        </div>
+                                                    )}
                                                     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 6 }}>
                                                         {row.top_lo_id && <button
                                                             className="btn btn-secondary"

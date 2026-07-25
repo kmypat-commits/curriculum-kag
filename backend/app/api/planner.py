@@ -1683,6 +1683,12 @@ async def get_variants(
                     or ("not_core_for_program" in reasons and "weak_lo_evidence" in reasons)
                 )
                 if reasons and high_risk and not academic_metadata["protected_by_goso"]:
+                    reason_details = {
+                        "wrong_education_level": "Дисциплина относится к другому уровню образования в ЕПВО.",
+                        "not_core_for_program": "Дисциплина не относится к выбранному направлению/группе ОП как ядро программы.",
+                        "weak_lo_evidence": "Нет достаточно сильной связи с профессиональными результатами обучения программы.",
+                        "too_early_for_complexity": "Дисциплина выглядит слишком сложной для указанного семестра.",
+                    }
                     suspicious_courses.append({
                         "course_id": item.course_id,
                         "title": title,
@@ -1697,6 +1703,8 @@ async def get_variants(
                         "top_lo_code": lo_by_id.get(top_match.lo_id).lo_code if top_match and lo_by_id.get(top_match.lo_id) else None,
                         "top_lo_text": lo_by_id.get(top_match.lo_id).lo_text if top_match and lo_by_id.get(top_match.lo_id) else None,
                         "reasons": reasons,
+                        "reason_details": [reason_details.get(reason, reason) for reason in reasons],
+                        "recommendation": "Подтвердите связь экспертом, перенесите дисциплину в более поздний семестр или замените её на дисциплину ЕПВО того же уровня и направления.",
                     })
                 top_matches = []
                 trustworthy_matches = []
@@ -2791,11 +2799,12 @@ async def course_replacement_apply(
     db.commit()
     return {
         "status": "replaced",
+        "updated_plan_id": plan.id,
         "course_id": course_id,
         "replacement_course_id": replacement.id,
         "replacement_title": replacement.title,
         "requires_regeneration": True,
-        "message": "Замена подтверждена. Она сохранена для следующей генерации A/B/C.",
+        "message": "Замена применена в текущем плане и сохранена для следующей генерации A/B/C.",
     }
 
 
