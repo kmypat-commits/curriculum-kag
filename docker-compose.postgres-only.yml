@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: curriculum-kag-postgres-shadow
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-curriculum_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-curriculum_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-curriculum_kag_shadow}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_shadow_data:/var/lib/postgresql/data
+      - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-curriculum_user} -d ${POSTGRES_DB:-curriculum_kag_shadow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_shadow_data:

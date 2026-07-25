@@ -1,0 +1,64 @@
+from pydantic_settings import BaseSettings
+from typing import List
+
+
+class Settings(BaseSettings):
+    # Database
+    DATABASE_URL: str
+    
+    # Security
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    # Plan generation and expert review sessions can legitimately last hours.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    
+    # Embedding Model
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    EMBEDDING_DIMENSION: int = 768
+    ENABLE_SBERT: bool = False
+    SBERT_DEVICE: str = "auto"
+    EPVO_AI_ENABLED: bool = False
+    EPVO_AI_THRESHOLD: float = 0.3449310730397701
+    EPVO_AI_TEMPERATURE: float = 0.08
+    EPVO_RANKER_ENABLED: bool = False
+    EPVO_RANKER_MODEL_NAME: str = "models/epvo-sbert-mined-triplets-6k"
+    EPVO_RANKER_DEVICE: str = "cpu"
+    # Frozen A/B decision 2026-07-17: validation selected weight 0.0.
+    # A non-zero value is experimental and must be justified by a new report.
+    EPVO_RANKER_WEIGHT: float = 0.0
+    
+    # LLM Configuration
+    LLM_PROVIDER: str = "openai"  # openai, anthropic, local
+    LLM_API_KEY: str = ""
+    LLM_MODEL_NAME: str = "gpt-4"
+    LLM_BASE_URL: str = ""  # For local models
+    
+    # KAG Configuration
+    SIMILARITY_THRESHOLD: float = 0.82
+    COVERAGE_THRESHOLD: float = 0.60
+    MAX_BRIDGE_MODULES: int = 5
+    TOP_K_RETRIEVAL: int = 20
+    # Profiled production defaults. NSGA-II ranking is O(G * P^2); the old
+    # 200x100 settings spent minutes ranking near-identical curricula. 36x50
+    # retained 100/100 quality and distinct A/B/C on the 240-credit control
+    # programme while reducing the complete dry-run to 22.91 seconds.
+    NSGA2_POPULATION: int = 36
+    NSGA2_GENERATIONS: int = 50
+    NSGA2_CROSSOVER_PROBABILITY: float = 0.9
+    NSGA2_MUTATION_PROBABILITY: float = 0.1
+    
+    # Localization
+    DEFAULT_LANGUAGE: str = "ru"
+    SUPPORTED_LANGUAGES: List[str] = ["ru", "kz", "en"]
+    
+    # Application
+    APP_NAME: str = "Curriculum-KAG Generator"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = False
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+
+settings = Settings()

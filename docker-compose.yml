@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: curriculum-kag-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-curriculum_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-curriculum_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-curriculum_kag}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U curriculum_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: curriculum-kag-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-curriculum_user}:${POSTGRES_PASSWORD:-curriculum_pass}@postgres:5432/${POSTGRES_DB:-curriculum_kag}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: curriculum-kag-frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+
+volumes:
+  postgres_data:

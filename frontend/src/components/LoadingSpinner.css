@@ -1,0 +1,10 @@
+.loading-container{display:flex;justify-content:center;align-items:center;width:100%;padding:40px;color:#1d1d1f}
+.loading-container.full-page{position:fixed;inset:0;height:100vh;z-index:9999;background:rgba(245,245,247,.88);backdrop-filter:saturate(160%) blur(24px)}
+.spinner-wrapper{display:flex;flex-direction:column;align-items:center}
+.loading-mark{width:68px;height:68px;display:flex;align-items:center;justify-content:center;gap:1px;border-radius:20px;color:#fff;background:#1d1d1f;box-shadow:0 18px 45px rgba(0,0,0,.16);font-size:20px;font-weight:750;letter-spacing:-.08em;animation:mark-breathe 1.8s ease-in-out infinite}
+.loading-text{margin-top:20px;color:#6e6e73;font-size:14px;font-weight:600;letter-spacing:0}
+.loading-progress{width:112px;height:3px;margin-top:14px;overflow:hidden;border-radius:99px;background:rgba(0,0,0,.08)}
+.loading-progress span{display:block;width:42%;height:100%;border-radius:inherit;background:#0071e3;animation:progress-slide 1.2s ease-in-out infinite}
+@keyframes mark-breathe{50%{transform:scale(.96);opacity:.86}}
+@keyframes progress-slide{0%{transform:translateX(-115%)}100%{transform:translateX(280%)}}
+@media(prefers-reduced-motion:reduce){.loading-mark,.loading-progress span{animation:none}}

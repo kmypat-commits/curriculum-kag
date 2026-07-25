@@ -1,0 +1,3 @@
+@echo off
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$root='%~dp0backend\experiment-results'; $extract=Join-Path $root 'epvo-expert-labels\manifest.json'; $metrics=Join-Path $root 'epvo-expert-baseline\metrics.json'; if(Test-Path $extract){$m=Get-Content $extract -Raw | ConvertFrom-Json; Write-Host ('Expert labels: '+$m.counts.labeled_pairs+' / pairs: '+$m.counts.pairs)}else{Write-Host 'Expert-label extraction is still running'}; if(Test-Path $metrics){$q=Get-Content $metrics -Raw | ConvertFrom-Json; Write-Host ('AI baseline ready. Test MAE: '+$q.test.mae+'; level accuracy: '+[math]::Round(100*$q.test.level_accuracy,1)+'%%')}else{Write-Host 'AI baseline training is still running'}"
+pause
