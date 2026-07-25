@@ -44,6 +44,45 @@ def sqlite_count(db_path: Path, table: str) -> int | None:
             return None
 
 
+def sqlite_valid_count(db_path: Path, table: str) -> int | None:
+    valid_sql = {
+        "embeddings": (
+            "SELECT COUNT(*) FROM embeddings e "
+            "JOIN course_chunks c ON e.chunk_id = c.id"
+        ),
+        "match_scores": (
+            "SELECT COUNT(*) FROM match_scores m "
+            "JOIN project_versions v ON m.project_version_id = v.id "
+            "LEFT JOIN courses c ON m.course_id = c.id "
+            "LEFT JOIN learning_outcomes lo ON m.lo_id = lo.id "
+            "LEFT JOIN course_chunks ch ON m.chunk_id = ch.id "
+            "WHERE (m.course_id IS NULL OR c.id IS NOT NULL) "
+            "AND (m.lo_id IS NULL OR lo.id IS NOT NULL) "
+            "AND (m.chunk_id IS NULL OR ch.id IS NOT NULL)"
+        ),
+        "match_feedback": (
+            "SELECT COUNT(*) FROM match_feedback mf "
+            "JOIN project_versions v ON mf.project_version_id = v.id "
+            "JOIN courses c ON mf.course_id = c.id "
+            "JOIN learning_outcomes lo ON mf.lo_id = lo.id"
+        ),
+        "bridge_modules": (
+            "SELECT COUNT(*) FROM bridge_modules b "
+            "JOIN project_versions v ON b.project_version_id = v.id "
+            "LEFT JOIN users u ON b.created_by = u.id "
+            "WHERE b.created_by IS NULL OR u.id IS NOT NULL"
+        ),
+    }
+    sql = valid_sql.get(table)
+    if not sql:
+        return sqlite_count(db_path, table)
+    with sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True) as db:
+        try:
+            return int(db.execute(sql).fetchone()[0])
+        except sqlite3.Error:
+            return None
+
+
 def postgres_engine(url: str):
     try:
         from sqlalchemy import create_engine, text
@@ -88,13 +127,20 @@ def main() -> int:
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        row_passed = sqlite_rows == postgres_rows
+        sqlite_valid_rows = sqlite_valid_count(args.sqlite, table)
+        row_passed = sqlite_rows == postgres_rows or sqlite_valid_rows == postgres_rows
         passed = passed and row_passed
         rows.append(
             {
                 "table": table,
                 "sqlite": sqlite_rows,
+                "sqlite_valid": sqlite_valid_rows,
                 "postgres": postgres_rows,
+                "skipped_orphan_rows": (
+                    sqlite_rows - sqlite_valid_rows
+                    if isinstance(sqlite_rows, int) and isinstance(sqlite_valid_rows, int)
+                    else None
+                ),
                 "passed": row_passed,
             }
         )

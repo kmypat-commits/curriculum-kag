@@ -32,10 +32,12 @@
 
 ## Текущий процесс
 
-- Миграция SQLite → PostgreSQL shadow выполняется в фоне.
-- Лог миграции:
+- Миграция SQLite → PostgreSQL shadow завершена успешно.
+- Итоговый лог миграции:
   `.runtime/postgres-migration.combined.log`.
-- Прогресс можно смотреть командой:
+- Валидная сверка counts сохранена в:
+  `.runtime/sqlite-postgres-counts-valid.json`.
+- Прогресс/активность PostgreSQL можно смотреть командой:
 
 ```powershell
 $env:PYTHONPATH='D:\curriculum-kag\curriculum-kag\backend\venv\Lib\site-packages'
@@ -44,13 +46,23 @@ C:\Users\User\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\py
 
 ## Следующие шаги
 
-1. Дождаться завершения миграции.
-2. Сверить количество строк SQLite и PostgreSQL.
-3. Запустить backend на shadow PostgreSQL.
-4. Проверить основные API: health, projects, variants, LO coverage, EPVO compare, генерация плана.
-5. После успешной проверки решить, когда переключать PostgreSQL как основную БД.
+1. Подготовить явный режим запуска `start.ps1 -Database postgres-shadow`.
+2. Добавить короткую команду rollback на SQLite.
+3. После ручной проверки UI решить, когда переключать PostgreSQL как основную БД.
 
 ## Риск
 
 - `.env` содержит локальные настройки и не должен попадать в Git.
-- Shadow PostgreSQL пока не считается основной БД до завершения сверки counts и API-smoke.
+- Shadow PostgreSQL пока не считается основной БД до ручной проверки UI.
+- В SQLite были старые orphan-строки: `embeddings` без `course_chunks`, часть `match_scores`, `match_feedback` и `bridge_modules` без родительских записей. Они не перенесены в PostgreSQL, потому что PostgreSQL поддерживает строгую ссылочную целостность. Валидные переносимые строки совпали.
+
+## Результат PostgreSQL smoke
+
+- Counts SQLite/PostgreSQL по валидным строкам — успешно.
+- FastAPI health/login/projects/variants/LO sources/EPVO compare на PostgreSQL shadow — успешно.
+- Генерация плана проекта 15 на PostgreSQL shadow — успешно:
+  - `plan_id=600`;
+  - `total_credits=240`;
+  - `feasible=True`;
+  - `hard_violation_count=0`;
+  - нарушений доменных квот нет.

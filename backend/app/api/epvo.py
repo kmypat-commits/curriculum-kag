@@ -120,7 +120,7 @@ def _scope_disciplines(db: Session, scope_item: dict, limit: int = 800) -> tuple
         ids = [
             row[0]
             for row in db.execute(
-                text("select id from epvo_disciplines_normalized where group_codes like :pattern limit :limit"),
+                text("select id from epvo_disciplines_normalized where cast(group_codes as text) like :pattern limit :limit"),
                 {"pattern": f"%{scope_item['group_code']}%", "limit": limit},
             ).fetchall()
         ]
@@ -129,7 +129,7 @@ def _scope_disciplines(db: Session, scope_item: dict, limit: int = 800) -> tuple
         ids = [
             row[0]
             for row in db.execute(
-                text("select id from epvo_disciplines_normalized where direction_codes like :pattern limit :limit"),
+                text("select id from epvo_disciplines_normalized where cast(direction_codes as text) like :pattern limit :limit"),
                 {"pattern": f"%{scope_item['direction_code']}%", "limit": limit},
             ).fetchall()
         ]
