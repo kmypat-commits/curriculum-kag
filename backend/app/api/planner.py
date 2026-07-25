@@ -1273,7 +1273,24 @@ def build_plan(
             if new_active_plan:
                 new_active_plan.is_active = 1
         else:
-            new_active_plan = None
+            def _variant_quality_key(row):
+                metrics = row.get("metrics") or {}
+                verification = metrics.get("verification") or {}
+                quality = metrics.get("international_quality") or {}
+                return (
+                    1 if verification.get("feasible") else 0,
+                    -int(verification.get("hard_violation_count") or 0),
+                    float(quality.get("score") or 0.0),
+                    -int(metrics.get("num_bridge_modules") or 0),
+                    float(metrics.get("lo_coverage_percentage") or 0.0),
+                )
+
+            best_variant = max(variants.items(), key=lambda item: _variant_quality_key(item[1]))[0] if variants else None
+            new_active_plan = db.query(Plan).filter(
+                Plan.id == variants[best_variant]["plan_id"]
+            ).first() if best_variant else None
+            if new_active_plan:
+                new_active_plan.is_active = 1
 
         new_active_snapshot = _plan_snapshot(new_active_plan, db)
         change_report = _build_change_report(old_active_snapshot, new_active_snapshot)
