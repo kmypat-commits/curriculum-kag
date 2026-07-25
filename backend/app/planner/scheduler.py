@@ -70,6 +70,25 @@ def _title_key(title: str | None) -> str:
     return " ".join(re.findall(r"\w+", value, flags=re.UNICODE))
 
 
+def _short_lo_theme(lo: LearningOutcome | None) -> str:
+    """Readable Russian theme for bridge titles; keeps modules distinguishable."""
+    text = f"{getattr(lo, 'lo_code', '')} {getattr(lo, 'description_ru', '') or getattr(lo, 'description', '') or getattr(lo, 'lo_text', '') or ''}".lower()
+    if any(token in text for token in ("данн", "аналит", "статист", "информац")):
+        return "данных и аналитики"
+    if any(token in text for token in ("модел", "алгорит", "машин", "ии", "ai", "нейро")):
+        return "моделей и алгоритмов"
+    if any(token in text for token in ("безопас", "кибер", "угроз", "риск")):
+        return "безопасности и рисков"
+    if any(token in text for token in ("прав", "этик", "норм", "регулир", "госо")):
+        return "нормативных и этических решений"
+    if any(token in text for token in ("проект", "команд", "коммуник", "обоснов")):
+        return "проектной коммуникации"
+    if any(token in text for token in ("внедр", "систем", "архитект", "платформ")):
+        return "внедрения цифровых систем"
+    code = str(getattr(lo, "lo_code", "") or "").strip()
+    return f"результата {code}" if code else "междисциплинарной интеграции"
+
+
 def _has_domain_term(text: str, terms: tuple[str, ...]) -> bool:
     words = set(text.split())
     for token in terms:
@@ -4151,7 +4170,9 @@ def ensure_credit_bridge_modules(
         return []
 
     project = project_version.project
-    lo_codes = [lo.lo_code for lo in project_version.learning_outcomes]
+    learning_outcomes = list(project_version.learning_outcomes)
+    lo_codes = [lo.lo_code for lo in learning_outcomes]
+    lo_by_code = {lo.lo_code: lo for lo in learning_outcomes}
     base_code = f"AUTO_BRIDGE_{project_version.id}_"
     existing = {
         bm.course_id: bm
@@ -4171,20 +4192,28 @@ def ensure_credit_bridge_modules(
         slots_left = count - index + 1
         credits = max(3, min(7, math.ceil(remaining / slots_left)))
         remaining -= credits
-        title = f"Bridge Module: {project.domain1} + {project.domain2} Integration {index}"
         target_los = lo_codes[index - 1::count] or lo_codes
+        theme = _short_lo_theme(lo_by_code.get(target_los[0]) if target_los else None)
+        domain_pair = (
+            f"{project.domain1} и {project.domain2}"
+            if project.domain1 and project.domain2 and project.domain1 != project.domain2
+            else str(project.domain1 or project.domain2 or "выбранного направления")
+        )
+        title = f"Интеграционный модуль {theme}: {domain_pair} - семестр {index}"
+        goal = f"Закрыть разрыв по {', '.join(target_los[:3]) or 'результатам обучения'} через практическую связь направлений {domain_pair}."
+        description = (
+            f"Bridge-модуль связывает дисциплины направления {domain_pair} с результатами "
+            f"{', '.join(target_los[:4]) or 'обучения программы'}. Используется только когда "
+            "в репозитории ЕПВО пока нет достаточно сильной реальной дисциплины."
+        )
         bm = existing.get(module_code)
         if bm is None:
             bm = BridgeModule(
                 project_version_id=project_version.id,
                 course_id=module_code,
                 title=title,
-                goal=f"Close interdisciplinary curriculum gaps between {project.domain1} and {project.domain2}.",
-                description=(
-                    f"Applied bridge module for integrating {project.domain1}, "
-                    f"{project.domain2}, digital transformation, data-driven decision-making, "
-                    "platform governance, cybersecurity, and public-sector implementation."
-                ),
+                goal=goal,
+                description=description,
                 credits=credits,
                 recommended_semester=min(index, int((project.constraints_json or {}).get("total_semesters", 1))),
                 learning_outcomes=[
@@ -4210,6 +4239,8 @@ def ensure_credit_bridge_modules(
         else:
             bm.credits = credits
             bm.title = title
+            bm.goal = goal
+            bm.description = description
             bm.target_los = target_los
         modules.append(bm)
 
