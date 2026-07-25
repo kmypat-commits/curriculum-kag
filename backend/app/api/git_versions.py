@@ -16,6 +16,7 @@ router = APIRouter()
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,80}$")
+MAX_DIFF_CHARS = 120_000
 
 
 class GitFileStatus(BaseModel):
@@ -93,6 +94,17 @@ def _parse_commits(text: str) -> List[GitCommit]:
     return commits
 
 
+def _bounded_diff(text: str) -> dict:
+    if len(text) <= MAX_DIFF_CHARS:
+        return {"diff": text, "truncated": False, "max_chars": MAX_DIFF_CHARS}
+    return {
+        "diff": text[:MAX_DIFF_CHARS]
+        + "\n\n... Diff обрезан для безопасности интерфейса. Используйте Git CLI для полного вывода.",
+        "truncated": True,
+        "max_chars": MAX_DIFF_CHARS,
+    }
+
+
 @router.get("/overview", response_model=GitOverview)
 async def git_overview(current_user: User = Depends(get_current_user)):
     branch = _git("branch", "--show-current") or "detached HEAD"
@@ -116,19 +128,15 @@ async def git_overview(current_user: User = Depends(get_current_user)):
 @router.get("/commits/{commit_hash}/diff")
 async def commit_diff(commit_hash: str, current_user: User = Depends(get_current_user)):
     _git("rev-parse", "--verify", f"{commit_hash}^{{commit}}")
-    return {
-        "commit": commit_hash,
-        "diff": _git("show", "--stat", "--patch", "--find-renames", commit_hash),
-    }
+    payload = _bounded_diff(_git("show", "--stat", "--patch", "--find-renames", commit_hash))
+    return {"commit": commit_hash, **payload}
 
 
 @router.get("/commits/{commit_hash}/compare-current")
 async def compare_with_current(commit_hash: str, current_user: User = Depends(get_current_user)):
     _git("rev-parse", "--verify", f"{commit_hash}^{{commit}}")
-    return {
-        "commit": commit_hash,
-        "diff": _git("diff", "--stat", "--patch", "--find-renames", f"{commit_hash}..HEAD"),
-    }
+    payload = _bounded_diff(_git("diff", "--stat", "--patch", "--find-renames", f"{commit_hash}..HEAD"))
+    return {"commit": commit_hash, **payload}
 
 
 @router.post("/commits/{commit_hash}/branches")

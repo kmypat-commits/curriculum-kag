@@ -46,6 +46,7 @@ export default function GitVersions() {
     const [selectedCommit, setSelectedCommit] = useState(null)
     const [diffMode, setDiffMode] = useState('commit')
     const [diff, setDiff] = useState('')
+    const [diffTruncated, setDiffTruncated] = useState(false)
     const [diffLoading, setDiffLoading] = useState(false)
     const [branchName, setBranchName] = useState('')
     const [branchMessage, setBranchMessage] = useState('')
@@ -72,6 +73,7 @@ export default function GitVersions() {
         setDiffMode(mode)
         setDiffLoading(true)
         setDiff('')
+        setDiffTruncated(false)
         setBranchMessage('')
         try {
             const endpoint = mode === 'compare'
@@ -79,6 +81,7 @@ export default function GitVersions() {
                 : `/api/git/commits/${commit.hash}/diff`
             const response = await axios.get(endpoint)
             setDiff(response.data.diff || 'Изменений нет.')
+            setDiffTruncated(Boolean(response.data.truncated))
         } catch (err) {
             setDiff(err.response?.data?.detail || err.message || 'Не удалось получить diff')
         } finally {
@@ -202,7 +205,10 @@ export default function GitVersions() {
                                 ) : diffLoading ? (
                                     <LoadingSpinner />
                                 ) : (
-                                    <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 620, background: '#111827', color: '#e5e7eb', borderRadius: 16, padding: 18, fontSize: 12 }}>{diff}</pre>
+                                    <>
+                                        {diffTruncated ? <p style={{ color: '#9a5b00' }}>Diff большой, поэтому показан безопасный фрагмент.</p> : null}
+                                        <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 620, background: '#111827', color: '#e5e7eb', borderRadius: 16, padding: 18, fontSize: 12 }}>{diff}</pre>
+                                    </>
                                 )}
                             </section>
                         ) : null}
