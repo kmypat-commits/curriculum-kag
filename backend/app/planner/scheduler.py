@@ -164,9 +164,13 @@ def _complexity_min_semester(item: Dict, num_semesters: int) -> int:
     # generic indicators of an advanced elective course.
     if item.get("regulatory_required") and str(item.get("type") or "").startswith("goso_"):
         return 1
+    # Use the course title and component type for complexity.  The legacy
+    # `domain` field can be stale for canonical EPVO courses reused across
+    # programmes (for example a basic algorithms course imported earlier under
+    # "forensics").  Domain scope is checked elsewhere; using it here creates
+    # false "too early" warnings for valid first-year foundations.
     text = _title_key(" ".join([
         item.get("title") or "",
-        item.get("domain") or "",
         item.get("type") or "",
     ]))
     advanced_terms = (
