@@ -3352,7 +3352,19 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         required = [
             max(
                 0.0,
-                math.ceil(quota_total_credits * min_domain_percent[index] / 100)
+                math.ceil(
+                    max(
+                        0,
+                        int(constraints.get("total_credits", quota_total_credits) or quota_total_credits)
+                        - sum(
+                            int(item.get("credits") or 0)
+                            for item in items
+                            if item.get("regulatory_required")
+                        ),
+                    )
+                    * min_domain_percent[index]
+                    / 100
+                )
                 - domain_quota_tolerance,
             )
             for index in range(2)
@@ -3363,6 +3375,20 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
 
         secondary_bridge_ids = {bridge.id for bridge in secondary_bridges}
         core_bridge_id = core_bridge.id if core_bridge is not None else None
+        domain_bridge_codes = {
+            bridge.id: str(bridge.course_id or "")
+            for bridge in [*(secondary_bridges or []), *([core_bridge] if core_bridge is not None else [])]
+        }
+        bridge_ids_in_plan = {
+            int(item.get("bridge_module_id"))
+            for item in normalized
+            if item.get("bridge_module_id") is not None
+        }
+        if bridge_ids_in_plan:
+            domain_bridge_codes.update({
+                bridge.id: str(bridge.course_id or "")
+                for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids_in_plan)).all()
+            })
 
         def credits_by_domain() -> List[float]:
             values = [0.0, 0.0]
@@ -3376,7 +3402,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 credits = float(item.get("credits") or 0)
                 if bridge_id in secondary_bridge_ids:
                     values[1] += credits
-                elif bridge_id == core_bridge_id:
+                elif bridge_id == core_bridge_id or str(domain_bridge_codes.get(bridge_id) or "").startswith(("AUTO_BRIDGE_", "QUALITY_BRIDGE_")):
                     values[0] += credits / 2.0
                     values[1] += credits / 2.0
             return values
@@ -3712,7 +3738,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
 
     def fill_domain_quota(domain_index: int) -> None:
         nonlocal total
-        required = math.ceil(quota_total_credits * min_domain_percent[domain_index] / 100)
+        regulatory_selected_credits = sum(
+            int(item.get("credits") or 0)
+            for item in selected.values()
+            if item.get("regulatory_required")
+        )
+        quota_base = max(0, quota_total_credits - regulatory_selected_credits)
+        required = math.ceil(quota_base * min_domain_percent[domain_index] / 100)
         if required <= 0:
             return
         domain_candidates = [

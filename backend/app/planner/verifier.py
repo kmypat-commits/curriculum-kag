@@ -177,7 +177,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             code = str(bridge.course_id or "")
             if code.startswith("SECONDARY_"):
                 domain_credits[1] += credits
-            elif code.startswith("CORE_BRIDGE_"):
+            elif code.startswith("CORE_BRIDGE_") or code.startswith("AUTO_BRIDGE_") or code.startswith("QUALITY_BRIDGE_"):
                 domain_credits[0] += credits / 2.0
                 domain_credits[1] += credits / 2.0
     regulatory_credits = sum(
