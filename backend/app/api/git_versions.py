@@ -15,6 +15,7 @@ from app.services.auth import get_current_user
 router = APIRouter()
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_SAFE_DIRECTORY = REPO_ROOT.as_posix()
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,80}$")
 MAX_DIFF_CHARS = 120_000
 
@@ -47,7 +48,7 @@ class CreateBranchRequest(BaseModel):
 def _git(*args: str) -> str:
     try:
         result = subprocess.run(
-            ["git", *args],
+            ["git", "-c", f"safe.directory={REPO_SAFE_DIRECTORY}", *args],
             cwd=REPO_ROOT,
             text=True,
             encoding="utf-8",
@@ -69,8 +70,13 @@ def _parse_status(text: str) -> List[GitFileStatus]:
     for line in text.splitlines():
         if not line:
             continue
-        status = line[:2].strip() or "?"
-        path = line[3:].strip()
+        match = re.match(r"^(.{1,2})\s+(.+)$", line)
+        if match:
+            status = match.group(1).strip() or "?"
+            path = match.group(2).strip()
+        else:
+            status = line[:2].strip() or "?"
+            path = line[2:].strip()
         files.append(GitFileStatus(path=path, status=status))
     return files
 
@@ -157,7 +163,7 @@ async def create_branch_from_commit(
     ):
         raise HTTPException(status_code=400, detail="Некорректное имя ветки")
     existing = subprocess.run(
-        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"],
+        ["git", "-c", f"safe.directory={REPO_SAFE_DIRECTORY}", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"],
         cwd=REPO_ROOT,
         check=False,
     )
