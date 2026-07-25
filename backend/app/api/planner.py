@@ -99,6 +99,52 @@ def _title_key(title: str | None) -> str:
     return " ".join(re.findall(r"\w+", value, flags=re.UNICODE))
 
 
+def _compact_lo_label(target_los: list[str]) -> str:
+    target_los = [code for code in target_los if not str(code or "").startswith("LO-GOSO-")]
+    if not target_los:
+        return "междисциплинарных результатов"
+    if len(target_los) <= 2:
+        return ", ".join(target_los)
+    return ", ".join(target_los[:2]) + f" и ещё {len(target_los) - 2}"
+
+
+def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, target_los: list[str], semester: int) -> list[str]:
+    domain1 = version.project.domain1 or "область 1"
+    domain2 = version.project.domain2 or "область 2"
+    professional_los = [code for code in target_los if not str(code or "").startswith("LO-GOSO-")]
+    lo_label = _compact_lo_label(target_los)
+    bridge_key = _title_key(bridge.title)
+    if "данн" in bridge_key or "data" in bridge_key:
+        focus = "данных и аналитических процессов"
+    elif "интеграц" in bridge_key or "integration" in bridge_key:
+        focus = "интеграции решений"
+    elif "основ" in bridge_key or "foundation" in bridge_key:
+        focus = "профессиональных основ"
+    elif "практик" in bridge_key or "project" in bridge_key:
+        focus = "проектной практики"
+    else:
+        focus = f"компетенций {lo_label}"
+    professional_focus = {
+        "LO1": "основ и принципов ИИ-систем",
+        "LO2": "аудита качества данных",
+        "LO3": "оценки качества ИИ-моделей",
+        "LO4": "выявления алгоритмических ошибок и bias",
+        "LO5": "оценки рисков применения ИИ",
+        "LO6": "правового и этического аудита ИИ",
+        "LO7": "человеческого контроля ИИ",
+        "LO8": "документирования жизненного цикла ИИ",
+        "LO9": "управления ответственным внедрением ИИ",
+    }
+    if professional_los:
+        focus = " и ".join(professional_focus.get(code, f"компетенции {code}") for code in professional_los[:2])
+    semester_label = f"семестр {semester}"
+    return [
+        f"{focus.capitalize()} в области {domain1} и {domain2}",
+        f"Прикладной модуль {domain2}: {lo_label}",
+        f"Проектный практикум {domain1} + {domain2}: {lo_label} ({semester_label})",
+    ]
+
+
 def _academic_classification(
     course: Course | None,
     semester: int,
@@ -2239,7 +2285,12 @@ async def bridge_ai_candidates(
     if not bridge or not version:
         raise HTTPException(status_code=404, detail="Данные bridge-модуля не найдены")
     lo_by_code = {lo.lo_code: lo.lo_text for lo in version.learning_outcomes}
-    target_los = [code for code in (bridge.target_los or []) if code in lo_by_code]
+    target_los = [
+        code for code in (bridge.target_los or [])
+        if code in lo_by_code and not str(code or "").startswith("LO-GOSO-")
+    ]
+    if not target_los:
+        target_los = [code for code in (bridge.target_los or []) if code in lo_by_code]
     prompt = f"""Ты проектировщик образовательных программ Казахстана.
 Предложи ровно 3 разные реальные дисциплины вместо служебного bridge-модуля.
 Название программы: {version.project.title}
@@ -2263,15 +2314,17 @@ Bridge: {bridge.title}
     candidates = payload.get("candidates") if isinstance(payload, dict) else None
     if not isinstance(candidates, list):
         candidates = []
-    fallback_titles = [
-        f"Прикладные методы {version.project.domain1} и {version.project.domain2}",
-        f"Проектирование решений: {version.project.domain1} + {version.project.domain2}",
-        f"Аналитика и профессиональная практика в области {version.project.domain1}",
-    ]
+    fallback_titles = _bridge_candidate_fallbacks(version, bridge, target_los, int(item.semester or 1))
     normalized = []
+    seen_titles = set()
     for index in range(3):
         row = candidates[index] if index < len(candidates) and isinstance(candidates[index], dict) else {}
         title_ru = str(row.get("title_ru") or row.get("title") or fallback_titles[index]).strip()[:240]
+        if _title_key(title_ru) in seen_titles:
+            title_ru = fallback_titles[index]
+        if _title_key(title_ru) in seen_titles:
+            title_ru = f"{fallback_titles[index]} · {target_los[index % max(len(target_los), 1)] if target_los else 'bridge'}"
+        seen_titles.add(_title_key(title_ru))
         description_ru = str(row.get("description_ru") or row.get("description") or (
             f"Дисциплина формирует и проверяет результаты {', '.join(target_los)} через прикладной проект, "
             f"связывающий {version.project.domain1} и {version.project.domain2}."

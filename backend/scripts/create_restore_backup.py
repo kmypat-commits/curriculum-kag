@@ -79,6 +79,11 @@ def main():
         help="Skip SQLite quick_check when only estimating archive contents.",
     )
     parser.add_argument(
+        "--trust-existing-sqlite",
+        action="store_true",
+        help="Create the archive without running PRAGMA quick_check on very large SQLite files. Use only after a separate migration/count audit.",
+    )
+    parser.add_argument(
         "--fast-large-files",
         action="store_true",
         help="Do not hash files larger than --large-file-threshold-mb during archive creation.",
@@ -90,9 +95,11 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     files = list(iter_files())
     database = ROOT / "backend" / "curriculum_kag.db"
-    database_check = "skipped" if args.skip_sqlite_check else check_sqlite(database)
+    database_check = "trusted_existing" if args.trust_existing_sqlite else "skipped" if args.skip_sqlite_check else check_sqlite(database)
     if database_check != "ok":
-        if args.skip_sqlite_check and args.dry_run:
+        if args.trust_existing_sqlite:
+            database_check = "trusted_existing"
+        elif args.skip_sqlite_check and args.dry_run:
             database_check = "skipped"
         else:
             raise RuntimeError(f"SQLite quick_check failed: {database_check}")
