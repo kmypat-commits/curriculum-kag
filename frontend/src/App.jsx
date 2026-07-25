@@ -13,6 +13,7 @@ const EpvoComparison = lazy(() => import('./pages/EpvoComparison'))
 const ResearchDashboard = lazy(() => import('./pages/ResearchDashboard'))
 const PrerequisiteGraph = lazy(() => import('./pages/PrerequisiteGraph'))
 const CourseSyllabus = lazy(() => import('./pages/CourseSyllabus'))
+const GitVersions = lazy(() => import('./pages/GitVersions'))
 
 function App() {
     return (
@@ -29,6 +30,7 @@ function App() {
                         <Route path="/projects/:id/plan" element={<PlanBuilder />} />
                         <Route path="/projects/:id/epvo" element={<EpvoComparison />} />
                         <Route path="/research" element={<ResearchDashboard />} />
+                        <Route path="/versions" element={<GitVersions />} />
                         <Route path="/projects/:id/graph" element={<PrerequisiteGraph />} />
                         <Route path="/projects/:id/syllabus/:kind/:entityId" element={<CourseSyllabus />} />
                     </Routes></Suspense>

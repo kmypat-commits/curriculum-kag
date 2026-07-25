@@ -18,7 +18,7 @@ except (ImportError, AttributeError):
     pass
 
 from app.config import settings
-from app.api import auth, projects, repository, kag, planner, export_api, epvo as epvo_api
+from app.api import auth, projects, repository, kag, planner, export_api, epvo as epvo_api, git_versions
 from app.database import engine, Base
 # Import all models to register them with Base
 from app.models import user, project, course, plan, embedding, audit, bridge_module, syllabus, epvo
@@ -61,6 +61,7 @@ app.include_router(kag.router, prefix="/kag", tags=["KAG Engine"])
 app.include_router(planner.router, prefix="/planner", tags=["Planner"])
 app.include_router(export_api.router, prefix="/export", tags=["Export"])
 app.include_router(epvo_api.router, prefix="/epvo", tags=["EPVO"])
+app.include_router(git_versions.router, prefix="/git", tags=["Git Versions"])
 
 
 @app.get("/")
