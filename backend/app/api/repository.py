@@ -18,9 +18,12 @@ from app.services.content_localization import (
 from app.services.epvo_repository import _assign_epvo_prerequisites
 import pandas as pd
 import json
+import time
 
 router = APIRouter()
 PREREQUISITE_EXEMPT_MARKER = "__prerequisite_exempt__"
+_STATS_CACHE = {"expires_at": 0.0, "payload": None}
+_STATS_CACHE_TTL_SECONDS = 60
 
 
 def prerequisite_exempt(course: Course) -> bool:
@@ -192,12 +195,18 @@ async def repository_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    now = time.monotonic()
+    if _STATS_CACHE["payload"] is not None and now < float(_STATS_CACHE["expires_at"]):
+        return _STATS_CACHE["payload"]
     total = db.query(func.count(Course.id)).scalar() or 0
     domains = [
         {"domain": domain or "unknown", "count": int(count)}
         for domain, count in db.query(Course.domain, func.count(Course.id)).group_by(Course.domain).all()
     ]
-    return {"total_courses": int(total), "domains": domains}
+    payload = {"total_courses": int(total), "domains": domains, "cached_for_seconds": _STATS_CACHE_TTL_SECONDS}
+    _STATS_CACHE["payload"] = payload
+    _STATS_CACHE["expires_at"] = now + _STATS_CACHE_TTL_SECONDS
+    return payload
 
 
 @router.get("/courses", response_model=List[CourseResponse])

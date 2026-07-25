@@ -20,7 +20,12 @@ function App() {
         <LanguageProvider>
             <AuthProvider>
                 <Router>
-                    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}>Загрузка…</div>}><Routes>
+                    <Suspense fallback={
+                        <div style={{ padding: 40, textAlign: 'center', color: '#4f5d6b' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 6 }}>Загрузка…</div>
+                            <div style={{ fontSize: 13 }}>Большие графы и отчёты могут открываться несколько секунд.</div>
+                        </div>
+                    }><Routes>
                         <Route path="/login" element={<Login />} />
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/repository" element={<Repository />} />
