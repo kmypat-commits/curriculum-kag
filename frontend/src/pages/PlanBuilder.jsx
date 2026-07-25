@@ -1300,6 +1300,13 @@ export default function PlanBuilder() {
                                                                         <div style={{ fontWeight: 600, marginBottom: 3 }}>
                                                                             {localText('Связи с результатами обучения:', 'Оқу нәтижелерімен байланыс:', 'Learning-outcome links:')}
                                                                         </div>
+                                                                        <div style={{ marginBottom: 5, color: '#607d8b', fontSize: 11 }}>
+                                                                            {localText(
+                                                                                'Как читать: “итог” — насколько дисциплина реально закрывает этот LO в плане; “ИИ” — прогноз модели по текстам; “ЕПВО” — похожая экспертная оценка из базы ЕПВО. Это три разных признака одной связи, они не суммируются.',
+                                                                                'Оқу тәртібі: “қорытынды” — пән осы LO-ны жоспарда қаншалықты жабады; “ЖИ” — мәтіндер бойынша модель болжамы; “ЕПВО” — ЕПВО базасындағы ұқсас сараптамалық баға. Бұлар бір байланыстың үш бөлек белгісі, қосылмайды.',
+                                                                                'How to read: effective is the final plan link strength; AI is the text-model prediction; EPVO is similar expert evidence from EPVO. These are separate signals for one link, not a sum.'
+                                                                            )}
+                                                                        </div>
                                                                         {c.why_selected.top_lo_matches.map(lo => (
                                                                                     <span key={lo.lo_code} title={lo.lo_text} style={{ display: 'inline-block', marginRight: 5, marginTop: 3 }}>
                                                                                         <span style={{
