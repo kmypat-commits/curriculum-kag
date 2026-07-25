@@ -1,15 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import axios from 'axios'
-import cytoscape from 'cytoscape'
-import dagre from 'cytoscape-dagre'
 import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
 
-cytoscape.use(dagre)
 const neon = ['#64a8ff', '#9b8cff', '#5ac8a8', '#e4ae57', '#dc78a5', '#6fb7c9', '#8fbd63', '#b68ac9']
 const stageHeight = 520
+let cytoscapeLoader = null
+
+function loadCytoscape() {
+    if (!cytoscapeLoader) {
+        cytoscapeLoader = Promise.all([
+            import('cytoscape'),
+            import('cytoscape-dagre'),
+        ]).then(([cytoscapeModule, dagreModule]) => {
+            const cytoscape = cytoscapeModule.default || cytoscapeModule
+            const dagre = dagreModule.default || dagreModule
+            if (!cytoscape.__curriculumDagreRegistered) {
+                cytoscape.use(dagre)
+                cytoscape.__curriculumDagreRegistered = true
+            }
+            return cytoscape
+        })
+    }
+    return cytoscapeLoader
+}
 
 export default function PrerequisiteGraph() {
     const { id } = useParams()
@@ -69,56 +85,60 @@ export default function PrerequisiteGraph() {
 
     useEffect(() => {
         if (!graph || !graphContainer.current) return
+        let cancelled = false
         cyRef.current?.destroy()
-        const cy = cytoscape({
-            container: graphContainer.current,
-            elements: [
-                ...graph.nodes.map(node => ({ data: { ...node, label: node.code + '\n' + localize(node.title_translations || node.title) } })),
-                ...graph.edges.map(edge => ({ data: edge }))
-            ],
-            wheelSensitivity: 0.18, minZoom: 0.15, maxZoom: 2.2,
-            style: [
-                { selector: 'node', style: {
-                    'background-color': '#111b29', 'background-opacity': .98,
-                    'border-color': element => neon[(Number(element.data('semester')) - 1) % neon.length],
-                    'border-width': 2, 'label': 'data(label)', 'color': '#f5f7fa', 'text-wrap': 'wrap',
-                    'text-max-width': 130, 'font-size': 9, 'font-weight': 600, 'text-valign': 'center',
-                    'text-halign': 'center', 'width': 158, 'height': 62, 'shape': 'round-rectangle',
-                    'shadow-blur': 14, 'shadow-color': '#000000',
-                    'shadow-opacity': .24, 'shadow-offset-x': 0, 'shadow-offset-y': 6
-                }},
-                { selector: 'node[kind = "bridge"]', style: { 'shape': 'hexagon', 'border-color': '#ff40f5', 'shadow-color': '#ff40f5', 'background-color': '#240a2d' }},
-                { selector: 'edge', style: {
-                    'width': 1.6, 'line-color': '#506276', 'target-arrow-color': '#7eb6ff',
-                    'target-arrow-shape': 'triangle', 'arrow-scale': .85, 'curve-style': 'taxi',
-                    'taxi-direction': 'rightward', 'taxi-turn': 24, 'opacity': .7
-                }},
-                { selector: 'edge[relation = "competency_flow"]', style: {
-                    'line-style': 'dashed', 'line-dash-pattern': [8, 5],
-                    'line-color': '#b388ff', 'target-arrow-color': '#ff80f6',
-                    'curve-style': 'bezier', 'width': 2.4, 'opacity': .72
-                }},
-                { selector: 'edge[relation = "semantic_progression"]', style: {
-                    'line-style': 'dotted', 'line-color': '#00e676',
-                    'target-arrow-color': '#b2ff59', 'curve-style': 'bezier',
-                    'width': 2, 'opacity': .58
-                }},
-                { selector: '.dimmed', style: { 'opacity': .07 } },
-                { selector: '.semesterNode', style: { 'border-width': 4, 'background-color': '#17283d', 'shadow-opacity': .5, 'z-index': 20 }},
-                { selector: '.flowPath', style: { 'opacity': 1, 'line-color': '#64a8ff', 'target-arrow-color': '#64a8ff', 'width': 3, 'z-index': 30 }},
-                { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 4, 'shadow-color': '#64a8ff', 'shadow-opacity': .65 }}
-            ],
-            layout: { name: 'dagre', rankDir: 'LR', rankSep: 86, nodeSep: 20, edgeSep: 10, padding: 35 }
-        })
-        cy.on('tap', 'node', event => {
-            const node = event.target
-            cy.elements().removeClass('dimmed flowPath').addClass('dimmed')
-            node.predecessors().union(node.successors()).union(node).removeClass('dimmed').addClass('flowPath')
-            setSelected(graph.nodes.find(item => item.id === node.id()))
-        })
-        cy.on('tap', event => { if (event.target === cy) setSelected(null) })
-        cyRef.current = cy
-        return () => cy.destroy()
+        loadCytoscape().then(cytoscape => {
+            if (cancelled || !graphContainer.current) return
+            const cy = cytoscape({
+                container: graphContainer.current,
+                elements: [
+                    ...graph.nodes.map(node => ({ data: { ...node, label: node.code + '\n' + localize(node.title_translations || node.title) } })),
+                    ...graph.edges.map(edge => ({ data: edge }))
+                ],
+                wheelSensitivity: 0.18, minZoom: 0.15, maxZoom: 2.2,
+                style: [
+                    { selector: 'node', style: {
+                        'background-color': '#111b29', 'background-opacity': .98,
+                        'border-color': element => neon[(Number(element.data('semester')) - 1) % neon.length],
+                        'border-width': 2, 'label': 'data(label)', 'color': '#f5f7fa', 'text-wrap': 'wrap',
+                        'text-max-width': 130, 'font-size': 9, 'font-weight': 600, 'text-valign': 'center',
+                        'text-halign': 'center', 'width': 158, 'height': 62, 'shape': 'round-rectangle',
+                        'shadow-blur': 14, 'shadow-color': '#000000',
+                        'shadow-opacity': .24, 'shadow-offset-x': 0, 'shadow-offset-y': 6
+                    }},
+                    { selector: 'node[kind = "bridge"]', style: { 'shape': 'hexagon', 'border-color': '#ff40f5', 'shadow-color': '#ff40f5', 'background-color': '#240a2d' }},
+                    { selector: 'edge', style: {
+                        'width': 1.6, 'line-color': '#506276', 'target-arrow-color': '#7eb6ff',
+                        'target-arrow-shape': 'triangle', 'arrow-scale': .85, 'curve-style': 'taxi',
+                        'taxi-direction': 'rightward', 'taxi-turn': 24, 'opacity': .7
+                    }},
+                    { selector: 'edge[relation = "competency_flow"]', style: {
+                        'line-style': 'dashed', 'line-dash-pattern': [8, 5],
+                        'line-color': '#b388ff', 'target-arrow-color': '#ff80f6',
+                        'curve-style': 'bezier', 'width': 2.4, 'opacity': .72
+                    }},
+                    { selector: 'edge[relation = "semantic_progression"]', style: {
+                        'line-style': 'dotted', 'line-color': '#00e676',
+                        'target-arrow-color': '#b2ff59', 'curve-style': 'bezier',
+                        'width': 2, 'opacity': .58
+                    }},
+                    { selector: '.dimmed', style: { 'opacity': .07 } },
+                    { selector: '.semesterNode', style: { 'border-width': 4, 'background-color': '#17283d', 'shadow-opacity': .5, 'z-index': 20 }},
+                    { selector: '.flowPath', style: { 'opacity': 1, 'line-color': '#64a8ff', 'target-arrow-color': '#64a8ff', 'width': 3, 'z-index': 30 }},
+                    { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 4, 'shadow-color': '#64a8ff', 'shadow-opacity': .65 }}
+                ],
+                layout: { name: 'dagre', rankDir: 'LR', rankSep: 86, nodeSep: 20, edgeSep: 10, padding: 35 }
+            })
+            cy.on('tap', 'node', event => {
+                const node = event.target
+                cy.elements().removeClass('dimmed flowPath').addClass('dimmed')
+                node.predecessors().union(node.successors()).union(node).removeClass('dimmed').addClass('flowPath')
+                setSelected(graph.nodes.find(item => item.id === node.id()))
+            })
+            cy.on('tap', event => { if (event.target === cy) setSelected(null) })
+            cyRef.current = cy
+        }).catch(err => setError(err.message || String(err)))
+        return () => { cancelled = true; cyRef.current?.destroy() }
     }, [graph])
 
     useEffect(() => {
