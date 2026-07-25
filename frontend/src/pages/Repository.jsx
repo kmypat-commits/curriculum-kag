@@ -263,6 +263,7 @@ export default function Repository() {
                     <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                         <LanguageSelector />
                         <Link to="/" style={{ textDecoration: 'none', color: '#366092' }}>{t('dashboard')}</Link>
+                        <Link to="/versions" style={{ textDecoration: 'none', color: '#366092' }}>Версии</Link>
                         <span>{user?.full_name || user?.email}</span>
                         <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-secondary">{t('logout')}</button>
                     </div>
