@@ -3402,13 +3402,17 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                     for index, item in enumerate(normalized):
                         course = courses.get(item.get("course_id"))
                         replace_domain = project_domain_index(course) if course else None
+                        can_reduce_replace_domain = (
+                            replace_domain not in (0, 1)
+                            or current[replace_domain] - candidate_credits >= required[replace_domain]
+                        )
                         if (
                             course
+                            and not item.get("regulatory_required")
                             and item.get("course_id") not in protected
-                            and replace_domain in (0, 1)
                             and replace_domain != domain_index
                             and int(item.get("credits") or 0) == candidate_credits
-                            and current[replace_domain] - candidate_credits >= required[replace_domain]
+                            and can_reduce_replace_domain
                         ):
                             replaceable.append((index, item, course))
                     if not replaceable:
@@ -3444,8 +3448,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                         replace_domain = project_domain_index(course) if course else None
                         if (
                             course
+                            and not item.get("regulatory_required")
                             and item.get("course_id") not in protected
-                            and replace_domain in (0, 1)
                             and replace_domain != domain_index
                         ):
                             replaceable_all.append((index, item, course))
@@ -3455,8 +3459,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                             group_credits = sum(int(row[1].get("credits") or 0) for row in group)
                             other_domain = project_domain_index(group[0][2])
                             if (
-                                other_domain in (0, 1)
-                                and current[other_domain] - group_credits >= required[other_domain]
+                                other_domain not in (0, 1)
+                                or current[other_domain] - group_credits >= required[other_domain]
                             ):
                                 replacement_groups.setdefault(group_credits, []).append(group)
                     candidate_groups = [*( (course,) for course in candidates )]
@@ -3554,8 +3558,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                         replace_domain = project_domain_index(course) if course else None
                         if (
                             course
+                            and not item.get("regulatory_required")
                             and item.get("course_id") not in protected
-                            and replace_domain in (0, 1)
                             and replace_domain != domain_index
                         ):
                             replaceable_all.append((index, item, course))
@@ -3571,8 +3575,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                             group_credits = sum(int(row[1].get("credits") or 0) for row in group)
                             other_domain = project_domain_index(group[0][2])
                             if (
-                                other_domain in (0, 1)
-                                and current[other_domain] - group_credits >= required[other_domain]
+                                other_domain not in (0, 1)
+                                or current[other_domain] - group_credits >= required[other_domain]
                             ):
                                 replacement_groups.setdefault(group_credits, group)
                     for candidate_bundle, bundle_credits, target_credits in bundle_candidates:
