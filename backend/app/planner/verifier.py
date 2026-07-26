@@ -114,9 +114,10 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         getattr(project_version.project, "domain1", "") or "",
         getattr(project_version.project, "domain2", "") or "",
     ]
+    interdisciplinary = str(constraints.get("program_type") or "standard").lower() in {"interdisciplinary", "joint"}
     minimum_domain_percent = [
         float(constraints.get("min_domain1_percent") or 0),
-        float(constraints.get("min_domain2_percent") or 0),
+        float(constraints.get("min_domain2_percent") or 0) if interdisciplinary else 0.0,
     ]
     domain_quota_tolerance = max(
         0.0, float(constraints.get("domain_quota_tolerance_credits", 3) or 0)

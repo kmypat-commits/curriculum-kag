@@ -14,7 +14,7 @@ from app.models.course import Course, course_prerequisites
 from app.models.embedding import MatchScore
 from app.models.plan import Plan, PlanItem
 from app.models.project import LearningOutcome, ProjectVersion
-from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
+from app.models.epvo import EpvoDirection, EpvoDisciplineLoLink, EpvoDisciplineNormalized, EpvoGroup
 from app.services.epvo_repository import epvo_row_matches_education_level, epvo_row_relevance_score
 from app.planner.international_quality import evaluate_international_quality
 from app.planner.verifier import TOTAL_CREDIT_TOLERANCE, verify_curriculum_plan
@@ -301,6 +301,50 @@ def _course_domain_matches(course: Course, project_domains: List[str]) -> bool:
     return bool(domain) and any(d and (d in domain or domain in d) for d in project_domains)
 
 
+def _is_invalid_project_domain_label(value: str | None) -> bool:
+    normalized = _title_key(value)
+    if not normalized:
+        return True
+    if "?" in normalized:
+        return True
+    alpha_count = sum(1 for char in normalized if char.isalpha())
+    return alpha_count < 3
+
+
+def _project_domain_terms(project_version: ProjectVersion, db: Session) -> List[str]:
+    project = project_version.project
+    constraints = project.constraints_json or {}
+    raw_domains = [project.domain1, project.domain2]
+    scope_sources = [
+        (constraints.get("group_code"), EpvoGroup),
+        (constraints.get("direction_code"), EpvoDirection),
+        (constraints.get("secondary_group_code"), EpvoGroup),
+        (constraints.get("secondary_direction_code"), EpvoDirection),
+    ]
+    terms: list[str] = []
+    for value in raw_domains:
+        if not _is_invalid_project_domain_label(str(value or "")):
+            terms.append(str(value or ""))
+    for code, model in scope_sources:
+        code = str(code or "").strip()
+        if not code:
+            continue
+        row = db.query(model).filter(model.code == code).first()
+        if row:
+            terms.extend([row.title_ru, row.title_kk, row.title_en, row.code])
+        else:
+            terms.append(code)
+    result: list[str] = []
+    seen = set()
+    for term in terms:
+        value = str(term or "").lower().strip()
+        key = _title_key(value)
+        if key and key not in seen and not _is_invalid_project_domain_label(value):
+            seen.add(key)
+            result.append(value)
+    return result
+
+
 def _course_curriculum_role(course: Course, project_domains: List[str]) -> str:
     title = _title_key(course.title)
     general_title_terms = (
@@ -370,10 +414,7 @@ def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersio
     constraints = project_version.project.constraints_json or {}
     jurisdiction_kz = str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
     total_semesters = int(constraints.get("total_semesters", 8) or 8)
-    project_domains = [
-        (project_version.project.domain1 or "").lower().strip(),
-        (project_version.project.domain2 or "").lower().strip(),
-    ]
+    project_domains = _project_domain_terms(project_version, db)
     real_items = [
         (int(semester), item)
         for semester, items in schedule.items()
@@ -1507,10 +1548,7 @@ def _diversify_variant_items(
     """
     if variant_type not in {"B", "C"}:
         return items
-    project_domains = [
-        (project_version.project.domain1 or "").lower().strip(),
-        (project_version.project.domain2 or "").lower().strip(),
-    ]
+    project_domains = _project_domain_terms(project_version, db)
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
         and any("forensic" in d or "криминал" in d or "расслед" in d for d in project_domains)
@@ -2141,11 +2179,8 @@ def build_curriculum_plan(
     target_credits = int(constraints.get("total_credits", 240))
     maximum_credits = target_credits + max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE)))
     selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
-    project_domains = [
-        (project_version.project.domain1 or "").lower().strip(),
-        (project_version.project.domain2 or "").lower().strip(),
-    ]
-    interdisciplinary_professional = bool(project_domains[0] and project_domains[1])
+    project_domains = _project_domain_terms(project_version, db)
+    interdisciplinary_professional = str(constraints.get("program_type") or "standard").lower() in {"interdisciplinary", "joint"}
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
         and any("forensic" in d or "криминал" in d or "расслед" in d for d in project_domains)
@@ -2263,7 +2298,9 @@ def build_curriculum_plan(
             for item in selected_courses
             if item.get("bridge_module_id") is not None
         }
-        maximum_bridge_slots = int(constraints.get("max_new_courses", 5))
+        configured_bridge_slots = int(constraints.get("max_new_courses", 5))
+        credit_gap = max(0, target_credits - total_before_gap_fill)
+        maximum_bridge_slots = max(configured_bridge_slots, len(existing_bridge_ids) + math.ceil(credit_gap / 7))
         available_slots = max(0, maximum_bridge_slots - len(existing_bridge_ids))
         for module in ensure_credit_bridge_modules(
             project_version,
@@ -2503,10 +2540,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
     constraints = version.project.constraints_json or {}
     target = int(constraints.get("total_credits", 240)); maximum = target + max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE)))
-    project_domains = [
-        (version.project.domain1 or "").lower().strip(),
-        (version.project.domain2 or "").lower().strip(),
-    ]
+    project_domains = _project_domain_terms(version, db)
     program_type = str(constraints.get("program_type") or "standard").lower()
     interdisciplinary = program_type in {"interdisciplinary", "joint"} and bool(project_domains[1])
     # Integration bridges represent the connection between two independently
@@ -2519,7 +2553,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
         and any("forensic" in d or "криминал" in d or "расслед" in d for d in project_domains)
     )
-    interdisciplinary_professional = interdisciplinary or bool(project_domains[0] and project_domains[1])
+    interdisciplinary_professional = interdisciplinary
     epvo_professional_scope = any(
         str(constraints.get(key) or "").strip() not in {"", "1", "none", "null"}
         for key in ("group_code", "direction_code", "secondary_group_code", "secondary_direction_code")
@@ -3804,8 +3838,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         result = _force_bridge_item(result, bridge, variant_type)
     total = sum(int(item.get("credits") or 0) for item in result)
     if constraints.get("allow_new_courses", True):
-        max_new_courses = int(constraints.get("max_new_courses", 5))
         existing_bridge_count = sum(1 for item in result if item.get("bridge_module_id") is not None)
+        configured_max_new_courses = int(constraints.get("max_new_courses", 5))
+        max_new_courses = max(configured_max_new_courses, existing_bridge_count + math.ceil(max(0, target - total) / 7))
         auto_prefix = f"AUTO_BRIDGE_{project_version_id}_"
         expert_bridges = db.query(BridgeModule).filter(
             BridgeModule.project_version_id == project_version_id,
