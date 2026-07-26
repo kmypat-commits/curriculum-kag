@@ -2221,12 +2221,6 @@ async def bridge_replacement_preview(
             coverage_ratio = covered / max(len(target_lo_ids), 1)
             credit_distance = abs(int(course.credits or 0) - int(item.credits or 0))
             combined_score = model_score * 0.55 + float(expert_score or 0) * 0.45
-            strong_candidate = (
-                model_score >= 0.6
-                and float(expert_score or 0) >= 0.5
-                and credit_distance <= 2
-                and coverage_ratio >= 0.75
-            )
             candidate_text_for_medium = " ".join(
                 str(value or "")
                 for value in (
@@ -2237,13 +2231,34 @@ async def bridge_replacement_preview(
                     row.title_kk if row else "",
                 )
             ).lower()
+            generic_social_marker = any(marker in candidate_text_for_medium for marker in (
+                "социально-полит", "финансовой грамотности", "антикоррупц",
+                "инклюзив", "экология и устойчив", "безопасность жизнедеятельности",
+            ))
             professional_marker = any(marker in candidate_text_for_medium for marker in (
                 "информац", "цифр", "программ", "алгоритм", "данн",
                 "кибер", "безопас", "модель", "искусствен", "intelligence",
                 "software", "digital", "algorithm",
             ))
+            exact_expert_strong = (
+                model_score >= 0.6
+                and float(expert_score or 0) >= 0.5
+                and credit_distance <= 2
+                and coverage_ratio >= 0.75
+            )
+            focused_model_strong = (
+                not generic_social_marker
+                and professional_marker
+                and model_score >= 0.8
+                and float(expert_score or 0) >= 0.15
+                and credit_distance <= 2
+                and covered >= min(2, max(len(target_lo_ids), 1))
+                and coverage_ratio >= 0.5
+            )
+            strong_candidate = exact_expert_strong or focused_model_strong
             medium_candidate = (
                 not strong_candidate
+                and not generic_social_marker
                 and model_score >= 0.55
                 and coverage_ratio >= 0.5
                 and credit_distance <= 3
