@@ -2217,6 +2217,29 @@ async def bridge_replacement_preview(
                 and credit_distance <= 2
                 and coverage_ratio >= 0.75
             )
+            candidate_text_for_medium = " ".join(
+                str(value or "")
+                for value in (
+                    course.title,
+                    course.description,
+                    row.title_ru if row else "",
+                    row.title_en if row else "",
+                    row.title_kk if row else "",
+                )
+            ).lower()
+            professional_marker = any(marker in candidate_text_for_medium for marker in (
+                "информац", "цифр", "программ", "алгоритм", "данн",
+                "кибер", "безопас", "модель", "искусствен", "intelligence",
+                "software", "digital", "algorithm",
+            ))
+            medium_candidate = (
+                not strong_candidate
+                and model_score >= 0.55
+                and coverage_ratio >= 0.5
+                and credit_distance <= 3
+                and (float(expert_score or 0) > 0 or professional_marker)
+            )
+            quality_level = "strong" if strong_candidate else "medium" if medium_candidate else "weak"
             rank = coverage_ratio * 100 + combined_score * 50 + float(expert_score or 0) * 50 - credit_distance * 10
             ranked.append({
                 "course_id": course.id,
@@ -2240,6 +2263,9 @@ async def bridge_replacement_preview(
                 "combined_score": round(combined_score, 4),
                 "coverage_ratio": round(coverage_ratio, 4),
                 "strong_candidate": strong_candidate,
+                "medium_candidate": medium_candidate,
+                "quality_level": quality_level,
+                "requires_expert_confirmation": quality_level != "strong",
                 "credit_distance": credit_distance,
                 "rank": round(rank, 4),
                 "scope": required_scope or "interdisciplinary",
@@ -2261,6 +2287,10 @@ async def bridge_replacement_preview(
         1 for row in suggestions
         if any(candidate.get("strong_candidate") for candidate in row.get("candidates", []))
     )
+    medium_replacements = sum(
+        1 for row in suggestions
+        if any(candidate.get("quality_level") == "medium" for candidate in row.get("candidates", []))
+    )
     candidate_replacements = sum(
         1 for row in suggestions
         if row.get("candidates")
@@ -2275,6 +2305,7 @@ async def bridge_replacement_preview(
             "bridge_credits": total_bridge_credits,
             "with_any_candidate": candidate_replacements,
             "with_strong_candidate": strong_replacements,
+            "with_medium_candidate": medium_replacements,
             "without_strong_candidate": weak_or_missing,
             "diagnosis": (
                 "Большая доля bridge означает, что система закрыла кредиты и LO временными проектными модулями. "
@@ -2324,18 +2355,26 @@ async def bridge_replacement_apply(
         db=db,
         current_user=current_user,
     )
-    allowed = {
+    allowed_strong = {
         candidate["course_id"]
         for row in preview["suggestions"]
         if row["bridge_item_id"] == item.id
         for candidate in row["candidates"]
         if candidate.get("strong_candidate")
     }
-    if course.id not in allowed:
+    allowed_manual = {
+        candidate["course_id"]
+        for row in preview["suggestions"]
+        if row["bridge_item_id"] == item.id
+        for candidate in row["candidates"]
+        if candidate.get("quality_level") in {"strong", "medium"}
+    }
+    if course.id not in allowed_manual:
         raise HTTPException(
             status_code=400,
-            detail="Замена не прошла порог качества: нужны подтверждение ЕПВО, связь с профильными LO и близкий объём кредитов",
+            detail="Замена слишком слабая: нужна хотя бы средняя связь с LO, близкий объём кредитов и выбранная область ЕПВО",
         )
+    manual_confirmation = course.id not in allowed_strong
 
     previous_bridge_id = item.bridge_module_id
     constraints = dict(item.plan.project_version.project.constraints_json or {})
@@ -2352,8 +2391,13 @@ async def bridge_replacement_apply(
         "course_id": course.id,
         "course_title": course.title,
         "credits": item.credits,
+        "manual_confirmation": manual_confirmation,
         "requires_regeneration": True,
-        "message": "Дисциплина добавлена в план вместо bridge-модуля. Перестройте варианты для полного пересчёта метрик.",
+        "message": (
+            "Средняя замена подтверждена экспертом и добавлена вместо bridge. Перестройте варианты для полного пересчёта метрик."
+            if manual_confirmation else
+            "Сильная замена добавлена в план вместо bridge-модуля. Перестройте варианты для полного пересчёта метрик."
+        ),
     }
 
 

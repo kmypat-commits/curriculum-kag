@@ -860,8 +860,11 @@ export default function PlanBuilder() {
                                         <button className="btn btn-secondary" onClick={loadBridgePreview} disabled={loadingBridgePreview} style={{ marginTop: 8 }}>
                                             {loadingBridgePreview ? localText('Поиск…', 'Іздеу…', 'Searching…') : localText('Найти реальные дисциплины вместо bridge', 'Bridge орнына нақты пәндерді табу', 'Find real courses instead of bridges')}
                                         </button>
-                                        {bridgePreview?.variant === activeVariant && (bridgePreview.suggestions || []).some(row =>
-                                            (row.candidates || []).some(c => (c.expert_score || 0) >= 0.5 || (c.model_score || 0) >= 0.65)
+                                        {bridgePreview?.variant === activeVariant && (
+                                            Object.keys(selectedBridgeReplacements).length > 0
+                                            || (bridgePreview.suggestions || []).some(row =>
+                                                (row.candidates || []).some(c => c.strong_candidate)
+                                            )
                                         ) && (
                                             <button
                                                 className="btn btn-primary"
@@ -882,9 +885,9 @@ export default function PlanBuilder() {
                                                     <div style={{ padding: '8px 10px', borderRadius: 8, background: '#fff3cd', border: '1px solid #ffecb5', color: '#6d4c00', fontSize: 12 }}>
                                                         <strong>{localText('Итог поиска замен', 'Ауыстыру іздеу қорытындысы', 'Replacement search summary')}:</strong>{' '}
                                                         {localText(
-                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредитов · сильных замен: ${bridgePreview.summary.with_strong_candidate} · без сильной замены: ${bridgePreview.summary.without_strong_candidate}.`,
-                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредит · күшті ауыстырулар: ${bridgePreview.summary.with_strong_candidate} · күшті ауыстырусыз: ${bridgePreview.summary.without_strong_candidate}.`,
-                                                            `${bridgePreview.summary.bridge_count} bridges · ${bridgePreview.summary.bridge_credits} credits · strong replacements: ${bridgePreview.summary.with_strong_candidate} · without strong replacement: ${bridgePreview.summary.without_strong_candidate}.`
+                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредитов · сильных: ${bridgePreview.summary.with_strong_candidate} · средних: ${bridgePreview.summary.with_medium_candidate || 0} · без сильной: ${bridgePreview.summary.without_strong_candidate}.`,
+                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредит · күшті: ${bridgePreview.summary.with_strong_candidate} · орташа: ${bridgePreview.summary.with_medium_candidate || 0} · күштісіз: ${bridgePreview.summary.without_strong_candidate}.`,
+                                                            `${bridgePreview.summary.bridge_count} bridges · ${bridgePreview.summary.bridge_credits} credits · strong: ${bridgePreview.summary.with_strong_candidate} · medium: ${bridgePreview.summary.with_medium_candidate || 0} · without strong: ${bridgePreview.summary.without_strong_candidate}.`
                                                         )}
                                                         <div style={{ marginTop: 4 }}>
                                                             {bridgePreview.summary.diagnosis}
@@ -897,7 +900,7 @@ export default function PlanBuilder() {
                                                     </div>
                                                 )}
                                                 {(bridgePreview.suggestions || []).map(row => {
-                                                    const good = (row.candidates || []).filter(c => c.strong_candidate)
+                                                    const good = (row.candidates || []).filter(c => c.strong_candidate || c.medium_candidate)
                                                     return (
                                                         <div key={row.bridge_item_id} style={{ fontSize: 12, padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #f3d27a' }}>
                                                             <b>{row.bridge_title}</b> · {row.credits} {t('credits')} · LO: {(row.target_los || []).join(', ')}
@@ -914,7 +917,7 @@ export default function PlanBuilder() {
                                                                                         onChange={() => setSelectedBridgeReplacements(current => ({ ...current, [row.bridge_item_id]: c.course_id }))}
                                                                                     />
                                                                                     <strong>→ {(c.title_translations || {})[language] || c.title}</strong>
-                                                                                </label> · {c.credits} {t('credits')} · AI {Math.round((c.model_score || 0) * 100)}% · EPVO {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
+                                                                                </label> · {c.credits} {t('credits')} · {c.quality_level === 'strong' ? localText('сильная', 'күшті', 'strong') : localText('средняя, нужно подтвердить', 'орташа, растау керек', 'medium, needs confirmation')} · AI {Math.round((c.model_score || 0) * 100)}% · EPVO {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
                                                                                 <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{c.description}</div>
                                                                             </span>
                                                                             <button
