@@ -3082,6 +3082,37 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     def role_rank(course: Course | None) -> int:
         return _course_role_rank(course, project_domains)
 
+    domain_text = " ".join(project_domains).lower()
+    ict_programme = any(marker in domain_text for marker in ("информац", "коммуникац", "it", "computer", "software", "digital", "кибер"))
+    medical_programme = any(marker in domain_text for marker in ("медицин", "здрав", "clinical", "health"))
+    agro_programme = any(marker in domain_text for marker in ("агро", "сельск", "растен", "почв"))
+
+    def course_matches_scope_theme(course: Course) -> bool:
+        text = " ".join(str(value or "") for value in (course.title, course.description, course.domain)).lower()
+        if ict_programme:
+            if any(marker in text for marker in (
+                "здоров", "здравоохран", "пациент", "стоматолог", "клинич",
+                "физи", "лабораторная физика", "теоретическая физика",
+                "электродинами", "скалярн", "калибровоч",
+                "философ", "общекультур", "лингвист", "языкозн",
+            )):
+                return any(marker in text for marker in (
+                    "информац", "цифр", "программир", "разработк", "алгоритм", "данные", "данных", "база данных",
+                    "кибер", "криптограф", "software", "digital", "data", "computer", "algorithm",
+                ))
+            return any(marker in text for marker in (
+                "информац", "цифр", "программир", "разработк", "алгоритм", "данные", "данных", "база данных",
+                "сеть", "кибер", "криптограф", "искусствен", "машинн", "software",
+                "digital", "data", "computer", "algorithm", "network", "security",
+                "математ", "алгебр", "исчислен", "статист", "вероятност", "дискрет",
+                "логик", "оптимизац", "calculus", "algebra", "statistics", "probability",
+            ))
+        if medical_programme:
+            return any(marker in text for marker in ("медицин", "клинич", "пациент", "здоров", "анатом", "физиолог", "фармак", "clinical", "health", "medical"))
+        if agro_programme:
+            return any(marker in text for marker in ("агро", "сельск", "растен", "почв", "урож", "животн", "agro", "crop", "soil"))
+        return True
+
     def admit_real_courses(items: List[Dict]) -> List[Dict]:
         """Final evidence gate shared by every A/B/C selection path.
 
@@ -3118,6 +3149,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if not credible_los:
                 continue
             if course_code.startswith("EPVO-") and scope_rank(course) <= 0:
+                continue
+            if course_code.startswith("EPVO-") and not course_matches_scope_theme(course):
                 continue
             if not is_project_domain(course):
                 continue
@@ -3376,6 +3409,61 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         )
         domain_quota_candidate_cache[domain_index] = cached
         return cached
+
+    def top_up_with_real_epvo_courses(items: List[Dict]) -> List[Dict]:
+        """Prefer real scoped EPVO courses before synthetic credit bridges."""
+        normalized = _unique_items_by_title(admit_real_courses(items))
+        total_now = sum(int(item.get("credits") or 0) for item in normalized)
+        if total_now >= target:
+            return normalized
+        selected_ids = {int(item.get("course_id")) for item in normalized if item.get("course_id")}
+        selected_titles = {_title_key(item.get("title")) for item in normalized if item.get("title")}
+        candidates = []
+        for course in courses.values():
+            if course.id in selected_ids or _title_key(course.title) in selected_titles:
+                continue
+            if not str(course.course_id or "").startswith("EPVO-"):
+                continue
+            if not is_project_domain(course) or scope_rank(course) <= 0:
+                continue
+            if not course_matches_scope_theme(course):
+                continue
+            if course_depth(course.id) >= num_semesters:
+                continue
+            prerequisites = prereq_ids_by_course.get(course.id, [])
+            if any(pre_id not in selected_ids for pre_id in prerequisites):
+                continue
+            evidence = aggregates.get(course.id, {})
+            if not evidence.get("professional_lo_codes"):
+                continue
+            candidates.append(course)
+        candidates.sort(key=lambda course: (
+            -scope_rank(course),
+            -priority_rank(course),
+            -float(aggregates.get(course.id, {}).get("max") or 0.0),
+            course.recommended_semester or 99,
+            course.id,
+        ))
+        for course in candidates:
+            credits = int(course.credits or 5)
+            if total_now + credits > maximum:
+                continue
+            normalized.append({
+                "course_id": course.id,
+                "title": course.title,
+                "domain": course.domain,
+                "credits": credits,
+                "recommended_semester": course.recommended_semester,
+                "prerequisites": prereq_ids_by_course.get(course.id, []),
+                "type": course.cycle_component or "elective",
+                "selection_method": "real_epvo_credit_top_up",
+            })
+            selected_ids.add(course.id)
+            selected_titles.add(_title_key(course.title))
+            total_now += credits
+            if total_now >= target:
+                break
+        return admit_real_courses(normalized)
 
     def rebalance_domain_quotas(items: List[Dict]) -> List[Dict]:
         if not interdisciplinary:
@@ -3833,7 +3921,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         target,
         max_general_percent,
     )
-    result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(remove_weak_general_items(result))), target, db)
+    result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(top_up_with_real_epvo_courses(remove_weak_general_items(result)))), target, db)
     for bridge in [core_bridge, *secondary_bridges]:
         result = _force_bridge_item(result, bridge, variant_type)
     total = sum(int(item.get("credits") or 0) for item in result)
@@ -3964,7 +4052,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     )
     result = rebalance_domain_quotas(result)
     result = _diversify_variant_items(result, version, db, variant_type)
-    result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(remove_weak_general_items(result))), target, db)
+    result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(top_up_with_real_epvo_courses(remove_weak_general_items(result)))), target, db)
     result = _limit_general_course_items(
         result,
         courses,
@@ -3984,7 +4072,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         target,
         maximum,
     )
-    result = _trim_to_target_credits(top_up_with_credit_bridges(result), target, db)
+    result = _trim_to_target_credits(top_up_with_credit_bridges(top_up_with_real_epvo_courses(result)), target, db)
     result = rebalance_domain_quotas(result)
     confirmed_course_replacements = {
         int(course_id): int(replacement_id)
@@ -4058,10 +4146,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # credits are filled only by explicit bridge modules, so the UI never
     # presents a catalogue placeholder as an evidence-backed course.
     result = admit_real_courses(result)
-    result = top_up_with_credit_bridges(result)
+    result = top_up_with_credit_bridges(top_up_with_real_epvo_courses(result))
     result = close_professional_lo_gaps(result)
     result = admit_real_courses(result)
-    result = top_up_with_credit_bridges(result)
+    result = top_up_with_credit_bridges(top_up_with_real_epvo_courses(result))
     result = _trim_to_target_credits(result, target, db)
     for item in result:
         course = courses.get(item.get("course_id"))
