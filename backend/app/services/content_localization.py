@@ -55,11 +55,11 @@ def course_localization_payload(db, course_id):
     }
 
 
-def course_localization_map(db, course_ids):
+def course_localization_map(db, course_ids, include_descriptions=True):
     """Batch variant of course_localization_payload for response builders."""
     result = {int(course_id): {
         "title_translations": dict(course_translations(course_id, "title")),
-        "description_translations": dict(course_translations(course_id, "description")),
+        "description_translations": dict(course_translations(course_id, "description")) if include_descriptions else {},
         "translation_status": course_translation_status(course_id),
     } for course_id in set(course_ids or []) if course_id}
     if not result:
@@ -76,7 +76,7 @@ def course_localization_map(db, course_ids):
             })
             if row.title:
                 payload["title_translations"][row.language] = row.title
-            if row.description:
+            if include_descriptions and row.description:
                 payload["description_translations"][row.language] = row.description
             if row.status == "verified":
                 payload["translation_status"] = "verified"

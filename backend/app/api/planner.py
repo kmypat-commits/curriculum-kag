@@ -1509,6 +1509,7 @@ def recompute_matches(
 @router.get("/{project_version_id}/variants")
 async def get_variants(
     project_version_id: int,
+    include_descriptions: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1540,7 +1541,7 @@ async def get_variants(
         course.id: course
         for course in db.query(Course).filter(Course.id.in_(all_course_ids)).all()
     } if all_course_ids else {}
-    all_localizations_by_course = course_localization_map(db, all_course_ids)
+    all_localizations_by_course = course_localization_map(db, all_course_ids, include_descriptions=include_descriptions)
     all_bridges_by_id = {
         bridge.id: bridge
         for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(all_bridge_ids)).all()
@@ -1934,8 +1935,8 @@ async def get_variants(
                     else all_localizations_by_course.get(item.course_id, {}).get("title_translations", {})
                     if item.course_id else {}
                 ),
-                "description": course_obj.description if item.course_id and course_obj else None,
-                "description_translations": all_localizations_by_course.get(item.course_id, {}).get("description_translations", {}) if item.course_id else {},
+                "description": course_obj.description if include_descriptions and item.course_id and course_obj else None,
+                "description_translations": all_localizations_by_course.get(item.course_id, {}).get("description_translations", {}) if include_descriptions and item.course_id else {},
                 "translation_status": all_localizations_by_course.get(item.course_id, {}).get("translation_status") if item.course_id else None,
                 "credits": item.credits,
                 "type": item.course_type,

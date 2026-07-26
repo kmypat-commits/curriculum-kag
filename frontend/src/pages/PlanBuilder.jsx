@@ -244,9 +244,11 @@ export default function PlanBuilder() {
         }
     }
 
-    const fetchVariants = async (versionId) => {
+    const fetchVariants = async (versionId, includeDescriptions = showCourseDescriptions) => {
         try {
-            const variantsRes = await axios.get(`/api/planner/${versionId}/variants`)
+            const variantsRes = await axios.get(`/api/planner/${versionId}/variants`, {
+                params: { include_descriptions: includeDescriptions },
+            })
             if (variantsRes.data && variantsRes.data.length > 0) {
                 const variantsObj = {}
                 variantsRes.data.forEach(v => {
@@ -263,6 +265,12 @@ export default function PlanBuilder() {
         } catch (err) {
             console.error('Error fetching variants:', err)
         }
+    }
+
+    const handleShowCourseDescriptionsChange = async (checked) => {
+        setShowCourseDescriptions(checked)
+        const versionId = project?.latest_version?.id
+        if (checked && versionId) await fetchVariants(versionId, checked)
     }
 
     const handleBuild = async () => {
@@ -852,7 +860,7 @@ export default function PlanBuilder() {
                                 <input
                                     type="checkbox"
                                     checked={showCourseDescriptions}
-                                    onChange={(event) => setShowCourseDescriptions(event.target.checked)}
+                                    onChange={(event) => handleShowCourseDescriptionsChange(event.target.checked)}
                                 />
                                 {localText(
                                     '\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d',
