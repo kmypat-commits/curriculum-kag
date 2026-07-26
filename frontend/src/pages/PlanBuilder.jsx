@@ -1434,6 +1434,11 @@ export default function PlanBuilder() {
                                                                                         <div style={{ marginTop: 2, maxWidth: 310, color: '#4f5d6b' }}>
                                                                                             <b>{lo.lo_code}:</b> {lo.lo_text}
                                                                                         </div>
+                                                                                        {lo.explanation && (
+                                                                                            <div style={{ marginTop: 3, maxWidth: 360, color: '#37474f', fontSize: 11, background: '#fffde7', border: '1px solid #fff59d', borderRadius: 6, padding: '5px 7px' }}>
+                                                                                                {lo.explanation}
+                                                                                            </div>
+                                                                                        )}
                                                                                         {lo.lo_id && c.course_id && (
                                                                                             <span style={{ display: 'inline-flex', gap: 3, marginLeft: 4 }}>
                                                                                                 {['confirmed', 'weak', 'incorrect'].map(verdict => {

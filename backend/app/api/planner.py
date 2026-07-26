@@ -114,6 +114,7 @@ def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, t
     professional_los = [code for code in target_los if not str(code or "").startswith("LO-GOSO-")]
     lo_label = _compact_lo_label(target_los)
     bridge_key = _title_key(bridge.title)
+    bridge_text = " ".join(str(value or "") for value in (bridge.title, bridge.description, bridge.goal)).lower()
     if "данн" in bridge_key or "data" in bridge_key:
         focus = "данных и аналитических процессов"
     elif "интеграц" in bridge_key or "integration" in bridge_key:
@@ -124,24 +125,29 @@ def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, t
         focus = "проектной практики"
     else:
         focus = f"компетенций {lo_label}"
-    professional_focus = {
-        "LO1": "основ и принципов ИИ-систем",
-        "LO2": "аудита качества данных",
-        "LO3": "оценки качества ИИ-моделей",
-        "LO4": "выявления алгоритмических ошибок и bias",
-        "LO5": "оценки рисков применения ИИ",
-        "LO6": "правового и этического аудита ИИ",
-        "LO7": "человеческого контроля ИИ",
-        "LO8": "документирования жизненного цикла ИИ",
-        "LO9": "управления ответственным внедрением ИИ",
-    }
     if professional_los:
-        focus = " и ".join(professional_focus.get(code, f"компетенции {code}") for code in professional_los[:2])
+        focus = " и ".join(f"компетенции {code}" for code in professional_los[:2])
+    if any(marker in bridge_text for marker in ("медицин", "клинич", "пациент", "здоров")):
+        themes = ["Клинические данные и процессы", "Основы медицинской информатики", "Цифровые технологии в здравоохранении"]
+    elif any(marker in bridge_text for marker in ("агро", "сельск", "растен", "почв", "урож")):
+        themes = ["Цифровая агрономия", "Аналитика агропромышленных данных", "Интеллектуальные технологии в АПК"]
+    elif any(marker in bridge_text for marker in ("киберслед", "кримин", "forensic", "расслед", "цифровых доказ")):
+        themes = ["Цифровая криминалистика", "Правовые основы цифровых расследований", "Анализ цифровых доказательств"]
+    elif any(marker in bridge_text for marker in ("робот", "мехатрон", "кинемат")):
+        themes = ["Основы робототехнических систем", "Моделирование и управление роботами", "Интеллектуальная мехатроника"]
+    elif any(marker in bridge_text for marker in ("ии", "ai", "модель", "алгоритм")):
+        themes = ["Прикладной искусственный интеллект", "Аудит и качество ИИ-систем", "Управление данными и моделями"]
+    else:
+        themes = [
+            f"Прикладной анализ области {domain2}",
+            f"Профессиональный практикум {domain1} и {domain2}",
+            f"Проектирование решений для {domain2}",
+        ]
     semester_label = f"семестр {semester}"
     return [
-        f"{focus.capitalize()} в области {domain1} и {domain2}",
-        f"Прикладной модуль {domain2}: {lo_label}",
-        f"Проектный практикум {domain1} + {domain2}: {lo_label} ({semester_label})",
+        f"{themes[0]}: {lo_label}",
+        f"{themes[1]} для программы «{version.project.title}»",
+        f"{themes[2]} ({semester_label}; {focus})",
     ]
 
 
@@ -1834,6 +1840,11 @@ async def get_variants(
                     expert_score = evidence.get("epvo_expert_score")
                     corrected_score = float(feedback.corrected_score or 0) if feedback and feedback.verdict == "corrected" else 0.0
                     effective_score = round(max(ai_score, float(expert_score or 0), corrected_score), 3)
+                    evidence_label = (
+                        "экспертная правка" if corrected_score > 0
+                        else "экспертная оценка ЕПВО" if float(expert_score or 0) > 0
+                        else "прогноз ИИ по текстам"
+                    )
                     top_matches.append({
                         "lo_id": lo.id,
                         "lo_code": lo.lo_code,
@@ -1844,6 +1855,12 @@ async def get_variants(
                         "effective_score": effective_score,
                         "ai_score": ai_score,
                         "expert_score": expert_score,
+                        "explanation": (
+                            f"Итог {round(effective_score * 100)}% — сила связи «{title} → {lo.lo_code}». "
+                            f"ИИ {round(ai_score * 100)}% — прогноз модели по описанию дисциплины и текста LO. "
+                            f"ЕПВО {round(float(expert_score or 0) * 100)}% — похожая экспертная разметка из ЕПВО. "
+                            f"Эти проценты не складываются; система берёт наиболее надёжный сигнал: {evidence_label}."
+                        ),
                         "weak_evidence": row not in trustworthy_matches,
                         "source": evidence.get("source") or evidence.get("label") or row.model_name,
                         "expert_feedback": (
