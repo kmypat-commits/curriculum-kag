@@ -899,7 +899,6 @@ export default function PlanBuilder() {
 
                         {currentPlan?.metrics?.verification && (
                             <CompactSection title={t('verification')} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{t('verification')}</h3>
                                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                                     <span>{t('feasible')}: <strong>{currentPlan.metrics.verification.feasible ? t('yes') : t('no')}</strong></span>
                                     <span>{t('total_credits')}: <strong>{currentPlan.metrics.total_credits}/{currentPlan.metrics.target_credits}</strong></span>
@@ -1116,53 +1115,6 @@ export default function PlanBuilder() {
                                                 <span style={{ color: '#8a5a00' }}>bridge: <b>{loCoverageSources.summary?.bridge_supported || 0}</b></span>
                                                 <span style={{ color: '#c62828' }}>{localText('СЃР»Р°Р±С‹Рµ', 'У™Р»СЃС–Р·', 'weak')}: <b>{loCoverageSources.summary?.weak || 0}</b></span>
                                             </div>
-                                            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #dfeaf6' }}>
-                                                <div style={{ fontWeight: 700, marginBottom: 6, color: '#17233b' }}>
-                                                    {localText('\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f \u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0445 \u043f\u043e\u043a\u0440\u044b\u0432\u0430\u044e\u0442', '\u041e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u043b\u0435\u0440\u0456 \u0436\u04d9\u043d\u0435 \u043e\u043b\u0430\u0440\u0434\u044b \u049b\u0430\u043c\u0442\u0438\u0442\u044b\u043d \u043f\u04d9\u043d\u0434\u0435\u0440', 'Learning outcomes and covering courses')}
-                                                </div>
-                                                <div style={{ fontSize: 12, color: '#566', marginBottom: 8 }}>
-                                                    {localText('\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u00ab\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b\u00bb, \u0447\u0442\u043e\u0431\u044b \u0443\u0432\u0438\u0434\u0435\u0442\u044c, \u043a\u0430\u043a\u0438\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u043f\u043b\u0430\u043d\u0430 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044e\u0442 \u0434\u043e\u0441\u0442\u0438\u0436\u0435\u043d\u0438\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430 \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f.', '\u00ab\u041f\u04d9\u043d\u0434\u0435\u0440\u0434\u0456 \u043a\u04e9\u0440\u0441\u0435\u0442\u0443\u00bb \u0431\u0430\u0442\u044b\u0440\u043c\u0430\u0441\u044b\u043d \u0431\u0430\u0441\u0441\u0430\u04a3\u044b\u0437, \u0442\u0430\u04a3\u0434\u0430\u043b\u0493\u0430\u043d \u043e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u0441\u0456\u043d \u0440\u0430\u0441\u0442\u0430\u0439\u0442\u044b\u043d \u0436\u043e\u0441\u043f\u0430\u0440 \u043f\u04d9\u043d\u0434\u0435\u0440\u0456 \u043a\u04e9\u0440\u0441\u0435\u0442\u0456\u043b\u0435\u0434\u0456.', 'Click Show courses to see which plan courses support the selected learning outcome.')}
-                                                </div>
-                                                <div style={{ display: 'grid', gap: 7 }}>
-                                                    {(loCoverageSources.items || []).map(row => {
-                                                        const loKey = `${activeVariant}:${row.lo_code}`
-                                                        const checked = Boolean(expandedLoCourses[loKey])
-                                                        const real = row.real_sources || []
-                                                        const bridges = row.bridge_sources || []
-                                                        return <div key={`lo-course-map-${row.lo_code}`} style={{ padding: '8px 10px', borderRadius: 8, background: checked ? '#f8fbff' : '#fbfcfe', border: '1px solid #e4edf7' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn btn-secondary"
-                                                                    onClick={() => setExpandedLoCourses(current => ({ ...current, [loKey]: !current[loKey] }))}
-                                                                    style={{ padding: '4px 8px', fontSize: 11, whiteSpace: 'nowrap', marginTop: 1 }}
-                                                                >
-                                                                    {checked ? localText('\u0421\u043a\u0440\u044b\u0442\u044c', '\u0421\u043a\u0440\u044b\u0442\u044c', 'Hide') : localText('\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b', '\u041f\u04d9\u043d\u0434\u0435\u0440\u0434\u0456 \u043a\u04e9\u0440\u0441\u0435\u0442\u0443', 'Show courses')}
-                                                                </button>
-                                                                <span>
-                                                                    <strong>{row.lo_code}</strong> <span aria-hidden="true">&middot;</span> {Math.round((row.coverage || 0) * 100)}% <span aria-hidden="true">&middot;</span> {row.status === 'real_confirmed' ? localText('\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u043c\u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430\u043c\u0438', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440\u043c\u0435\u043d \u0440\u0430\u0441\u0442\u0430\u043b\u0493\u0430\u043d', 'confirmed by real courses') : row.status === 'bridge_supported' ? localText('\u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0430\u043d\u043e bridge-\u043c\u043e\u0434\u0443\u043b\u0435\u043c', 'bridge-\u043c\u043e\u0434\u0443\u043b\u044c\u043c\u0435\u043d \u049b\u043e\u043b\u0434\u0430\u0443 \u0442\u0430\u043f\u049b\u0430\u043d', 'supported by a bridge module') : localText('\u043d\u0443\u0436\u043d\u043e \u0443\u0441\u0438\u043b\u0438\u0442\u044c', '\u043a\u04af\u0448\u0435\u0439\u0442\u0443 \u049b\u0430\u0436\u0435\u0442', 'needs strengthening')}
-                                                                    <span style={{ display: 'block', marginTop: 2, color: '#667085', fontSize: 12 }}>{row.lo_text}</span>
-                                                                </span>
-                                                            </div>
-                                                            {checked && <div style={{ marginTop: 8, paddingLeft: 25, display: 'grid', gap: 5, fontSize: 12 }}>
-                                                                {real.length > 0 && real.map(src => (
-                                                                    <div key={`lo-real-${row.lo_code}-${src.course_id}`} style={{ color: '#1b5e20' }}>
-                                                                        <span aria-hidden="true">&#10003;</span> {src.title} <span aria-hidden="true">&middot;</span> {src.credits} {t('credits')} <span aria-hidden="true">&middot;</span> AI {Math.round((src.score || 0) * 100)}% <span aria-hidden="true">&middot;</span> EPVO {Math.round((src.expert_score || 0) * 100)}%
-                                                                    </div>
-                                                                ))}
-                                                                {bridges.length > 0 && bridges.map(src => (
-                                                                    <div key={`lo-bridge-${row.lo_code}-${src.bridge_id || src.title}`} style={{ color: '#8a5a00' }}>
-                                                                        <span aria-hidden="true">&#8618;</span> bridge: {src.title} <span aria-hidden="true">&middot;</span> {src.credits} {t('credits')} <span aria-hidden="true">&middot;</span> {t('semester')} {src.semester}
-                                                                    </div>
-                                                                ))}
-                                                                {real.length === 0 && bridges.length === 0 && <div style={{ color: '#b71c1c' }}>
-                                                                    {localText('\u0412 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u043f\u043b\u0430\u043d\u0435 \u043d\u0435\u0442 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0443\u0432\u0435\u0440\u0435\u043d\u043d\u043e \u043f\u043e\u043a\u0440\u044b\u0432\u0430\u044e\u0442 \u044d\u0442\u043e\u0442 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442.', '\u0410\u0493\u044b\u043c\u0434\u0430\u0493\u044b \u0436\u043e\u0441\u043f\u0430\u0440\u0434\u0430 \u0431\u04b1\u043b \u043d\u04d9\u0442\u0438\u0436\u0435\u043d\u0456 \u0441\u0435\u043d\u0456\u043c\u0434\u0456 \u049b\u0430\u043c\u0442\u0438\u0442\u044b\u043d \u043f\u04d9\u043d\u0434\u0435\u0440 \u0436\u043e\u049b.', 'No courses in the current plan confidently cover this outcome.')}
-                                                                </div>}
-                                                            </div>}
-                                                        </div>
-                                                    })}
-                                                </div>
-                                            </div>
                                             <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                                                 {(loCoverageSources.items || []).map(row => (
                                                     <details key={row.lo_code} style={{ padding: 8, borderRadius: 7, background: '#fff', border: '1px solid #e2edf7' }}>
@@ -1361,7 +1313,6 @@ export default function PlanBuilder() {
                         })()}
                         {currentPlan?.metrics?.optimizer && (
                             <CompactSection title={t('optimizer')} accent={'#3949ab'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{t('optimizer')}</h3>
                                 <strong>{currentPlan.metrics.optimizer.name}</strong>
                                 {currentPlan.metrics.optimizer.selection_method === 'nsga2' && (
                                     <span style={{ marginLeft: '12px', color: '#555' }}>
@@ -1376,7 +1327,6 @@ export default function PlanBuilder() {
                             <CompactSection title={t('international_quality')} subtitle={'OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences'} accent={currentPlan.metrics.international_quality.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '12px' }}>
                                     <div>
-                                        <h3 style={{ margin: 0 }}>{t('international_quality')}</h3>
                                         <p style={{ margin: '6px 0 0', color: '#666', fontSize: '14px' }}>
                                             OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences
                                         </p>
