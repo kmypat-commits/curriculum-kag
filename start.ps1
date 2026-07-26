@@ -53,6 +53,78 @@ function Wait-Endpoint([string]$Name, [string]$Url, [int]$Seconds = 120) {
     throw "$Name did not start in $Seconds seconds. Check logs in .runtime."
 }
 
+function Wait-TcpPort([string]$HostName, [int]$Port, [int]$Seconds = 60) {
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-NetConnection -ComputerName $HostName -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 750
+    }
+    return $false
+}
+
+function Find-DockerCli {
+    $command = Get-Command docker.exe -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\resources\bin\docker.exe"),
+        "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Start-DockerDesktopIfNeeded([string]$DockerCli) {
+    try {
+        & $DockerCli version --format "{{.Server.Version}}" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { return $true }
+    }
+    catch { }
+
+    $desktopCandidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\Docker Desktop.exe"),
+        "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    )
+    $desktop = $desktopCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $desktop) { return $false }
+
+    Write-Host "Starting Docker Desktop..." -ForegroundColor Cyan
+    Start-Process -FilePath $desktop -WindowStyle Hidden | Out-Null
+    $deadline = (Get-Date).AddSeconds(90)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            & $DockerCli version --format "{{.Server.Version}}" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return $true }
+        }
+        catch { }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
+function Start-PostgresShadowIfNeeded {
+    if (Wait-TcpPort "localhost" 5433 2) { return $true }
+    $composeFile = Join-Path $root "docker-compose.postgres-only.yml"
+    if (-not (Test-Path $composeFile)) { return $false }
+    $docker = Find-DockerCli
+    if (-not $docker) { return $false }
+    if (-not (Start-DockerDesktopIfNeeded $docker)) { return $false }
+
+    Write-Host "Starting local PostgreSQL shadow database..." -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $docker compose -f $composeFile up -d
+        if ($LASTEXITCODE -ne 0) { return $false }
+    }
+    finally {
+        Pop-Location
+    }
+    return (Wait-TcpPort "localhost" 5433 90)
+}
+
 function Get-LatestSourceTime {
     $files = @(
         Get-ChildItem (Join-Path $frontendDir "src") -File -Recurse -ErrorAction SilentlyContinue
@@ -158,6 +230,9 @@ Build-FrontendIfNeeded
 # Keep the one-click local launch usable when the optional PostgreSQL service is
 # not running. Environment variables override backend/.env for the child process.
 $sqlitePath = (Join-Path $backendDir "curriculum_kag.db").Replace('\', '/')
+if ($Database -in @("auto", "postgres", "postgres-shadow")) {
+    Start-PostgresShadowIfNeeded | Out-Null
+}
 if ($Database -eq "sqlite") {
     $env:DATABASE_URL = "sqlite:///$sqlitePath"
     Write-Host "Using SQLite database." -ForegroundColor Cyan
