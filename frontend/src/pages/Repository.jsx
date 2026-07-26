@@ -65,7 +65,8 @@ export default function Repository() {
                     direction_code: filter.direction_code || undefined,
                     group_code: filter.group_code || undefined,
                     search: filter.search || undefined,
-                    limit: 200
+                    limit: 50,
+                    include_descriptions: false,
                 }
             })
             setCourses(response.data)

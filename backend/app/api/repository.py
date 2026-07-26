@@ -215,13 +215,20 @@ async def list_courses(
     direction_code: Optional[str] = None,
     group_code: Optional[str] = None,
     search: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
     skip: int = 0,
     limit: int = 100,
+    include_descriptions: bool = False,
     include_relations: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """List courses with optional filtering"""
+    if page_size is not None:
+        limit = max(1, min(int(page_size), 200))
+    if page is not None:
+        skip = max(0, int(page) - 1) * limit
     query = db.query(Course)
     
     if domain:
@@ -253,7 +260,7 @@ async def list_courses(
         courses = query.order_by(Course.id.desc()).offset(skip).limit(limit).all()
     # Format for response
     results = []
-    localization_by_course = course_localization_map(db, [c.id for c in courses])
+    localization_by_course = course_localization_map(db, [c.id for c in courses], include_descriptions=include_descriptions)
     for c in courses:
         localization = localization_by_course.get(c.id, {})
         results.append({
@@ -261,11 +268,11 @@ async def list_courses(
             "course_id": c.course_id,
             "title": c.title,
             "title_translations": localization.get("title_translations", {}),
-            "description_translations": localization.get("description_translations", {}),
+            "description_translations": localization.get("description_translations", {}) if include_descriptions else {},
             "translation_status": localization.get("translation_status"),
             "domain": c.domain,
             "credits": c.credits,
-            "description": c.description,
+            "description": c.description if include_descriptions else None,
             "recommended_semester": c.recommended_semester,
             "prerequisite_exempt": prerequisite_exempt(c),
             "cycle_component": c.cycle_component,
