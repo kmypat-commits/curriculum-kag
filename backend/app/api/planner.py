@@ -1338,31 +1338,26 @@ def build_plan(
         for old_plan in old_plans:
             db.delete(old_plan)
 
-        if active_variant and active_variant in variants:
-            new_active_plan = db.query(Plan).filter(
-                Plan.id == variants[active_variant]["plan_id"]
-            ).first()
-            if new_active_plan:
-                new_active_plan.is_active = 1
-        else:
-            def _variant_quality_key(row):
-                metrics = row.get("metrics") or {}
-                verification = metrics.get("verification") or {}
-                quality = metrics.get("international_quality") or {}
-                return (
-                    1 if verification.get("feasible") else 0,
-                    -int(verification.get("hard_violation_count") or 0),
-                    float(quality.get("score") or 0.0),
-                    -int(metrics.get("num_bridge_modules") or 0),
-                    float(metrics.get("lo_coverage_percentage") or 0.0),
-                )
+        def _variant_quality_key(item):
+            variant_name, row = item
+            metrics = row.get("metrics") or {}
+            verification = metrics.get("verification") or {}
+            quality = metrics.get("international_quality") or {}
+            return (
+                1 if verification.get("feasible") else 0,
+                -int(verification.get("hard_violation_count") or 0),
+                float(quality.get("score") or 0.0),
+                float(metrics.get("lo_coverage_percentage") or 0.0),
+                -int(metrics.get("num_bridge_modules") or 0),
+                1 if active_variant and variant_name == active_variant else 0,
+            )
 
-            best_variant = max(variants.items(), key=lambda item: _variant_quality_key(item[1]))[0] if variants else None
-            new_active_plan = db.query(Plan).filter(
-                Plan.id == variants[best_variant]["plan_id"]
-            ).first() if best_variant else None
-            if new_active_plan:
-                new_active_plan.is_active = 1
+        best_variant = max(variants.items(), key=_variant_quality_key)[0] if variants else active_variant
+        new_active_plan = db.query(Plan).filter(
+            Plan.id == variants[best_variant]["plan_id"]
+        ).first() if best_variant and best_variant in variants else None
+        if new_active_plan:
+            new_active_plan.is_active = 1
 
         new_active_snapshot = _plan_snapshot(new_active_plan, db)
         change_report = _build_change_report(old_active_snapshot, new_active_snapshot)
@@ -1380,12 +1375,14 @@ def build_plan(
             "stage": "complete",
             "progress": 100,
             "change_report": change_report,
+            "active_variant": best_variant,
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         }
         
         return {
             "variants": variants,
+            "active_variant": best_variant,
             "epvo_repository": epvo_sync,
             "change_report": change_report,
             "descriptions": {
