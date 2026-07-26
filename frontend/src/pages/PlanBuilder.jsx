@@ -471,6 +471,21 @@ export default function PlanBuilder() {
         }
     }
 
+    const selectMediumBridgeReplacements = () => {
+        const selected = {}
+        for (const row of bridgePreview?.suggestions || []) {
+            const candidate = (row.candidates || []).find(c => c.quality_level === 'medium' || c.medium_candidate)
+            if (candidate) selected[row.bridge_item_id] = candidate.course_id
+        }
+        setSelectedBridgeReplacements(selected)
+        setBuildNotice({
+            type: Object.keys(selected).length ? 'success' : 'info',
+            text: Object.keys(selected).length
+                ? localText(`Выбрано средних замен: ${Object.keys(selected).length}. Проверьте список и нажмите подтверждение.`, `Орташа ауыстырулар таңдалды: ${Object.keys(selected).length}. Тізімді тексеріп, растаңыз.`, `Selected medium replacements: ${Object.keys(selected).length}. Review and confirm.`)
+                : localText('Средних замен пока нет.', 'Орташа ауыстырулар жоқ.', 'No medium replacements available.'),
+        })
+    }
+
     const loadAiBridgeCandidates = async (bridgeItemId) => {
         const versionId = project?.latest_version?.id
         if (!versionId) return
@@ -909,6 +924,16 @@ export default function PlanBuilder() {
                                                     : Object.keys(selectedBridgeReplacements).length
                                                         ? localText(`Подтвердить выбранные: ${Object.keys(selectedBridgeReplacements).length}`, `Таңдалғандарды растау: ${Object.keys(selectedBridgeReplacements).length}`, `Confirm selected: ${Object.keys(selectedBridgeReplacements).length}`)
                                                         : localText('Заменить все подходящие bridge', 'Барлық қолайлы bridge-модульдерді ауыстыру', 'Replace all suitable bridges')}
+                                            </button>
+                                        )}
+                                        {bridgePreview?.variant === activeVariant && (bridgePreview.suggestions || []).some(row => (row.candidates || []).some(c => c.quality_level === 'medium' || c.medium_candidate)) && (
+                                            <button
+                                                className="btn btn-secondary"
+                                                onClick={selectMediumBridgeReplacements}
+                                                disabled={replacingAllBridges || Boolean(replacingBridge)}
+                                                style={{ marginTop: 8, marginLeft: 8, borderColor: '#c17b00', color: '#8a5a00' }}
+                                            >
+                                                {localText('Выбрать все средние замены', 'Барлық орташа ауыстыруларды таңдау', 'Select all medium replacements')}
                                             </button>
                                         )}
                                         {bridgePreview?.variant === activeVariant && (
