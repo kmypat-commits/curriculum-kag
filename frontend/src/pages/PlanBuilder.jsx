@@ -1081,16 +1081,16 @@ export default function PlanBuilder() {
                                     <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f5fbff', border: '1px solid #d7ecfb' }}>
                                         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
                                             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                                            <strong>{localText('Р”РёСЃС†РёРїР»РёРЅС‹ РїР»Р°РЅР° РёР· Р•РџР’Рћ', 'Р–РѕСЃРїР°СЂРґР°Т“С‹ Р•РџР’Рћ РїУ™РЅРґРµСЂС–', 'Plan courses from EPVO')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
+                                            <strong>{localText('\u0414\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u043f\u043b\u0430\u043d\u0430 \u0438\u0437 \u0415\u041f\u0412\u041e', '\u0416\u043e\u0441\u043f\u0430\u0440\u0434\u0430\u0493\u044b \u0415\u041f\u0412\u041e \u043f\u04d9\u043d\u0434\u0435\u0440\u0456', 'Plan courses from EPVO')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
                                             <span style={{ color: '#566' }}>
-                                                {localText('С‚РёРїРѕРІС‹С… РґРёСЃС†РёРїР»РёРЅ', 'С‚РёРїС‚С–Рє РїУ™РЅРґРµСЂ', 'typical courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
+                                                {localText('\u0442\u0438\u043f\u043e\u0432\u044b\u0445 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d', '\u0442\u0438\u043f\u0442\u0456\u043a \u043f\u04d9\u043d\u0434\u0435\u0440', 'typical courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
                                             </span>
                                             <span style={{ color: '#566' }}>
-                                                {localText('СЌРєСЃРїРµСЂС‚РЅС‹С… СЃРІСЏР·РµР№', 'СЃР°СЂР°РїС‚Р°РјР°Р»С‹Т› Р±Р°Р№Р»Р°РЅС‹СЃС‚Р°СЂ', 'expert links')}: {currentPlan.epvo_plan_quality.expert_links}
+                                                {localText('\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u044b\u0445 \u0441\u0432\u044f\u0437\u0435\u0439', '\u0441\u0430\u0440\u0430\u043f\u0442\u0430\u043c\u0430\u043b\u044b\u049b \u0431\u0430\u0439\u043b\u0430\u043d\u044b\u0441\u0442\u0430\u0440', 'expert links')}: {currentPlan.epvo_plan_quality.expert_links}
                                             </span>
                                             </div>
                                             <Link to={`/projects/${id}/epvo`} className="btn btn-secondary" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                                                {localText('РџРѕР»РЅС‹Р№ Р°РЅР°Р»РёР· Р•РџР’Рћ', 'Р•РџР’Рћ С‚РѕР»С‹Т› С‚Р°Р»РґР°СѓС‹', 'Full EPVO analysis')}
+                                                {localText('\u041f\u043e\u043b\u043d\u044b\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 \u0415\u041f\u0412\u041e', '\u0415\u041f\u0412\u041e \u0442\u043e\u043b\u044b\u049b \u0442\u0430\u043b\u0434\u0430\u0443\u044b', 'Full EPVO analysis')}
                                             </Link>
                                         </div>
                                     </div>
@@ -1098,22 +1098,22 @@ export default function PlanBuilder() {
                                 <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f8fbff', border: '1px solid #dce9f7' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                                         <div>
-                                            <strong>{localText('РСЃС‚РѕС‡РЅРёРєРё РїРѕРєСЂС‹С‚РёСЏ LO', 'LO Т›Р°РјС‚Сѓ РєУ©Р·РґРµСЂС–', 'LO coverage sources')}</strong>
+                                            <strong>{localText('\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438 \u043f\u043e\u043a\u0440\u044b\u0442\u0438\u044f LO', 'LO \u049b\u0430\u043c\u0442\u0443 \u043a\u04e9\u0437\u0434\u0435\u0440\u0456', 'LO coverage sources')}</strong>
                                             <div style={{ fontSize: 12, color: '#566', marginTop: 2 }}>
-                                                {localText('РџРѕРєР°Р·С‹РІР°РµС‚, РєР°РєРёРµ СЂРµР·СѓР»СЊС‚Р°С‚С‹ Р·Р°РєСЂС‹С‚С‹ СЂРµР°Р»СЊРЅС‹РјРё РґРёСЃС†РёРїР»РёРЅР°РјРё, Р° РєР°РєРёРµ С‚РѕР»СЊРєРѕ bridge-РјРѕРґСѓР»СЏРјРё.', 'ТљР°Р№ РЅУ™С‚РёР¶РµР»РµСЂ РЅР°Т›С‚С‹ РїУ™РЅРґРµСЂРјРµРЅ, Т›Р°Р№СЃС‹СЃС‹ bridge-РјРѕРґСѓР»СЊРґРµСЂРјРµРЅ Р¶Р°Р±С‹Р»Т“Р°РЅС‹РЅ РєУ©СЂСЃРµС‚РµРґС–.', 'Shows which outcomes are covered by real courses and which only by bridge modules.')}
+                                                {localText('\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442, \u043a\u0430\u043a\u0438\u0435 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0437\u0430\u043a\u0440\u044b\u0442\u044b \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u043c\u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430\u043c\u0438, \u0430 \u043a\u0430\u043a\u0438\u0435 \u0442\u043e\u043b\u044c\u043a\u043e bridge-\u043c\u043e\u0434\u0443\u043b\u044f\u043c\u0438.', '\u049a\u0430\u0439 \u043d\u04d9\u0442\u0438\u0436\u0435\u043b\u0435\u0440 \u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440\u043c\u0435\u043d, \u049b\u0430\u0439\u0441\u044b\u0441\u044b bridge-\u043c\u043e\u0434\u0443\u043b\u044c\u0434\u0435\u0440\u043c\u0435\u043d \u0436\u0430\u0431\u044b\u043b\u0493\u0430\u043d\u044b\u043d \u043a\u04e9\u0440\u0441\u0435\u0442\u0435\u0434\u0456.', 'Shows which outcomes are covered by real courses and which only by bridge modules.')}
                                             </div>
                                         </div>
                                         <button className="btn btn-secondary" onClick={loadLoCoverageSources} disabled={loadingLoCoverageSources}>
-                                            {loadingLoCoverageSources ? localText('Р—Р°РіСЂСѓР·РєР°вЂ¦', 'Р–ТЇРєС‚РµСѓвЂ¦', 'LoadingвЂ¦') : localText('РџРѕРєР°Р·Р°С‚СЊ LO-РёСЃС‚РѕС‡РЅРёРєРё', 'LO РєУ©Р·РґРµСЂС–РЅ РєУ©СЂСЃРµС‚Сѓ', 'Show LO sources')}
+                                            {loadingLoCoverageSources ? localText('\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026', '\u0416\u04af\u043a\u0442\u0435\u0443\u2026', 'Loading...') : localText('\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c LO-\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438', 'LO \u043a\u04e9\u0437\u0434\u0435\u0440\u0456\u043d \u043a\u04e9\u0440\u0441\u0435\u0442\u0443', 'Show LO sources')}
                                         </button>
                                     </div>
                                     {loCoverageSources?.variant === activeVariant && (
                                         <div style={{ marginTop: 10 }}>
                                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                                                <span>{localText('Р’СЃРµРіРѕ LO', 'Р‘Р°СЂР»С‹Т› LO', 'Total LOs')}: <b>{loCoverageSources.summary?.los || 0}</b></span>
-                                                <span style={{ color: '#2e7d32' }}>{localText('СЂРµР°Р»СЊРЅС‹Рµ РґРёСЃС†РёРїР»РёРЅС‹', 'РЅР°Т›С‚С‹ РїУ™РЅРґРµСЂ', 'real courses')}: <b>{loCoverageSources.summary?.real_confirmed || 0}</b></span>
+                                                <span>{localText('\u0412\u0441\u0435\u0433\u043e LO', '\u0411\u0430\u0440\u043b\u044b\u049b LO', 'Total LOs')}: <b>{loCoverageSources.summary?.los || 0}</b></span>
+                                                <span style={{ color: '#2e7d32' }}>{localText('\u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440', 'real courses')}: <b>{loCoverageSources.summary?.real_confirmed || 0}</b></span>
                                                 <span style={{ color: '#8a5a00' }}>bridge: <b>{loCoverageSources.summary?.bridge_supported || 0}</b></span>
-                                                <span style={{ color: '#c62828' }}>{localText('СЃР»Р°Р±С‹Рµ', 'У™Р»СЃС–Р·', 'weak')}: <b>{loCoverageSources.summary?.weak || 0}</b></span>
+                                                <span style={{ color: '#c62828' }}>{localText('\u0441\u043b\u0430\u0431\u044b\u0435', '\u04d9\u043b\u0441\u0456\u0437', 'weak')}: <b>{loCoverageSources.summary?.weak || 0}</b></span>
                                             </div>
                                             <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                                                 {(loCoverageSources.items || []).map(row => (
@@ -1128,24 +1128,24 @@ export default function PlanBuilder() {
                                                                 background: row.status === 'real_confirmed' ? '#e8f5e9' : row.status === 'bridge_supported' ? '#fff8e1' : '#ffebee',
                                                                 color: row.status === 'real_confirmed' ? '#1b5e20' : row.status === 'bridge_supported' ? '#8a5a00' : '#b71c1c'
                                                             }}>
-                                                                {row.status === 'real_confirmed' ? localText('СЂРµР°Р»СЊРЅР°СЏ РґРёСЃС†РёРїР»РёРЅР°', 'РЅР°Т›С‚С‹ РїУ™РЅ', 'real course') : row.status === 'bridge_supported' ? 'bridge' : localText('СЃР»Р°Р±РѕРµ РїРѕРєСЂС‹С‚РёРµ', 'У™Р»СЃС–Р· Т›Р°РјС‚Сѓ', 'weak')}
+                                                                {row.status === 'real_confirmed' ? localText('\u0440\u0435\u0430\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d', 'real course') : row.status === 'bridge_supported' ? 'bridge' : localText('\u0441\u043b\u0430\u0431\u043e\u0435 \u043f\u043e\u043a\u0440\u044b\u0442\u0438\u0435', '\u04d9\u043b\u0441\u0456\u0437 \u049b\u0430\u043c\u0442\u0443', 'weak')}
                                                             </span>
                                                         </summary>
                                                         <div style={{ marginTop: 6, fontSize: 12, color: '#455' }}>{row.lo_text}</div>
                                                         <div style={{ marginTop: 5, padding: '6px 8px', borderRadius: 6, background: row.coverage_kind === 'bridge_target_assumption' ? '#fff8e1' : '#f5f8fb', fontSize: 11, color: '#5d6470' }}>
                                                             {row.coverage_explanation || (row.status === 'bridge_supported'
-                                                                ? localText('75% вЂ” СЃР»СѓР¶РµР±РЅР°СЏ РѕС†РµРЅРєР° РїСЂРѕРµРєС‚РЅРѕРіРѕ bridge, Р° РЅРµ СЌРєСЃРїРµСЂС‚РЅР°СЏ РѕС†РµРЅРєР° СЂРµР°Р»СЊРЅРѕР№ РґРёСЃС†РёРїР»РёРЅС‹ Р•РџР’Рћ.', '75% вЂ” Р¶РѕР±Р°Р»С‹Т› bridge Т›С‹Р·РјРµС‚С‚С–Рє Р±Р°Т“Р°СЃС‹, РЅР°Т›С‚С‹ Р•РџР’Рћ РїУ™РЅС–РЅС–ТЈ СЃР°СЂР°РїС‚Р°РјР°Р»С‹Т› Р±Р°Т“Р°СЃС‹ РµРјРµСЃ.', '75% is a planning assumption for a proposed bridge, not an expert EPVO course score.')
+                                                                ? localText('75% \u2014 \u0441\u043b\u0443\u0436\u0435\u0431\u043d\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430 \u043f\u0440\u043e\u0435\u043a\u0442\u043d\u043e\u0433\u043e bridge, \u0430 \u043d\u0435 \u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430 \u0440\u0435\u0430\u043b\u044c\u043d\u043e\u0439 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u0415\u041f\u0412\u041e.', '75% \u2014 \u0436\u043e\u0431\u0430\u043b\u044b\u049b bridge \u049b\u044b\u0437\u043c\u0435\u0442\u0442\u0456\u043a \u0431\u0430\u0493\u0430\u0441\u044b, \u043d\u0430\u049b\u0442\u044b \u0415\u041f\u0412\u041e \u043f\u04d9\u043d\u0456\u043d\u0456\u04a3 \u0441\u0430\u0440\u0430\u043f\u0442\u0430\u043c\u0430\u043b\u044b\u049b \u0431\u0430\u0493\u0430\u0441\u044b \u0435\u043c\u0435\u0441.', '75% is a planning assumption for a proposed bridge, not an expert EPVO course score.')
                                                                 : '')}
                                                         </div>
                                                         <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 12 }}>
                                                             {(row.real_sources || []).slice(0, 3).map(src => (
-                                                                <div key={`real-${row.lo_code}-${src.course_id}`}>вњ“ {src.title} В· {src.credits} {t('credits')} В· AI {Math.round((src.score || 0) * 100)}% В· EPVO {Math.round((src.expert_score || 0) * 100)}%</div>
+                                                                <div key={`real-${row.lo_code}-${src.course_id}`}>\u2713 {src.title} \u00b7 {src.credits} {t('credits')} \u00b7 AI {Math.round((src.score || 0) * 100)}% \u00b7 EPVO {Math.round((src.expert_score || 0) * 100)}%</div>
                                                             ))}
                                                             {(row.bridge_sources || []).slice(0, 3).map(src => (
                                                                 <div key={`bridge-${row.lo_code}-${src.bridge_id}`} style={{ color: '#8a5a00' }}>
-                                                                    в†і bridge РІ РїР»Р°РЅРµ: {src.title} В· {src.credits} {t('credits')} В· {t('semester')} {src.semester}
+                                                                    \u21b3 bridge \u0432 \u043f\u043b\u0430\u043d\u0435: {src.title} \u00b7 {src.credits} {t('credits')} \u00b7 {t('semester')} {src.semester}
                                                                     <button className="btn btn-secondary" style={{ marginLeft: 7, padding: '3px 7px', fontSize: 10 }} onClick={() => document.querySelector(`[data-plan-semester="${src.semester}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                                                                        {localText('РџРѕРєР°Р·Р°С‚СЊ РІ РїР»Р°РЅРµ', 'Р–РѕСЃРїР°СЂРґР° РєУ©СЂСЃРµС‚Сѓ', 'Show in plan')}
+                                                                        {localText('\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0432 \u043f\u043b\u0430\u043d\u0435', '\u0416\u043e\u0441\u043f\u0430\u0440\u0434\u0430 \u043a\u04e9\u0440\u0441\u0435\u0442\u0443', 'Show in plan')}
                                                                     </button>
                                                                 </div>
                                                             ))}
@@ -1460,19 +1460,19 @@ export default function PlanBuilder() {
                                                             </div>
                                                             {showCourseDescriptions && localizedCourseField(c.description_translations, c.description) && (
                                                                 <div style={{ fontSize: '11px', color: '#777', marginTop: 3, lineHeight: 1.35 }}>
-                                                                    {localizedCourseField(c.description_translations, c.description).slice(0, 220)}{localizedCourseField(c.description_translations, c.description).length > 220 ? 'вЂ¦' : ''}
+                                                                    {localizedCourseField(c.description_translations, c.description).slice(0, 220)}{localizedCourseField(c.description_translations, c.description).length > 220 ? '\u2026' : ''}
                                                                 </div>
                                                             )}
                                                             <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
-                                                                {c.academic_cycle && <>{localText('Р¦РёРєР»', 'Р¦РёРєР»', 'Cycle')}: <b>{c.academic_cycle}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('СЂР°СЃС‡С‘С‚ СЃРёСЃС‚РµРјС‹', 'Р¶ТЇР№Рµ РµСЃРµР±С–', 'system estimate')})` : ''}{' В· '}</>}
-                                                                {localText('РљРѕРјРїРѕРЅРµРЅС‚', 'РљРѕРјРїРѕРЅРµРЅС‚', 'Component')}: {c.academic_component || componentLabel(c.cycle_component || c.type)}
-                                                                {' В· '}{localText('РСЃС‚РѕС‡РЅРёРє', 'Р”РµСЂРµРєРєУ©Р·', 'Source')}: {
-                                                                    c.course_source === 'rk_mandatory' ? localText('РѕР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РґРёСЃС†РёРїР»РёРЅР° Р Рљ', 'ТљР  РјС–РЅРґРµС‚С‚С– РїУ™РЅС–', 'RK mandatory course')
-                                                                    : c.course_source === 'ai_confirmed' ? localText('РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅР°СЏ Р·Р°РјРµРЅР° РР', 'Р–Р СЂР°СЃС‚Р°Р»Т“Р°РЅ Р°СѓС‹СЃС‚С‹СЂСѓ', 'AI-confirmed replacement')
-                                                                    : c.course_source === 'bridge' ? localText('bridge-РјРѕРґСѓР»СЊ', 'bridge-РјРѕРґСѓР»СЊ', 'bridge module')
-                                                                    : localText('СЂРµРїРѕР·РёС‚РѕСЂРёР№ РґРёСЃС†РёРїР»РёРЅ', 'РїУ™РЅРґРµСЂ СЂРµРїРѕР·РёС‚РѕСЂРёР№С–', 'course repository')
+                                                                {c.academic_cycle && <>{localText('\u0426\u0438\u043a\u043b', '\u0426\u0438\u043a\u043b', 'Cycle')}: <b>{c.academic_cycle}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('\u0440\u0430\u0441\u0447\u0451\u0442 \u0441\u0438\u0441\u0442\u0435\u043c\u044b', '\u0436\u04af\u0439\u0435 \u0435\u0441\u0435\u0431\u0456', 'system estimate')})` : ''}{' \u00b7 '}</>}
+                                                                {localText('\u041a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442', '\u041a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442', 'Component')}: {c.academic_component || componentLabel(c.cycle_component || c.type)}
+                                                                {' \u00b7 '}{localText('\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a', '\u0414\u0435\u0440\u0435\u043a\u043a\u04e9\u0437', 'Source')}: {
+                                                                    c.course_source === 'rk_mandatory' ? localText('\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430 \u0420\u041a', '\u049a\u0420 \u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u043f\u04d9\u043d\u0456', 'RK mandatory course')
+                                                                    : c.course_source === 'ai_confirmed' ? localText('\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u0430\u044f \u0437\u0430\u043c\u0435\u043d\u0430 \u0418\u0418', '\u0416\u0418 \u0440\u0430\u0441\u0442\u0430\u043b\u0493\u0430\u043d \u0430\u0443\u044b\u0441\u0442\u044b\u0440\u0443', 'AI-confirmed replacement')
+                                                                    : c.course_source === 'bridge' ? localText('bridge-\u043c\u043e\u0434\u0443\u043b\u044c', 'bridge-\u043c\u043e\u0434\u0443\u043b\u044c', 'bridge module')
+                                                                    : localText('\u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u0439 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d', '\u043f\u04d9\u043d\u0434\u0435\u0440 \u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u0439\u0456', 'course repository')
                                                                 }
-                                                                {c.course_code ? ` В· ${localText('РљРѕРґ', 'РљРѕРґ', 'Code')}: ${c.course_code}` : ''}
+                                                                {c.course_code ? ` \u00b7 ${localText('\u041a\u043e\u0434', '\u041a\u043e\u0434', 'Code')}: ${c.course_code}` : ''}
                                                             </div>
                                                             {c.course_id && !c.protected_by_goso && (
                                                                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 11, color: excludedCourses[c.course_id] ? '#b71c1c' : '#5d6470', cursor: 'pointer' }}>
@@ -1482,19 +1482,19 @@ export default function PlanBuilder() {
                                                                         onChange={() => toggleCourseExclusion(c.course_id, c.title)}
                                                                     />
                                                                     {excludedCourses[c.course_id]
-                                                                        ? localText('Р‘СѓРґРµС‚ СѓР±СЂР°РЅР° РїСЂРё РїРµСЂРµРіРµРЅРµСЂР°С†РёРё', 'ТљР°Р№С‚Р° Т›Т±СЂСѓ РєРµР·С–РЅРґРµ Р°Р»С‹РЅР°РґС‹', 'Will be removed on regeneration')
-                                                                        : localText('Р—Р°РјРµРЅРёС‚СЊ/СѓР±СЂР°С‚СЊ РїСЂРё СЃР»РµРґСѓСЋС‰РµР№ РіРµРЅРµСЂР°С†РёРё', 'РљРµР»РµСЃС– Т›Т±СЂСѓРґР° Р°СѓС‹СЃС‚С‹СЂСѓ/Р°Р»С‹Рї С‚Р°СЃС‚Р°Сѓ', 'Replace/remove on next generation')}
+                                                                        ? localText('\u0411\u0443\u0434\u0435\u0442 \u0443\u0431\u0440\u0430\u043d\u0430 \u043f\u0440\u0438 \u043f\u0435\u0440\u0435\u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438', '\u049a\u0430\u0439\u0442\u0430 \u049b\u04b1\u0440\u0443 \u043a\u0435\u0437\u0456\u043d\u0434\u0435 \u0430\u043b\u044b\u043d\u0430\u0434\u044b', 'Will be removed on regeneration')
+                                                                        : localText('\u0417\u0430\u043c\u0435\u043d\u0438\u0442\u044c/\u0443\u0431\u0440\u0430\u0442\u044c \u043f\u0440\u0438 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0439 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438', '\u041a\u0435\u043b\u0435\u0441\u0456 \u049b\u04b1\u0440\u0443\u0434\u0430 \u0430\u0443\u044b\u0441\u0442\u044b\u0440\u0443/\u0430\u043b\u044b\u043f \u0442\u0430\u0441\u0442\u0430\u0443', 'Replace/remove on next generation')}
                                                                 </label>
                                                             )}
                                                             {c.protected_by_goso && (
                                                                 <div style={{ marginTop: 5, fontSize: 11, color: '#1b5e20', fontWeight: 600 }}>
-                                                                    рџ›Ў {localText('РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РґРёСЃС†РёРїР»РёРЅР° Р“РћРЎРћ Р Рљ вЂ” Р·Р°С‰РёС‰РµРЅР° РѕС‚ СѓРґР°Р»РµРЅРёСЏ Рё Р·Р°РјРµРЅС‹', 'ТљР  РњР–РњР‘РЎ РјС–РЅРґРµС‚С‚С– РїУ™РЅС– вЂ” Р¶РѕСЋРґР°РЅ Р¶У™РЅРµ Р°СѓС‹СЃС‚С‹СЂСѓРґР°РЅ Т›РѕСЂТ“Р°Р»Т“Р°РЅ', 'RK mandatory course вЂ” protected from removal and replacement')}
+                                                                    \U0001f6e1 {localText('\u041e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430 \u0413\u041e\u0421\u041e \u0420\u041a \u2014 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u0430 \u043e\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f \u0438 \u0437\u0430\u043c\u0435\u043d\u044b', '\u049a\u0420 \u041c\u0416\u041c\u0411\u0421 \u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u043f\u04d9\u043d\u0456 \u2014 \u0436\u043e\u044e\u0434\u0430\u043d \u0436\u04d9\u043d\u0435 \u0430\u0443\u044b\u0441\u0442\u044b\u0440\u0443\u0434\u0430\u043d \u049b\u043e\u0440\u0493\u0430\u043b\u0493\u0430\u043d', 'RK mandatory course ? protected from removal and replacement')}
                                                                 </div>
                                                             )}
                                                             {c.why_selected && (
                                                                 <details style={{ marginTop: 6, fontSize: 11, color: '#586174' }}>
                                                                     <summary style={{ cursor: 'pointer', color: '#366092', fontWeight: 600 }}>
-                                                                        {localText('РџРѕС‡РµРјСѓ РІС‹Р±СЂР°РЅР°?', 'РќРµРіРµ С‚Р°ТЈРґР°Р»РґС‹?', 'Why selected?')}
+                                                                        {localText('\u041f\u043e\u0447\u0435\u043c\u0443 \u0432\u044b\u0431\u0440\u0430\u043d\u0430?', '\u041d\u0435\u0433\u0435 \u0442\u0430\u04a3\u0434\u0430\u043b\u0434\u044b?', 'Why selected?')}
                                                                     </summary>
                                                                     <div style={{ marginTop: 5, lineHeight: 1.45 }}>
                                                                         <div>{c.why_selected.selection_reason}</div>
