@@ -1244,6 +1244,27 @@ export default function PlanBuilder() {
                                         {currentPlan.metrics.international_quality.score}%
                                     </div>
                                 </div>
+                                <div style={{
+                                    marginBottom: '14px',
+                                    padding: '10px 12px',
+                                    borderRadius: '9px',
+                                    background: currentPlan.metrics.international_quality.passed ? '#eef8f0' : '#fff8e1',
+                                    border: `1px solid ${currentPlan.metrics.international_quality.passed ? '#c8e6c9' : '#ffe082'}`,
+                                    color: '#344054',
+                                    fontSize: '13px',
+                                    lineHeight: 1.45
+                                }}>
+                                    <strong>
+                                        {currentPlan.metrics.international_quality.passed
+                                            ? localText('План уже прошёл международный чек-лист.', 'Жоспар халықаралық чек-листен өтті.', 'The plan already passed the international checklist.')
+                                            : localText('План требует автоматического исправления.', 'Жоспар автоматты түзетуді қажет етеді.', 'The plan needs automatic repair.')}
+                                    </strong>{' '}
+                                    {localText(
+                                        'Система проверяет кредиты, нагрузку по семестрам, пререквизиты, покрытие результатов обучения, предметную релевантность и защиту обязательных ГОСО-компонентов. Кнопка ниже исключает только заменяемые слабые дисциплины, защищает ГОСО и запускает пересборку A/B/C, если это действительно нужно.',
+                                        'Жүйе кредиттерді, семестр жүктемесін, пререквизиттерді, оқу нәтижелерін қамтуды, пәндік сәйкестікті және міндетті МЖМБС компоненттерін қорғауды тексереді. Төмендегі батырма тек ауыстыруға болатын әлсіз пәндерді алып тастайды, МЖМБС-ты қорғайды және қажет болса A/B/C қайта құрады.',
+                                        'The system checks credits, semester load, prerequisites, LO coverage, domain relevance, and protected regulatory components. The button excludes only replaceable weak courses, protects RK mandatory courses, and rebuilds A/B/C only when needed.'
+                                    )}
+                                </div>
                                 {(!currentPlan.metrics.international_quality.passed || currentPlan.metrics.international_quality.checks?.some(check => !check.passed)) && (
                                     <button
                                         className="btn btn-primary"
