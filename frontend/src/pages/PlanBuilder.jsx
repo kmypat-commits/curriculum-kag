@@ -561,6 +561,38 @@ export default function PlanBuilder() {
         }
     }
 
+    const loadAllVisibleCourseReplacements = async () => {
+        const versionId = project?.latest_version?.id
+        const visible = (currentPlan?.suspicious_courses || []).slice(0, 6).filter(row => row.course_id)
+        if (!versionId || !visible.length) return
+        setLoadingCourseReplacement('all')
+        try {
+            const results = await Promise.allSettled(visible.map(row =>
+                axios.get(`/api/planner/${versionId}/course-replacement-preview`, {
+                    params: { course_id: row.course_id, variant: activeVariant },
+                }).then(response => [row.course_id, response.data])
+            ))
+            const next = {}
+            let ok = 0
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    const [courseId, data] = result.value
+                    next[courseId] = data
+                    ok += 1
+                }
+            }
+            setCourseReplacementPreviews(current => ({ ...current, ...next }))
+            setBuildNotice({
+                type: ok ? 'success' : 'error',
+                text: ok
+                    ? localText(`Подобраны замены для ${ok} дисциплин.`, `${ok} пән үшін ауыстырулар таңдалды.`, `Loaded replacements for ${ok} courses.`)
+                    : localText('Не удалось подобрать замены для видимых дисциплин.', 'Көрінетін пәндер үшін ауыстыру табылмады.', 'Could not load replacements for visible courses.'),
+            })
+        } finally {
+            setLoadingCourseReplacement(null)
+        }
+    }
+
     const applyCourseReplacement = async (courseId, replacementCourseId) => {
         const versionId = project?.latest_version?.id
         if (!versionId) return
@@ -1077,7 +1109,19 @@ export default function PlanBuilder() {
                                 </div>
                                 {currentPlan.suspicious_courses?.length > 0 && (
                                     <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082' }}>
-                                        <strong>{localText('Сомнительные дисциплины', 'Күмәнді пәндер', 'Suspicious courses')}: {currentPlan.suspicious_courses.length}</strong>
+                                        <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <strong>{localText('Сомнительные дисциплины', 'Күмәнді пәндер', 'Suspicious courses')}: {currentPlan.suspicious_courses.length}</strong>
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ padding: '5px 9px', fontSize: 11, borderColor: '#c17b00' }}
+                                                disabled={loadingCourseReplacement === 'all'}
+                                                onClick={loadAllVisibleCourseReplacements}
+                                            >
+                                                {loadingCourseReplacement === 'all'
+                                                    ? localText('Ищем замены…', 'Ауыстырулар ізделуде…', 'Searching replacements…')
+                                                    : localText('Подобрать замены для всех видимых', 'Көрінетіндердің бәріне ауыстыру табу', 'Find replacements for all visible')}
+                                            </button>
+                                        </div>
                                         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
                                             {currentPlan.suspicious_courses.slice(0, 6).map((row, idx) => (
                                                 <div key={`${row.course_id}-${idx}`} style={{ fontSize: 12, color: '#6d4c41' }}>
