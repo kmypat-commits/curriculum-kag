@@ -2256,10 +2256,31 @@ async def bridge_replacement_preview(
             "required_scope": required_scope or "interdisciplinary",
             "candidates": ranked[:3],
         })
+    total_bridge_credits = sum(int(item.credits or 0) for item in bridge_items)
+    strong_replacements = sum(
+        1 for row in suggestions
+        if any(candidate.get("strong_candidate") for candidate in row.get("candidates", []))
+    )
+    candidate_replacements = sum(
+        1 for row in suggestions
+        if row.get("candidates")
+    )
+    weak_or_missing = max(0, len(suggestions) - strong_replacements)
     return {
         "project_version_id": project_version_id,
         "plan_id": plan.id,
         "variant": plan.variant_type,
+        "summary": {
+            "bridge_count": len(bridge_items),
+            "bridge_credits": total_bridge_credits,
+            "with_any_candidate": candidate_replacements,
+            "with_strong_candidate": strong_replacements,
+            "without_strong_candidate": weak_or_missing,
+            "diagnosis": (
+                "Большая доля bridge означает, что система закрыла кредиты и LO временными проектными модулями. "
+                "Их нужно заменить реальными дисциплинами ЕПВО там, где есть сильная экспертная/модельная связь."
+            ),
+        },
         "suggestions": suggestions,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
         "limits": {

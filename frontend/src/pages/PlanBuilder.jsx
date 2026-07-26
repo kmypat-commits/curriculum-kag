@@ -878,6 +878,19 @@ export default function PlanBuilder() {
                                         )}
                                         {bridgePreview?.variant === activeVariant && (
                                             <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                                                {bridgePreview.summary && (
+                                                    <div style={{ padding: '8px 10px', borderRadius: 8, background: '#fff3cd', border: '1px solid #ffecb5', color: '#6d4c00', fontSize: 12 }}>
+                                                        <strong>{localText('Итог поиска замен', 'Ауыстыру іздеу қорытындысы', 'Replacement search summary')}:</strong>{' '}
+                                                        {localText(
+                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредитов · сильных замен: ${bridgePreview.summary.with_strong_candidate} · без сильной замены: ${bridgePreview.summary.without_strong_candidate}.`,
+                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредит · күшті ауыстырулар: ${bridgePreview.summary.with_strong_candidate} · күшті ауыстырусыз: ${bridgePreview.summary.without_strong_candidate}.`,
+                                                            `${bridgePreview.summary.bridge_count} bridges · ${bridgePreview.summary.bridge_credits} credits · strong replacements: ${bridgePreview.summary.with_strong_candidate} · without strong replacement: ${bridgePreview.summary.without_strong_candidate}.`
+                                                        )}
+                                                        <div style={{ marginTop: 4 }}>
+                                                            {bridgePreview.summary.diagnosis}
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 {bridgePreview.elapsed_seconds !== undefined && (
                                                     <div style={{ fontSize: 12, color: '#6d4c41' }}>
                                                         {localText(`Поиск замен выполнен за ${bridgePreview.elapsed_seconds}s.`, `Ауыстыруларды іздеу ${bridgePreview.elapsed_seconds}s ішінде орындалды.`, `Replacement search completed in ${bridgePreview.elapsed_seconds}s.`)}
