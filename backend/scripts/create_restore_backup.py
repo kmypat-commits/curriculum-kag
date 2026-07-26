@@ -33,9 +33,15 @@ INCLUDE_PATHS = [
 EXCLUDED_PARTS = {"__pycache__", ".pytest_cache", "node_modules", "venv", ".runtime"}
 
 
-def iter_files():
+def iter_files(skip_large_state=False):
+    large_state_paths = {
+        "backend/curriculum_kag.db",
+        "backend/models/epvo-sbert-finetuned-40k",
+    }
     seen = set()
     for relative in INCLUDE_PATHS:
+        if skip_large_state and any(relative == path or relative.startswith(f"{path}/") for path in large_state_paths):
+            continue
         path = ROOT / relative
         candidates = path.rglob("*") if path.is_dir() else [path]
         for candidate in candidates:
@@ -88,15 +94,24 @@ def main():
         action="store_true",
         help="Do not hash files larger than --large-file-threshold-mb during archive creation.",
     )
+    parser.add_argument(
+        "--skip-large-state",
+        action="store_true",
+        help="Do not include the large SQLite database or local model weights; record their existing paths in the manifest.",
+    )
     parser.add_argument("--large-file-threshold-mb", type=int, default=512)
     args = parser.parse_args()
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output = Path(args.output) if args.output else ROOT / "backups" / f"restore-point-{stamp}.zip"
     output.parent.mkdir(parents=True, exist_ok=True)
-    files = list(iter_files())
+    files = list(iter_files(skip_large_state=args.skip_large_state))
     database = ROOT / "backend" / "curriculum_kag.db"
-    database_check = "trusted_existing" if args.trust_existing_sqlite else "skipped" if args.skip_sqlite_check else check_sqlite(database)
-    if database_check != "ok":
+    database_check = (
+        "external_existing"
+        if args.skip_large_state
+        else "trusted_existing" if args.trust_existing_sqlite else "skipped" if args.skip_sqlite_check else check_sqlite(database)
+    )
+    if database_check not in {"ok", "external_existing"}:
         if args.trust_existing_sqlite:
             database_check = "trusted_existing"
         elif args.skip_sqlite_check and args.dry_run:
@@ -148,6 +163,9 @@ def main():
             "project_root": str(ROOT),
             "purpose": "Rollback code, configuration, SQLite database, and EPVO SBERT 40k model",
             "epvo_dataset_included": False,
+            "large_state_included": not args.skip_large_state,
+            "sqlite_database_location": "backend/curriculum_kag.db",
+            "sbert_40k_model_location": "backend/models/epvo-sbert-finetuned-40k",
             "epvo_archive_location": "outputs/epvo_export_20260705/EPVO_Полный_CSV_архив.zip",
             "sqlite_quick_check": database_check,
             "file_count": len(manifest_files),
