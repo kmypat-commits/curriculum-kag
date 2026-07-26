@@ -1633,6 +1633,60 @@ async def get_variants(
         bridge_id_set = set(bridge_ids)
         courses_by_id = {cid: course for cid, course in all_courses_by_id.items() if cid in course_id_set}
         bridges_by_id = {bid: bridge for bid, bridge in all_bridges_by_id.items() if bid in bridge_id_set}
+        item_by_course_id = {
+            int(item.course_id): item
+            for item in items
+            if item.course_id is not None
+        }
+        postrequisites_by_course_id = {int(course_id): [] for course_id in course_id_set}
+        for item in items:
+            if item.course_id is None:
+                continue
+            for prerequisite_id in item.prerequisites_snapshot or []:
+                if prerequisite_id in postrequisites_by_course_id:
+                    postrequisites_by_course_id[int(prerequisite_id)].append(int(item.course_id))
+
+        def plan_requisite_payload(course_id: int | None) -> dict:
+            if course_id is None:
+                return {"prerequisites": [], "postrequisites": []}
+            current_item = item_by_course_id.get(int(course_id))
+            prerequisite_ids = [
+                int(value)
+                for value in (current_item.prerequisites_snapshot or [])
+                if int(value) in course_id_set
+            ] if current_item else []
+
+            def course_ref(value: int) -> dict | None:
+                course = courses_by_id.get(int(value))
+                plan_item = item_by_course_id.get(int(value))
+                if not course or not plan_item:
+                    return None
+                return {
+                    "course_id": course.id,
+                    "course_code": course.course_id,
+                    "title": _course_display_title(course, f"Дисциплина №{course.id}"),
+                    "semester": plan_item.semester,
+                    "credits": plan_item.credits,
+                }
+
+            prerequisites = [
+                ref for ref in (course_ref(value) for value in prerequisite_ids)
+                if ref is not None
+            ]
+            postrequisites = [
+                ref for ref in (
+                    course_ref(value)
+                    for value in postrequisites_by_course_id.get(int(course_id), [])
+                )
+                if ref is not None
+            ]
+            prerequisites.sort(key=lambda row: (row["semester"], row["title"]))
+            postrequisites.sort(key=lambda row: (row["semester"], row["title"]))
+            return {
+                "prerequisites": prerequisites,
+                "postrequisites": postrequisites,
+            }
+
         matches_by_course = {cid: all_matches_by_course.get(cid, []) for cid in course_id_set}
         course_title_keys = {_title_key(course.title) for course in courses_by_id.values()}
         epvo_ids = []
@@ -1947,6 +2001,7 @@ async def get_variants(
                     else item.course_type
                 ),
                 "why_selected": why_selected,
+                "plan_requisites": plan_requisite_payload(item.course_id),
             })
         
         # Add semester LOs

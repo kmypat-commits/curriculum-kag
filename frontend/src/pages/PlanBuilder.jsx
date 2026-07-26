@@ -1584,6 +1584,44 @@ export default function PlanBuilder() {
                                                                                 ))}
                                                                             </div>
                                                                         )}
+                                                                        {(c.plan_requisites?.prerequisites?.length > 0 || c.plan_requisites?.postrequisites?.length > 0) && (
+                                                                            <div style={{ marginTop: 8, padding: '7px 9px', background: '#f8fbff', border: '1px solid #dbe8f6', borderRadius: 8 }}>
+                                                                                <div style={{ fontWeight: 700, color: '#244b78', marginBottom: 4 }}>
+                                                                                    {localText('Пре- и постреквизиты в этом плане', 'Осы жоспардағы пре- және постреквизиттер', 'Pre- and post-requisites in this plan')}
+                                                                                </div>
+                                                                                <div style={{ color: '#607d8b', marginBottom: 5 }}>
+                                                                                    {localText(
+                                                                                        'Показываются только дисциплины, которые реально есть в текущем варианте плана.',
+                                                                                        'Тек ағымдағы жоспар нұсқасында бар пәндер көрсетіледі.',
+                                                                                        'Only courses that are actually present in the current plan variant are shown.'
+                                                                                    )}
+                                                                                </div>
+                                                                                <div style={{ display: 'grid', gap: 5 }}>
+                                                                                    <div>
+                                                                                        <b>{localText('До этой дисциплины:', 'Осы пәнге дейін:', 'Before this course:')}</b>{' '}
+                                                                                        {c.plan_requisites?.prerequisites?.length > 0
+                                                                                            ? c.plan_requisites.prerequisites.map(item => (
+                                                                                                <span key={`pre-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eef4ff', color: '#244b78' }}>
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {item.title}
+                                                                                                </span>
+                                                                                            ))
+                                                                                            : <span style={{ color: '#8a96a3' }}>{localText('в плане нет обязательных предшествующих дисциплин', 'жоспарда міндетті алдыңғы пәндер жоқ', 'no required earlier courses in the plan')}</span>
+                                                                                        }
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <b>{localText('После неё опираются:', 'Одан кейін сүйенетін пәндер:', 'Courses that depend on it:')}</b>{' '}
+                                                                                        {c.plan_requisites?.postrequisites?.length > 0
+                                                                                            ? c.plan_requisites.postrequisites.map(item => (
+                                                                                                <span key={`post-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eefaf3', color: '#1b5e20' }}>
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {item.title}
+                                                                                                </span>
+                                                                                            ))
+                                                                                            : <span style={{ color: '#8a96a3' }}>{localText('в текущем плане нет дисциплин, которые явно требуют её как пререквизит', 'ағымдағы жоспарда оны пререквизит ретінде талап ететін пәндер жоқ', 'no later courses explicitly require it in this plan')}</span>
+                                                                                        }
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </details>
                                                             )}
