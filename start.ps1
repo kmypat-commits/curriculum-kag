@@ -166,6 +166,12 @@ elseif ($Database -eq "postgres-shadow") {
     $env:DATABASE_URL = "postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5433/curriculum_kag_shadow"
     Write-Host "Using shadow PostgreSQL database on localhost:5433." -ForegroundColor Cyan
 }
+elseif ($Database -eq "postgres") {
+    # Local primary PostgreSQL cutover uses the verified migrated database.
+    # Keep postgres-shadow as a backward-compatible alias during transition.
+    $env:DATABASE_URL = "postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5433/curriculum_kag_shadow"
+    Write-Host "Using PostgreSQL primary database on localhost:5433." -ForegroundColor Cyan
+}
 $configuredDatabaseUrl = $env:DATABASE_URL
 if (-not $configuredDatabaseUrl) {
     $envFiles = @(
