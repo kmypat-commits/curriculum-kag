@@ -1174,7 +1174,15 @@ async def apply_quality_improvements(
         db.add(bridge)
         db.flush()
 
-    requires_rebuild = bool(newly_excluded or bridge_created)
+    existing_verification = ((plan.metrics_json or {}).get("verification") if plan else {}) or {}
+    has_hard_plan_violations = bool(
+        (existing_verification.get("hard_violation_count") or 0) > 0
+        or existing_verification.get("prerequisite_violations")
+        or existing_verification.get("semester_load_violations")
+        or existing_verification.get("credit_violations")
+        or existing_verification.get("domain_quota_violations")
+    )
+    requires_rebuild = bool(newly_excluded or bridge_created or has_hard_plan_violations)
     metrics_refreshed = False
     if plan and not requires_rebuild:
         plan_items = db.query(PlanItem).filter(PlanItem.plan_id == plan.id).all()
@@ -1203,6 +1211,7 @@ async def apply_quality_improvements(
             "bridge_module_id": bridge.id if bridge else None,
             "excluded_irrelevant_course_ids": sorted(newly_excluded),
             "protected_regulatory_course_ids": sorted(protected_regulatory),
+            "hard_plan_violations_detected": has_hard_plan_violations,
             "requires_rebuild": requires_rebuild,
             "metrics_refreshed": metrics_refreshed,
         },
@@ -1214,6 +1223,7 @@ async def apply_quality_improvements(
         "bridge_module_id": bridge.id if bridge else None,
         "excluded_irrelevant_courses": len(newly_excluded),
         "protected_regulatory_courses": len(protected_regulatory),
+        "hard_plan_violations_detected": has_hard_plan_violations,
         "still_requires_expert_review": len(replaceable_unsupported) == 0 and bool(relevance["unsupported_ids"]),
         "requires_rebuild": requires_rebuild,
         "metrics_refreshed": metrics_refreshed,
