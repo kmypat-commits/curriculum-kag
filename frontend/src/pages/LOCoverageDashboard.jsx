@@ -725,7 +725,7 @@ export default function LOCoverageDashboard() {
                 {/* LO List with Priorities */}
                 <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h2 style={{ margin: 0 }}>{t('learning_outcomes')} Analysis</h2>
+                        <h2 style={{ margin: 0 }}>{language === 'ru' ? 'Анализ результатов обучения' : language === 'kk' ? 'Оқу нәтижелерін талдау' : 'Learning outcomes analysis'}</h2>
                         <button
                             onClick={handleSaveWeights}
                             className="btn btn-primary"
@@ -750,6 +750,11 @@ export default function LOCoverageDashboard() {
                             const isCovered = score >= threshold
                             const currentWeight = loWeights[lo.id] || 1.0
                             const sourceRow = (loSources?.items || []).find(item => item.lo_code === lo.lo_code)
+                            const statusLabel = sourceRow?.status === 'real_confirmed'
+                                ? (language === 'ru' ? 'закрыто реальными дисциплинами' : language === 'kk' ? 'нақты пәндермен жабылған' : 'covered by real courses')
+                                : sourceRow?.status === 'bridge_supported'
+                                    ? (language === 'ru' ? 'только bridge — лучше усилить' : language === 'kk' ? 'тек bridge — күшейту керек' : 'bridge only — strengthen')
+                                    : (language === 'ru' ? 'нужно усилить' : language === 'kk' ? 'күшейту керек' : 'needs strengthening')
 
                             return (
                                 <div key={lo.id} style={{
@@ -775,16 +780,37 @@ export default function LOCoverageDashboard() {
                                             }}>
                                                 {isCovered ? `${t('covered')} (${Math.round(stats.max_score * 100)}%)` : t('not_covered')}
                                             </span>
+                                            {sourceRow && (
+                                                <div style={{ marginTop: 6, fontSize: 12, color: '#667' }}>
+                                                    {statusLabel}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
                                     <div style={{ display: 'grid', gap: 6, padding: '10px 12px', borderRadius: 8, background: '#f7fafc', border: '1px solid #e1e8ef', fontSize: 13 }}>
+                                        {sourceRow?.coverage_explanation && (
+                                            <div style={{ color: '#344054', marginBottom: 4 }}>
+                                                <strong>{language === 'ru' ? 'Как читать процент' : language === 'kk' ? 'Пайызды қалай оқу керек' : 'How to read the score'}:</strong> {sourceRow.coverage_explanation}
+                                            </div>
+                                        )}
                                         {(sourceRow?.real_sources || []).length > 0 ? sourceRow.real_sources.slice(0, 5).map(source => (
-                                            <div key={source.course_id} style={{ color: '#285d47' }}>✓ {source.title} · {Math.round((source.score || 0) * 100)}% AI · {Math.round((source.expert_score || 0) * 100)}% ЕПВО</div>
+                                            <div key={source.course_id} style={{ color: '#285d47' }}>
+                                                ✓ {source.title} · {Math.round((source.score || 0) * 100)}% {source.source === 'goso_regulatory' ? 'ГОСО' : 'ИИ'} · {Math.round((source.expert_score || 0) * 100)}% ЕПВО
+                                            </div>
                                         )) : <div style={{ color: '#a33' }}>{language === 'ru' ? 'Нет подтверждённой реальной дисциплины — эту РО нужно усилить.' : language === 'kk' ? 'Расталған нақты пән жоқ — осы ОН күшейту керек.' : 'No confirmed real course — strengthen this outcome.'}</div>}
                                         {(sourceRow?.bridge_sources || []).map(source => (
                                             <div key={source.bridge_id} style={{ color: '#8a5a00' }}>◇ bridge в плане, {t('semester')} {source.semester}: {source.title}</div>
                                         ))}
+                                        {sourceRow?.status !== 'real_confirmed' && (
+                                            <div style={{ color: '#7a4f00', marginTop: 4 }}>
+                                                {language === 'ru'
+                                                    ? 'Что делать: добавить/заменить дисциплину из ЕПВО с сильной связью к этой РО или подтвердить связь экспертом.'
+                                                    : language === 'kk'
+                                                        ? 'Не істеу керек: осы ОН-ға күшті байланысы бар ЕПВО пәнін қосу/ауыстыру немесе байланысты сарапшымен растау.'
+                                                        : 'Action: add/replace with an EPVO course strongly linked to this LO, or confirm the link by expert review.'}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Priority Slider */}
