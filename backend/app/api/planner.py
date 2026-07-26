@@ -127,7 +127,9 @@ def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, t
         focus = f"компетенций {lo_label}"
     if professional_los:
         focus = " и ".join(f"компетенции {code}" for code in professional_los[:2])
-    if any(marker in bridge_text for marker in ("медицин", "клинич", "пациент", "здоров")):
+    if any(marker in bridge_text for marker in ("безопас", "риск", "угроз", "защит")):
+        themes = ["Управление цифровыми рисками", "Безопасность и надёжность профессиональных решений", "Практикум анализа угроз и контроля качества"]
+    elif any(marker in bridge_text for marker in ("медицин", "клинич", "пациент", "здоров")):
         themes = ["Клинические данные и процессы", "Основы медицинской информатики", "Цифровые технологии в здравоохранении"]
     elif any(marker in bridge_text for marker in ("агро", "сельск", "растен", "почв", "урож")):
         themes = ["Цифровая агрономия", "Аналитика агропромышленных данных", "Интеллектуальные технологии в АПК"]
@@ -143,10 +145,17 @@ def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, t
             f"Профессиональный практикум {domain1} и {domain2}",
             f"Проектирование решений для {domain2}",
         ]
+    rotations = [
+        themes,
+        [themes[1], themes[2], themes[0]],
+        [themes[2], themes[0], themes[1]],
+    ]
+    themes = rotations[int(getattr(bridge, "id", 0) or 0) % len(rotations)]
     semester_label = f"семестр {semester}"
+    stage_label = f"этап {semester}"
     return [
-        f"{themes[0]}: {lo_label}",
-        f"{themes[1]} для программы «{version.project.title}»",
+        f"{themes[0]}: {lo_label} ({stage_label})",
+        f"{themes[1]} для программы «{version.project.title}» ({semester_label})",
         f"{themes[2]} ({semester_label}; {focus})",
     ]
 
