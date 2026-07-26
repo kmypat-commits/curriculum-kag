@@ -172,6 +172,13 @@ elseif ($Database -eq "postgres") {
     $env:DATABASE_URL = "postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5433/curriculum_kag_shadow"
     Write-Host "Using PostgreSQL primary database on localhost:5433." -ForegroundColor Cyan
 }
+elseif (Test-NetConnection -ComputerName localhost -Port 5433 -InformationLevel Quiet -WarningAction SilentlyContinue) {
+    # Prefer the verified local PostgreSQL migration when it is already
+    # available. This avoids silently falling back to SQLite because an old
+    # backend/.env still points at an unavailable localhost:5432 instance.
+    $env:DATABASE_URL = "postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5433/curriculum_kag_shadow"
+    Write-Host "Using available local PostgreSQL database on localhost:5433." -ForegroundColor Cyan
+}
 $configuredDatabaseUrl = $env:DATABASE_URL
 if (-not $configuredDatabaseUrl) {
     $envFiles = @(

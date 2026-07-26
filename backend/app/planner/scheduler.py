@@ -3402,6 +3402,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             key=lambda course: (
                 -role_rank(course),
                 -scope_rank(course),
+                -float(aggregates.get(course.id, {}).get("expert") or 0.0),
+                -float(aggregates.get(course.id, {}).get("max") or 0.0),
+                -len(aggregates.get(course.id, {}).get("professional_lo_codes") or set()),
                 -priority_rank(course),
                 course.recommended_semester or 99,
                 course.id,
@@ -4151,6 +4154,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = admit_real_courses(result)
     result = top_up_with_credit_bridges(top_up_with_real_epvo_courses(result))
     result = _trim_to_target_credits(result, target, db)
+    # The last credit top-up/trim can undo an earlier interdisciplinary quota
+    # repair. Keep the final plan envelope honest: no later stage may leave a
+    # plan that fails domain quotas if an equal-credit EPVO swap is available.
+    result = rebalance_domain_quotas(result)
+    result = replace_redundant_bridges_with_real_courses(result)
+    result = _trim_to_target_credits(result, target, db)
+    result = rebalance_domain_quotas(result)
     for item in result:
         course = courses.get(item.get("course_id"))
         domain_index = project_domain_index(course) if course else None
