@@ -189,7 +189,12 @@ def evaluate_international_quality(
     domain_credits = verification.get("domain_credits") or {}
     domain1_credits = float(domain_credits.get("domain1") or 0.0)
     domain2_credits = float(domain_credits.get("domain2") or 0.0)
-    target_credits = float(verification.get("target_credits") or constraints.get("total_credits") or 0.0)
+    target_credits = float(
+        verification.get("domain_quota_base_credits")
+        or verification.get("target_credits")
+        or constraints.get("total_credits")
+        or 0.0
+    )
     tolerance = float(verification.get("domain_quota_tolerance_credits") or 0.0)
     required_domain1 = max(
         0.0,
