@@ -300,6 +300,15 @@ def _item_minimum_appropriate_semester(item: Dict, num_semesters: int) -> int:
 
 def _foundation_max_semester(title: str | None, num_semesters: int) -> int:
     key = _title_key(title)
+    # "Основы" in a clinical title describes a medical block, not a generic
+    # first-year introduction.  Such courses may legitimately follow
+    # biomedical prerequisites in the later half of the programme.
+    if any(marker in key for marker in (
+        "клиническ", "диагност", "врачебн", "хирург", "терапи",
+        "педиатр", "акуш", "гинек", "онколог", "кардио",
+        "clinical", "diagnostic", "surgery",
+    )):
+        return num_semesters
     if any(marker in key for marker in (
         "информационной безопасности", "кибербезопасности",
         "цифровой криминалистики", "digital forensics", "cybersecurity",
@@ -371,6 +380,50 @@ def _is_interdisciplinary_title_relevant(course: Course, project_domains: List[s
     if "it" in domain or "информ" in domain or "computer" in domain:
         return _has_domain_term(full_text, it_terms)
     return True
+
+
+def _is_it_medicine_support_course(
+    course: Course,
+    project_domains: List[str],
+) -> bool:
+    """Reject physician-training depth from an IT + medicine curriculum.
+
+    A secondary medical field should contribute biomedical foundations,
+    health-system context or digital/analytical medicine.  Exact membership in
+    a medical EPVO group is not enough to admit a clinical treatment course
+    intended for training a physician.
+    """
+    domains = " ".join(project_domains).casefold()
+    is_it_medicine = (
+        any(marker in domains for marker in ("it", "информ", "computer", "software", "цифр"))
+        and any(marker in domains for marker in ("мед", "здрав", "medicine", "medical", "health"))
+    )
+    if not is_it_medicine:
+        return True
+    text = _title_key(" ".join([
+        course.title or "",
+        course.description or "",
+    ]))
+    explicit_digital = (
+        "информационн систем", "медицинская информатика",
+        "медицинской информатики", "медицинскую информатику", "цифр",
+        "алгоритм", "программ", "телемед", "биоинформ", "искусствен",
+        "machine learning", "data science", "database", "digital",
+        "information system", "software", "computer",
+        "электронн медицинск", "электронн здравоохран",
+    )
+    physician_training_depth = (
+        "клиническ", "диагност", "лечени", "хирург", "терапевт",
+        "внутренние болезни", "акуш", "гинек", "педиатр", "офтальм",
+        "онколог", "кардио", "уролог", "реаним", "стоматолог",
+        "пропедевтик", "врачебн практик", "clinical diagnostics", "clinical diagnosis",
+        "surgery", "treatment",
+    )
+    if not _has_domain_term(text, physician_training_depth):
+        return True
+    if _has_domain_term(text, explicit_digital):
+        return True
+    return 0 < int(course.credits or 0) <= 7
 
 
 def _course_domain_matches(course: Course, project_domains: List[str]) -> bool:
@@ -1844,27 +1897,6 @@ def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_cre
         if module:
             module.credits = item["credits"]
 
-    for item in sorted(
-        (
-            item for items in schedule.values() for item in items
-            if item.get("course_id") is not None
-            and not item.get("regulatory_required")
-            and not item.get("competency_required")
-        ),
-        key=lambda row: (
-            0 if "выбор" in str(row.get("type") or "").lower() or "elective" in str(row.get("type") or "").lower() else 1,
-            -int(row.get("credits") or 0),
-            int(row.get("recommended_semester") or 99),
-        ),
-    ):
-        excess = total() - target_credits
-        if excess <= 0:
-            break
-        current = int(item.get("credits") or 0)
-        reduction = min(excess, max(0, current - 3))
-        if reduction > 0:
-            item["credits"] = current - reduction
-
     while total() > target_credits:
         excess = total() - target_credits
         selected_ids = {
@@ -1909,8 +1941,19 @@ def _shift_excess_load_to_balance_modules(
     nominal_load: int,
     db: Session,
 ) -> Dict[int, List[Dict]]:
-    """Move residual overload as credit workload, when whole-course moves are impossible."""
+    """Reallocate only flexible bridge workload after whole-course balancing.
+
+    Credits declared for a real EPVO discipline are immutable.  Earlier code
+    could reduce a 9-credit clinical course to three credits and invent a
+    six-credit load-shift module elsewhere; that produced a numerically valid
+    but academically false curriculum.
+    """
     upper = nominal_load + 3
+    constraints = project_version.project.constraints_json or {}
+    interdisciplinary = (
+        str(constraints.get("program_type") or "standard").lower()
+        in {"interdisciplinary", "joint"}
+    )
 
     def loads() -> Dict[int, int]:
         return {semester: sum(int(item.get("credits") or 0) for item in items) for semester, items in schedule.items()}
@@ -1931,6 +1974,7 @@ def _shift_excess_load_to_balance_modules(
                     item for item in schedule[donor_semester]
                     if int(item.get("credits") or 0) > 3
                     and not item.get("regulatory_required")
+                    and item.get("bridge_module_id") is not None
                 ],
                 key=lambda item: (
                     0 if item.get("bridge_module_id") is not None else 1,
@@ -1940,7 +1984,26 @@ def _shift_excess_load_to_balance_modules(
             )
             if not donor_items:
                 continue
-            for receiver_semester in sorted(receivers, key=lambda semester: current[semester]):
+            def receiver_bridge(semester: int) -> Dict | None:
+                candidates = [
+                    item for item in schedule[semester]
+                    if item.get("bridge_module_id") is not None
+                    and int(item.get("credits") or 0) < 7
+                ]
+                return min(
+                    candidates,
+                    key=lambda item: int(item.get("credits") or 0),
+                    default=None,
+                )
+
+            ordered_receivers = sorted(
+                receivers,
+                key=lambda semester: (
+                    receiver_bridge(semester) is None,
+                    current[semester],
+                ),
+            )
+            for receiver_semester in ordered_receivers:
                 room = upper - current[receiver_semester]
                 if room <= 0:
                     continue
@@ -1948,30 +2011,38 @@ def _shift_excess_load_to_balance_modules(
                 shift = min(excess, room, int(donor.get("credits") or 0) - 3)
                 if shift <= 0:
                     continue
-                if shift < 3:
-                    receiver_bridge = next(
-                        (item for item in schedule[receiver_semester]
-                         if item.get("bridge_module_id") is not None and int(item.get("credits") or 0) + shift <= 7),
-                        None,
+                flexible_receiver = receiver_bridge(receiver_semester)
+                if flexible_receiver is not None:
+                    shift = min(
+                        shift,
+                        7 - int(flexible_receiver.get("credits") or 0),
                     )
-                    if receiver_bridge is None:
+                    if shift <= 0:
                         continue
                     donor["credits"] = int(donor.get("credits") or 0) - shift
-                    if donor.get("bridge_module_id") is not None:
-                        donor_module = db.query(BridgeModule).filter(BridgeModule.id == donor["bridge_module_id"]).first()
-                        if donor_module:
-                            donor_module.credits = donor["credits"]
-                    receiver_bridge["credits"] = int(receiver_bridge.get("credits") or 0) + shift
-                    receiver_module = db.query(BridgeModule).filter(BridgeModule.id == receiver_bridge["bridge_module_id"]).first()
-                    if receiver_module:
-                        receiver_module.credits = receiver_bridge["credits"]
-                    moved = True
-                    break
-                donor["credits"] = int(donor.get("credits") or 0) - shift
-                if donor.get("bridge_module_id") is not None:
-                    donor_module = db.query(BridgeModule).filter(BridgeModule.id == donor["bridge_module_id"]).first()
+                    donor_module = db.query(BridgeModule).filter(
+                        BridgeModule.id == donor["bridge_module_id"]
+                    ).first()
                     if donor_module:
                         donor_module.credits = donor["credits"]
+                    flexible_receiver["credits"] = int(
+                        flexible_receiver.get("credits") or 0
+                    ) + shift
+                    receiver_module = db.query(BridgeModule).filter(
+                        BridgeModule.id == flexible_receiver["bridge_module_id"]
+                    ).first()
+                    if receiver_module:
+                        receiver_module.credits = flexible_receiver["credits"]
+                    moved = True
+                    break
+                if shift < 3 or interdisciplinary:
+                    continue
+                donor["credits"] = int(donor.get("credits") or 0) - shift
+                donor_module = db.query(BridgeModule).filter(
+                    BridgeModule.id == donor["bridge_module_id"]
+                ).first()
+                if donor_module:
+                    donor_module.credits = donor["credits"]
 
                 code = f"AUTO_LOAD_SHIFT_{project_version.id}_{receiver_semester}"
                 module = db.query(BridgeModule).filter(
@@ -1992,8 +2063,18 @@ def _shift_excess_load_to_balance_modules(
                         prerequisites=[],
                         assessment_methods=["портфолио", "рефлексивный отчёт"],
                         source_chunks_json=[],
-                        generation_params_json={"mode": "load_shift_repair", "from_semester": donor_semester},
-                        target_los=[lo.lo_code for lo in project_version.learning_outcomes],
+                        generation_params_json={
+                            "mode": "load_shift_repair",
+                            "from_semester": donor_semester,
+                            "from_course_id": donor.get("course_id"),
+                            "from_bridge_module_id": donor.get("bridge_module_id"),
+                            "from_title": donor.get("title"),
+                            "shifted_credits": shift,
+                        },
+                        target_los=[
+                            lo.lo_code for lo in project_version.learning_outcomes
+                            if not str(lo.lo_code or "").startswith("LO-GOSO-")
+                        ],
                     )
                     db.add(module)
                     db.flush()
@@ -3691,6 +3772,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
 
     def is_project_domain(course: Course) -> bool:
         if not _education_level_course_allowed(course, constraints.get("education_level")):
+            return False
+        if (
+            interdisciplinary_professional
+            and not _is_it_medicine_support_course(course, project_domains)
+        ):
             return False
         course_code = str(course.course_id or "")
         if course_code.startswith("AI-CONFIRMED-") and not course_code.startswith(f"AI-CONFIRMED-{project_version_id}-"):
@@ -5581,7 +5667,15 @@ def ensure_credit_bridge_modules(
         return []
 
     project = project_version.project
-    learning_outcomes = list(project_version.learning_outcomes)
+    # Regulatory ГОСО outcomes are already evidenced by the mandatory
+    # components merged into every KZ curriculum.  A synthetic credit-gap
+    # module must never claim those outcomes: doing so both overstates its
+    # pedagogical role and prevents the final EPVO replacement pass from
+    # recognising the bridge as redundant.
+    learning_outcomes = [
+        lo for lo in project_version.learning_outcomes
+        if not str(lo.lo_code or "").startswith("LO-GOSO-")
+    ]
     lo_codes = [lo.lo_code for lo in learning_outcomes]
     lo_by_code = {lo.lo_code: lo for lo in learning_outcomes}
     base_code = f"AUTO_BRIDGE_{project_version.id}_"

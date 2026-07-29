@@ -7,13 +7,18 @@ from app.planner.scheduler import (
     _complexity_min_semester,
     _credible_professional_lo_by_course,
     _foundation_equivalent_title_key,
+    _foundation_max_semester,
     _force_bridge_item,
     _infer_schedule_prerequisites,
+    _is_it_medicine_support_course,
     _item_minimum_appropriate_semester,
     _rebalance_semester_load,
     _repair_semester_appropriateness,
     _select_exact_professional_subset,
+    _shift_excess_load_to_balance_modules,
+    _trim_schedule_to_target_credits,
     _unique_items_by_title,
+    ensure_credit_bridge_modules,
     schedule_courses,
 )
 from app.planner.verifier import _ict_competency_audit, _semantic_min_semester, verify_curriculum_plan
@@ -61,6 +66,82 @@ def test_foundation_source_semester_is_advisory_except_for_clinical_depth():
     }
     assert _item_minimum_appropriate_semester(ai, 8) == 1
     assert _item_minimum_appropriate_semester(surgery, 8) >= 5
+    assert _foundation_max_semester(surgery["title"], 8) == 8
+
+
+def test_it_medicine_rejects_physician_training_without_digital_content():
+    domains = [
+        "информационно-коммуникационные технологии",
+        "здравоохранение",
+    ]
+    clinical = SimpleNamespace(
+        title="Интегрированный курс клинической диагностики",
+        credits=10,
+        description=(
+            "Интерпретировать данные обследования пациента, составлять план "
+            "диагностики и лечения, применять доказательную медицину и "
+            "сохранять медицинскую информацию."
+        ),
+    )
+    digital = SimpleNamespace(
+        title="Цифровые методы клинической диагностики",
+        credits=10,
+        description="Анализ медицинских данных и алгоритмы поддержки решений.",
+    )
+    compact_context = SimpleNamespace(
+        title="Основы клинических процессов",
+        credits=5,
+        description="Клиническая диагностика как предметный контекст.",
+    )
+    assert not _is_it_medicine_support_course(clinical, domains)
+    assert _is_it_medicine_support_course(digital, domains)
+    assert _is_it_medicine_support_course(compact_context, domains)
+
+
+def test_load_shift_never_splits_real_epvo_course_credits():
+    heavy = {
+        "course_id": 809,
+        "title": "Интегрированный курс клинической диагностики",
+        "credits": 9,
+        "prerequisites": [],
+    }
+    schedule = {
+        1: [{"course_id": index, "credits": 3, "prerequisites": []} for index in range(1, 10)],
+        2: [
+            *[{"course_id": index, "credits": 5, "prerequisites": []} for index in range(20, 26)],
+            heavy,
+        ],
+    }
+    version = SimpleNamespace(
+        project=SimpleNamespace(
+            constraints_json={"program_type": "interdisciplinary"},
+        ),
+        learning_outcomes=[],
+    )
+    result = _shift_excess_load_to_balance_modules(
+        schedule, version, nominal_load=30, db=MagicMock()
+    )
+    assert heavy["credits"] == 9
+    assert not any(
+        item.get("bridge_module_id") is not None
+        for items in result.values()
+        for item in items
+    )
+
+
+def test_total_credit_trim_never_changes_real_course_credits():
+    real = {
+        "course_id": 42,
+        "title": "Системы баз данных",
+        "credits": 5,
+        "prerequisites": [],
+    }
+    schedule = {
+        1: [real],
+        2: [{"course_id": 43, "title": "Алгоритмы", "credits": 5, "prerequisites": []}],
+    }
+    _trim_schedule_to_target_credits(schedule, target_credits=8, db=MagicMock())
+    assert real["credits"] == 5
 
 
 def test_common_catalogue_aliases_are_semantically_deduplicated():
@@ -190,6 +271,26 @@ def test_meaningful_bridge_never_replaces_regulatory_course():
     result = _force_bridge_item(items, module, variant_type="C", target_credits=10)
     assert any(item.get("course_id") == 1 for item in result)
     assert not any(item.get("course_id") == 2 for item in result)
+
+
+def test_credit_gap_bridge_never_claims_goso_outcomes():
+    version = SimpleNamespace(
+        id=7,
+        project=SimpleNamespace(
+            domain1="IT",
+            domain2=None,
+            constraints_json={"total_semesters": 8},
+        ),
+        learning_outcomes=[
+            SimpleNamespace(lo_code="LO1", lo_text="Разрабатывать информационные системы"),
+            SimpleNamespace(lo_code="LO-GOSO-B1", lo_text="Обязательный результат ГОСО"),
+        ],
+    )
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = []
+    modules = ensure_credit_bridge_modules(version, db, needed_credits=5, slots=1)
+    assert len(modules) == 1
+    assert modules[0].target_los == ["LO1"]
 
 
 def test_verified_translations_are_stored_in_database_without_json_write():

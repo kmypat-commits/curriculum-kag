@@ -172,6 +172,36 @@ def main() -> None:
                 for item in items
                 if item.get("bridge_module_id") is not None
             }
+            selected_real_ids = {
+                int(item.get("course_id"))
+                for items in schedule.values()
+                for item in items
+                if item.get("course_id") is not None
+                and not item.get("regulatory_required")
+            }
+            selected_real_courses = {
+                course.id: course
+                for course in db.query(Course).filter(
+                    Course.id.in_(selected_real_ids or {-1})
+                ).all()
+            }
+            credit_integrity_violations = [
+                {
+                    "course_id": int(item["course_id"]),
+                    "title": item.get("title"),
+                    "plan_credits": int(item.get("credits") or 0),
+                    "repository_credits": int(
+                        selected_real_courses[int(item["course_id"])].credits or 5
+                    ),
+                }
+                for items in schedule.values()
+                for item in items
+                if item.get("course_id") is not None
+                and not item.get("regulatory_required")
+                and int(item["course_id"]) in selected_real_courses
+                and int(item.get("credits") or 0)
+                != int(selected_real_courses[int(item["course_id"])].credits or 5)
+            ]
             bridge_rows = {
                 bridge.id: bridge
                 for bridge in db.query(BridgeModule).filter(
@@ -187,6 +217,7 @@ def main() -> None:
                     "semester": int(semester),
                     "target_los": bridge_rows[bridge_id].target_los or [],
                     "mode": (bridge_rows[bridge_id].generation_params_json or {}).get("mode"),
+                    "generation_params": bridge_rows[bridge_id].generation_params_json or {},
                 }
                 for semester, items in schedule.items()
                 for item in items
@@ -233,6 +264,7 @@ def main() -> None:
                 ],
                 "load_violations": verification.get("semester_load_violations"),
                 "credit_violations": verification.get("credit_violations"),
+                "credit_integrity_violations": credit_integrity_violations,
                 "domain_quota_violations": verification.get("domain_quota_violations"),
                 "quality_violations": verification.get("quality_violations"),
                 "lo_without_real_course": audit.get("lo_without_real_course"),
@@ -284,7 +316,30 @@ def main() -> None:
                     for item in items
                 ),
             }
-            print(f"variant {code}: {variants[code]}", flush=True)
+            variant_summary = {
+                key: variants[code].get(key)
+                for key in (
+                    "credits",
+                    "hard_violations",
+                    "quality_passed",
+                    "goso_compliant",
+                    "wrong_semester",
+                    "wrong_level",
+                    "bridges",
+                    "international_score",
+                )
+            }
+            variant_summary["prerequisite_edges"] = int(
+                variants[code]["prerequisite_graph"].get("edge_count") or 0
+            )
+            variant_summary["credit_integrity_errors"] = len(
+                variants[code]["credit_integrity_violations"]
+            )
+            print(
+                f"variant {code}: "
+                + json.dumps(variant_summary, ensure_ascii=False),
+                flush=True,
+            )
         fingerprints = {
             json.dumps(row["schedule_fingerprint"], ensure_ascii=False)
             for row in variants.values()
@@ -338,6 +393,7 @@ def main() -> None:
             "passed": variants_are_distinct and all(
                 row["credits"] == total_credits
                 and row["hard_violations"] == 0
+                and not row["credit_integrity_violations"]
                 and bridge_contract(row)
                 and int(row["prerequisite_graph"].get("edge_count") or 0) >= min_prerequisite_edges
                 and row["quality_passed"] is True
