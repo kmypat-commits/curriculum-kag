@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.user import User
 from app.services.auth import get_current_user
 from app.planner.scheduler import build_curriculum_plan, calculate_plan_metrics, _course_curriculum_role, _complexity_min_semester
-from app.models.course import Course
+from app.models.course import Course, course_prerequisites
 from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.project import ProjectVersion
@@ -445,6 +445,16 @@ async def get_plan_graph(
     edges = []
     adjacency = {node_id: [] for node_id in node_ids}
     course_to_node = {node["entity_id"]: node["id"] for node in nodes if node["kind"] == "course"}
+    selected_course_ids = set(course_to_node)
+    catalogue_pairs = {
+        (int(row.course_id), int(row.prerequisite_id))
+        for row in db.execute(
+            course_prerequisites.select().where(
+                course_prerequisites.c.course_id.in_(selected_course_ids or {-1}),
+                course_prerequisites.c.prerequisite_id.in_(selected_course_ids or {-1}),
+            )
+        ).fetchall()
+    }
     for item in items:
         target = course_to_node.get(item.course_id)
         if not target:
@@ -453,7 +463,36 @@ async def get_plan_graph(
             source = course_to_node.get(prerequisite_id)
             if not source:
                 continue
-            edges.append({"id": f"{source}-{target}", "source": source, "target": target, "relation": "prerequisite"})
+            origin = (
+                "catalogue"
+                if (int(item.course_id), int(prerequisite_id)) in catalogue_pairs
+                else "plan_inferred"
+            )
+            edges.append({
+                "id": f"{source}-{target}",
+                "source": source,
+                "target": target,
+                "relation": "prerequisite",
+                "origin": origin,
+                "explanation": (
+                    "Подтверждённая связь репозитория дисциплин."
+                    if origin == "catalogue"
+                    else "Связь выведена внутри плана по предметной близости и более раннему семестру."
+                ),
+                "explanation_translations": (
+                    {
+                        "ru": "Подтверждённая связь репозитория дисциплин.",
+                        "kk": "Пәндер репозиторийіндегі расталған байланыс.",
+                        "en": "Confirmed course-repository relation.",
+                    }
+                    if origin == "catalogue"
+                    else {
+                        "ru": "Связь выведена внутри плана по предметной близости и более раннему семестру.",
+                        "kk": "Байланыс пәндік жақындық пен ертерек семестр негізінде жоспар ішінде шығарылды.",
+                        "en": "Plan-local relation inferred from subject proximity and an earlier semester.",
+                    }
+                ),
+            })
             adjacency[source].append(target)
 
     # Add deeper evidence-based competency flow without pretending that these

@@ -39,6 +39,7 @@ export default function PrerequisiteGraph() {
     const [competencies, setCompetencies] = useState(null)
     const [activeSemester, setActiveSemester] = useState(1)
     const [selected, setSelected] = useState(null)
+    const [selectedEdge, setSelectedEdge] = useState(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [semesterInsights, setSemesterInsights] = useState({})
@@ -64,7 +65,7 @@ export default function PrerequisiteGraph() {
             axios.get('/api/planner/version/' + versionId + '/graph', { params: { variant } }),
             axios.get('/api/planner/version/' + versionId + '/semester-competencies', { params: { variant } })
         ]).then(([g, c]) => {
-            setGraph(g.data); setCompetencies(c.data); setSelected(null); setActiveSemester(1); setError(null)
+            setGraph(g.data); setCompetencies(c.data); setSelected(null); setSelectedEdge(null); setActiveSemester(1); setError(null)
         }).catch(err => setError(err.response?.data?.detail || err.message)).finally(() => setLoading(false))
     }, [project, variant])
 
@@ -112,6 +113,11 @@ export default function PrerequisiteGraph() {
                         'target-arrow-shape': 'triangle', 'arrow-scale': .85, 'curve-style': 'taxi',
                         'taxi-direction': 'rightward', 'taxi-turn': 24, 'opacity': .7
                     }},
+                    { selector: 'edge[relation = "prerequisite"][origin = "plan_inferred"]', style: {
+                        'line-style': 'dashed', 'line-dash-pattern': [10, 5],
+                        'line-color': '#00c8ff', 'target-arrow-color': '#00e5ff',
+                        'width': 2.2, 'opacity': .82
+                    }},
                     { selector: 'edge[relation = "competency_flow"]', style: {
                         'line-style': 'dashed', 'line-dash-pattern': [8, 5],
                         'line-color': '#b388ff', 'target-arrow-color': '#ff80f6',
@@ -131,11 +137,21 @@ export default function PrerequisiteGraph() {
             })
             cy.on('tap', 'node', event => {
                 const node = event.target
+                setSelectedEdge(null)
                 cy.elements().removeClass('dimmed flowPath').addClass('dimmed')
                 node.predecessors().union(node.successors()).union(node).removeClass('dimmed').addClass('flowPath')
                 setSelected(graph.nodes.find(item => item.id === node.id()))
             })
-            cy.on('tap', event => { if (event.target === cy) setSelected(null) })
+            cy.on('tap', 'edge', event => {
+                setSelected(null)
+                setSelectedEdge(graph.edges.find(item => item.id === event.target.id()) || null)
+            })
+            cy.on('tap', event => {
+                if (event.target === cy) {
+                    setSelected(null)
+                    setSelectedEdge(null)
+                }
+            })
             cyRef.current = cy
         }).catch(err => setError(err.message || String(err)))
         return () => { cancelled = true; cyRef.current?.destroy() }
@@ -155,6 +171,7 @@ export default function PrerequisiteGraph() {
 
     const resetGraph = () => {
         setSelected(null)
+        setSelectedEdge(null)
         cyRef.current?.elements().removeClass('dimmed semesterNode flowPath')
         cyRef.current?.fit(undefined, 35)
     }
@@ -205,16 +222,43 @@ export default function PrerequisiteGraph() {
                         <div style={{ position: 'absolute', zIndex: 3, left: 18, top: 15, pointerEvents: 'none' }}><div style={{ color: neon[(activeSemester - 1) % neon.length], fontSize: 11, letterSpacing: '.16em' }}>{t('current_stage')}</div><div style={{ fontSize: 26, fontWeight: 800 }}>{activeSemester} {t('semester_short')}</div></div>
                         <div style={{ position: 'absolute', zIndex: 3, right: 16, top: 14, padding: '9px 11px', borderRadius: 10, background: 'rgba(2,10,18,.8)', fontSize: 10, lineHeight: 1.65, pointerEvents: 'none' }}>
                             <div><span style={{ color: '#00e5ff' }}>━━▶</span> {t('formal_prerequisite')} ({graph.formal_edge_count})</div>
+                            <div style={{ color: '#7fcfff' }}>
+                                {language === 'ru' ? 'репозиторий' : language === 'kk' ? 'репозиторий' : 'repository'}: {graph.edges.filter(edge => edge.relation === 'prerequisite' && edge.origin === 'catalogue').length}
+                                {' · '}
+                                {language === 'ru' ? 'выведено в плане' : language === 'kk' ? 'жоспарда шығарылды' : 'plan-inferred'}: {graph.edges.filter(edge => edge.relation === 'prerequisite' && edge.origin === 'plan_inferred').length}
+                            </div>
                             <div><span style={{ color: '#d09cff' }}>┄┄▶</span> {t('competency_connection')} ({graph.competency_edge_count})</div>
                             <div><span style={{ color: '#00e676' }}>···▶</span> {t('semantic_progression')} ({graph.semantic_edge_count})</div>
                         </div>
                         <div ref={graphContainer} style={{ width: '100%', height: '100%' }} />
                         {selected && <SelectedCard selected={selected} graph={graph} t={t} id={id} onClose={() => setSelected(null)} />}
+                        {selectedEdge && <EdgeCard edge={selectedEdge} graph={graph} language={language} localize={localize} onClose={() => setSelectedEdge(null)} />}
                     </div>
                     <div className="right-rail">{competencies.semesters.map(record => <ResultStage key={record.semester} record={record} active={activeSemester} t={t} language={language} insight={semesterInsights[record.semester]} loading={insightLoading === record.semester} onAnalyze={() => analyzeSemester(record.semester)} />)}</div>
                 </div>
             </>}
         </main>
+    </div>
+}
+
+function EdgeCard({ edge, graph, language, localize, onClose }) {
+    const source = graph.nodes.find(node => node.id === edge.source)
+    const target = graph.nodes.find(node => node.id === edge.target)
+    const explanation = localize(edge.explanation_translations || edge.explanation)
+    const relation = edge.relation === 'prerequisite'
+        ? (language === 'ru' ? 'Пререквизит' : language === 'kk' ? 'Пререквизит' : 'Prerequisite')
+        : edge.relation
+    const origin = edge.origin === 'catalogue'
+        ? (language === 'ru' ? 'Подтверждено репозиторием' : language === 'kk' ? 'Репозиториймен расталған' : 'Repository-confirmed')
+        : edge.origin === 'plan_inferred'
+            ? (language === 'ru' ? 'Выведено алгоритмом для этого плана' : language === 'kk' ? 'Осы жоспар үшін алгоритм шығарған' : 'Inferred for this plan')
+            : ''
+    return <div style={{ position: 'absolute', left: 14, right: 14, bottom: 14, zIndex: 5, padding: 14, border: '1px solid rgba(0,200,255,.42)', borderRadius: 14, background: 'rgba(2,10,18,.96)' }}>
+        <button onClick={onClose} style={{ float: 'right', ...futureButton }}>×</button>
+        <div style={{ color: '#00e5ff', fontSize: 11 }}>{relation}{origin ? ` · ${origin}` : ''}</div>
+        <strong>{localize(source?.title_translations || source?.title)} → {localize(target?.title_translations || target?.title)}</strong>
+        {explanation && <div style={{ marginTop: 8, color: '#b8cddd', fontSize: 11 }}>{explanation}</div>}
+        {edge.shared_los?.length > 0 && <div style={{ marginTop: 7, color: '#d5b7ff', fontSize: 11 }}>LO: {edge.shared_los.join(', ')}</div>}
     </div>
 }
 

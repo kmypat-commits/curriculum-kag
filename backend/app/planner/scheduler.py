@@ -3004,6 +3004,7 @@ def build_curriculum_plan(
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )
+    prerequisite_graph = _infer_schedule_prerequisites(schedule)
 
     invalid_domain_courses = []
     for semester_items in schedule.values():
@@ -3043,6 +3044,7 @@ def build_curriculum_plan(
             + ", ".join(f"{row.get('title')} [{row.get('reason')}]" for row in examples)
         )
     verification = verify_curriculum_plan(schedule, project_version, db)
+    verification["prerequisite_graph"] = prerequisite_graph
     metrics = calculate_plan_metrics(schedule, selected_courses, project_version, db, verification)
     metrics["course_admission"] = admission_audit
     plan = Plan(project_version_id=project_version_id, variant_type=variant_type, metrics_json=metrics)
@@ -5194,6 +5196,178 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                 if changed: break
             if changed: break
     return schedule
+
+
+def _prerequisite_concepts(title: str | None) -> set[str]:
+    """Small explainable ontology used for plan-local prerequisite inference."""
+    key = _title_key(title)
+    concepts: set[str] = set()
+    markers = {
+        "programming": ("программир", "software development", "разработка прилож"),
+        "algorithms": ("алгоритм", "структур данных", "data structures"),
+        "database": ("баз данных", "database", "sql"),
+        "operating_systems": ("операционн систем", "системное программ", "operating system"),
+        "networks": ("компьютерн сет", "вычислительных систем и сет", "network"),
+        "security": ("безопас", "кибер", "security"),
+        "data_analysis": ("анализ данн", "больших данных", "big data", "аналитик"),
+        "artificial_intelligence": (
+            "искусственн интеллект", "машинн обуч", "нейросет",
+            "интеллектуальн систем", "machine learning", "artificial intelligence",
+        ),
+        "information_systems": ("информационн систем", "information system", "информационных ресурсов"),
+        "research": ("научн исслед", "методолог", "research method", "academic writing", "экспериментальн"),
+        "project_management": ("управление проект", "проектный менедж", "project management"),
+        "project_application": ("проектно исслед", "проект 1", "project 1", "курсов"),
+        "web": ("web", "интернет технолог"),
+        "robotics": ("робот", "robot"),
+        "validation": ("тестирован", "валидац", "validation", "verification"),
+        "distributed_systems": ("распредел", "distributed", "cloud", "облач"),
+    }
+    for concept, terms in markers.items():
+        if any(term in key for term in terms):
+            concepts.add(concept)
+    # Russian inflection inserts endings between stems, so phrase substring
+    # matching alone would miss e.g. "машинное обучение".
+    conjunctions = {
+        "artificial_intelligence": (("машин", "обуч"), ("искусствен", "интеллект"), ("интеллектуальн", "систем")),
+        "networks": (("компьютер", "сет"), ("вычисл", "сет")),
+        "database": (("баз", "данн"),),
+        "operating_systems": (("операцион", "систем"), ("системн", "программ")),
+        "data_analysis": (("анализ", "данн"), ("больш", "данн")),
+        "information_systems": (("информацион", "систем"), ("информацион", "ресурс")),
+        "research": (("научн", "исслед"), ("академическ", "письм")),
+        "project_management": (("управлен", "проект"), ("проектн", "менедж")),
+        "project_application": (("проект", "исслед"),),
+    }
+    for concept, alternatives in conjunctions.items():
+        if any(all(stem in key for stem in stems) for stems in alternatives):
+            concepts.add(concept)
+    return concepts
+
+
+def _infer_schedule_prerequisites(schedule: Dict[int, List[Dict]]) -> Dict[str, float | int]:
+    """Add conservative, explainable prerequisite edges inside one final plan.
+
+    Repository links are often absent in legacy EPVO cards.  The inference is
+    deliberately plan-local: it can only point to an already selected course
+    in an earlier semester and never mutates the shared course repository.
+    """
+    semester_by_course = {
+        int(item["course_id"]): int(semester)
+        for semester, items in schedule.items()
+        for item in items
+        if item.get("course_id") is not None
+    }
+    items_by_course = {
+        int(item["course_id"]): item
+        for items in schedule.values()
+        for item in items
+        if item.get("course_id") is not None
+    }
+    concepts_by_course = {
+        course_id: _prerequisite_concepts(item.get("title"))
+        for course_id, item in items_by_course.items()
+    }
+    regulatory_course_ids = {
+        course_id
+        for course_id, item in items_by_course.items()
+        if item.get("regulatory_required")
+    }
+    dependency_map = {
+        "artificial_intelligence": {"algorithms": 6, "data_analysis": 5, "programming": 4},
+        "security": {"networks": 6, "operating_systems": 5, "programming": 3},
+        "information_systems": {"database": 5, "programming": 3, "data_analysis": 3},
+        "data_analysis": {"database": 4, "algorithms": 4, "research": 3},
+        "validation": {"programming": 4, "research": 5},
+        "project_application": {"project_management": 5, "research": 5, "programming": 3},
+        "distributed_systems": {"networks": 5, "operating_systems": 5, "programming": 3},
+        "robotics": {"algorithms": 5, "programming": 4, "artificial_intelligence": 3},
+        "web": {"programming": 4, "database": 3, "networks": 2},
+    }
+    inferred = 0
+    existing = 0
+    covered_targets: set[int] = set()
+    for course_id, item in items_by_course.items():
+        semester = semester_by_course[course_id]
+        safe_existing = sorted({
+            int(prerequisite_id)
+            for prerequisite_id in (item.get("prerequisites") or [])
+            if int(prerequisite_id) in semester_by_course
+            and semester_by_course[int(prerequisite_id)] < semester
+        })
+        if safe_existing:
+            item["prerequisites"] = safe_existing
+            existing += len(safe_existing)
+            covered_targets.add(course_id)
+            continue
+        target_concepts = concepts_by_course.get(course_id, set())
+        if not target_concepts:
+            item["prerequisites"] = []
+            continue
+        ranked = []
+        for candidate_id, candidate_semester in semester_by_course.items():
+            if candidate_semester >= semester or candidate_id == course_id:
+                continue
+            # ГОСО research/practice/final units keep their explicit normative
+            # chains but must not become inferred foundations for coursework.
+            if candidate_id in regulatory_course_ids:
+                continue
+            candidate_concepts = concepts_by_course.get(candidate_id, set())
+            if not candidate_concepts:
+                continue
+            score = 0
+            shared = target_concepts & candidate_concepts
+            if shared:
+                score += 6 * len(shared)
+            for target_concept in target_concepts:
+                for prerequisite_concept, weight in dependency_map.get(target_concept, {}).items():
+                    if prerequisite_concept in candidate_concepts:
+                        score += weight
+            # Research methodology is a valid foundation for later analytical
+            # or experimental courses, especially at postgraduate levels.
+            target_key = _title_key(item.get("title"))
+            if "research" in candidate_concepts and any(
+                marker in target_key
+                for marker in ("метод", "анализ", "модел", "эксперимент", "исслед")
+            ):
+                score += 3
+            if score < 4:
+                continue
+            ranked.append((
+                score,
+                candidate_semester,
+                int(items_by_course[candidate_id].get("credits") or 0),
+                candidate_id,
+            ))
+        ranked.sort(reverse=True)
+        selected = []
+        used_concepts: set[str] = set()
+        for score, _, _, candidate_id in ranked:
+            candidate_concepts = concepts_by_course[candidate_id]
+            if selected and candidate_concepts <= used_concepts:
+                continue
+            selected.append(candidate_id)
+            used_concepts.update(candidate_concepts)
+            if len(selected) == 2:
+                break
+        item["prerequisites"] = sorted(selected)
+        if selected:
+            item["prerequisite_inference"] = {
+                "method": "plan_local_semantic_ontology",
+                "course_ids": sorted(selected),
+            }
+            inferred += len(selected)
+            covered_targets.add(course_id)
+    total_edges = existing + inferred
+    real_courses = len(items_by_course)
+    return {
+        "edge_count": total_edges,
+        "existing_edge_count": existing,
+        "inferred_edge_count": inferred,
+        "covered_course_count": len(covered_targets),
+        "real_course_count": real_courses,
+        "edge_density": round(total_edges / max(real_courses, 1), 4),
+    }
 
 
 def calculate_plan_metrics(schedule, selected_courses, project_version, db, verification=None) -> Dict:

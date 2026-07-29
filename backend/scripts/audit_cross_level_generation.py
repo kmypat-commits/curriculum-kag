@@ -49,14 +49,17 @@ def main() -> None:
         total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
         professional_los = BACHELOR_LOS
         max_allowed_bridges = 1
+        min_prerequisite_edges = 5
     elif args.level == "doctorate":
         total_credits, semesters, direction, group, area = 180, 6, "8D061", "D094", "8D06"
         professional_los = PROFESSIONAL_LOS
         max_allowed_bridges = 0
+        min_prerequisite_edges = 2
     else:
         total_credits, semesters, direction, group, area = 120, 4, "7M061", "M094", "7M06"
         professional_los = PROFESSIONAL_LOS
         max_allowed_bridges = 0
+        min_prerequisite_edges = 3
     constraints = {
         "education_level": args.level,
         "jurisdiction": "KZ",
@@ -139,6 +142,37 @@ def main() -> None:
                 "hard_violations": verification.get("hard_violation_count"),
                 "course_lo_violations": verification.get("course_lo_violations"),
                 "prerequisite_violations": verification.get("prerequisite_violations"),
+                "prerequisite_graph": verification.get("prerequisite_graph") or {},
+                "prerequisite_pairs": [
+                    {
+                        "prerequisite_id": int(prerequisite_id),
+                        "prerequisite_title": next(
+                            (
+                                source.get("title")
+                                for source_items in schedule.values()
+                                for source in source_items
+                                if int(source.get("course_id") or 0) == int(prerequisite_id)
+                            ),
+                            None,
+                        ),
+                        "course_id": int(item.get("course_id")),
+                        "course_title": item.get("title"),
+                        "prerequisite_semester": next(
+                            (
+                                int(source_semester)
+                                for source_semester, source_items in schedule.items()
+                                for source in source_items
+                                if int(source.get("course_id") or 0) == int(prerequisite_id)
+                            ),
+                            None,
+                        ),
+                        "course_semester": int(semester),
+                    }
+                    for semester, items in schedule.items()
+                    for item in items
+                    if item.get("course_id") is not None
+                    for prerequisite_id in (item.get("prerequisites") or [])
+                ],
                 "load_violations": verification.get("semester_load_violations"),
                 "credit_violations": verification.get("credit_violations"),
                 "domain_quota_violations": verification.get("domain_quota_violations"),
@@ -146,6 +180,7 @@ def main() -> None:
                 "lo_without_real_course": audit.get("lo_without_real_course"),
                 "weak_courses": audit.get("weak_courses"),
                 "structural_foundations": audit.get("structural_foundations"),
+                "competency_blocks": audit.get("competency_blocks") or {},
                 "quality_passed": verification.get("quality_passed"),
                 "goso_compliant": (verification.get("goso_compliance") or {}).get("compliant"),
                 "wrong_semester": len(audit.get("semester_misplacements") or []),
@@ -207,11 +242,14 @@ def main() -> None:
             "variants": variants,
             "variants_are_distinct": variants_are_distinct,
             "max_allowed_bridges": max_allowed_bridges,
+            "min_prerequisite_edges": min_prerequisite_edges,
             "passed": variants_are_distinct and all(
                 row["credits"] == total_credits
                 and row["hard_violations"] == 0
                 and row["bridges"] <= max_allowed_bridges
+                and int(row["prerequisite_graph"].get("edge_count") or 0) >= min_prerequisite_edges
                 and row["quality_passed"] is True
+                and (row["competency_blocks"].get("passed") is not False)
                 and row["goso_compliant"] is True
                 and row["wrong_semester"] == 0
                 and row["wrong_level"] == 0

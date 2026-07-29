@@ -82,6 +82,69 @@ def _semantic_max_semester(title: str | None, num_semesters: int) -> int:
         return max(1, min(num_semesters, -(-num_semesters * 35 // 100)))
     return num_semesters
 
+
+def _ict_competency_audit(courses: List[Course], constraints: Dict) -> Dict:
+    """Verify explainable core blocks for EPVO ICT programmes.
+
+    LO coverage alone can be high while a conventional core block is absent.
+    This audit is intentionally activated only for the known 6B061/7M061/8D061
+    scope (and corresponding groups), so it does not impose ICT rules on other
+    educational fields.
+    """
+    scope = " ".join(str(constraints.get(key) or "").upper() for key in (
+        "direction_code", "secondary_direction_code", "group_code", "secondary_group_code",
+    ))
+    if not any(code in scope for code in ("6B061", "7M061", "8D061", "B057", "M094", "D094")):
+        return {"applicable": False, "passed": True, "covered": {}, "missing": []}
+    level = str(constraints.get("education_level") or "bachelor").lower()
+    if level in {"doctorate", "doctoral", "phd"}:
+        requirements = {
+            "research_methodology": (("исслед",), ("методолог",), ("research",)),
+            "advanced_ai_and_data": (("искусствен", "интеллект"), ("больш", "данн"), ("data",)),
+            "experimental_validation": (("эксперимент",), ("валидац",), ("validation",)),
+            "systems_modelling": (("модел", "систем"), ("информацион", "ресурс")),
+            "research_leadership": (("управлен", "проект"), ("project management",)),
+        }
+    elif level in {"master", "masters", "magistracy"}:
+        requirements = {
+            "research_methodology": (("исслед",), ("методолог",), ("research",)),
+            "ai_and_data": (("искусствен", "интеллект"), ("машин", "обуч"), ("анализ", "данн")),
+            "systems_architecture": (("проектирован", "информацион", "систем"), ("архитектур",)),
+            "information_security": (("безопас",), ("кибер",), ("security",)),
+            "project_and_communication": (("управлен", "проект"), ("научн", "коммуникац"), ("project management",)),
+        }
+    else:
+        requirements = {
+            "programming_and_algorithms": (("программир",), ("алгоритм",)),
+            "data_and_databases": (("баз", "данн"), ("анализ", "данн"), ("database",)),
+            "systems_and_networks": (("операцион", "систем"), ("компьютер", "сет"), ("системн", "программ")),
+            "information_security": (("безопас",), ("кибер",), ("security",)),
+            "ai_and_analytics": (("искусствен", "интеллект"), ("машин", "обуч"), ("аналитик",)),
+            "project_and_research": (("проект",), ("научн", "исслед"), ("academic writing",)),
+        }
+    titles = [str(course.title or "") for course in courses]
+    normalized = [(title, title.casefold()) for title in titles]
+    covered = {}
+    for code, alternatives in requirements.items():
+        evidence = [
+            title
+            for title, text in normalized
+            if any(all(stem in text for stem in stems) for stems in alternatives)
+        ]
+        covered[code] = evidence[:5]
+    missing = [code for code, evidence in covered.items() if not evidence]
+    return {
+        "applicable": True,
+        "scope": scope.strip(),
+        "level": level,
+        "passed": not missing,
+        "covered": covered,
+        "missing": missing,
+        "covered_count": len(covered) - len(missing),
+        "required_count": len(covered),
+    }
+
+
 def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: ProjectVersion, db: Session) -> Dict:
     constraints = project_version.project.constraints_json or {}
     num_semesters = int(constraints.get("total_semesters", len(schedule) or 1))
@@ -283,6 +346,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         course.id: course
         for course in db.query(Course).filter(Course.id.in_(selected_course_ids or [-1])).all()
     }
+    competency_audit = _ict_competency_audit(list(courses_by_id.values()), constraints)
     weak_courses = []
     structural_foundations = []
     semester_misplacements = []
@@ -375,13 +439,25 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         })
     if semester_misplacements:
         quality_violations.append({"reason": "semester_appropriateness", "count": len(semester_misplacements)})
+    if not competency_audit["passed"]:
+        quality_violations.append({
+            "reason": "missing_core_competency_blocks",
+            "missing": competency_audit["missing"],
+        })
     pedagogical_audit = {
-        "passed": not lo_without_real_course and not weak_courses and not structural_foundations and not semester_misplacements,
+        "passed": (
+            not lo_without_real_course
+            and not weak_courses
+            and not structural_foundations
+            and not semester_misplacements
+            and competency_audit["passed"]
+        ),
         "engine": "SBERT + EPVO expert evidence + prerequisite/semester rules",
         "lo_without_real_course": lo_without_real_course,
         "weak_courses": weak_courses,
         "structural_foundations": structural_foundations,
         "semester_misplacements": semester_misplacements,
+        "competency_blocks": competency_audit,
     }
     goso_compliance = evaluate_goso_compliance(schedule, project_version)
     # A curriculum unit without a direct programme-LO link is not merely a

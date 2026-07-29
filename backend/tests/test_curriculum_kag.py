@@ -6,13 +6,14 @@ from app.kag.bridge_generator import call_llm, parse_llm_response
 from app.planner.scheduler import (
     _complexity_min_semester,
     _foundation_equivalent_title_key,
+    _infer_schedule_prerequisites,
     _rebalance_semester_load,
     _repair_semester_appropriateness,
     _select_exact_professional_subset,
     _unique_items_by_title,
     schedule_courses,
 )
-from app.planner.verifier import _semantic_min_semester, verify_curriculum_plan
+from app.planner.verifier import _ict_competency_audit, _semantic_min_semester, verify_curriculum_plan
 from app.services.content_localization import register_course_translations
 
 
@@ -59,6 +60,59 @@ def test_common_catalogue_aliases_are_semantically_deduplicated():
         "Алгоритмы и структуры данных",
         "Управление IT-проектами",
     ]
+
+
+def test_plan_local_prerequisites_use_only_earlier_semesters():
+    schedule = {
+        1: [{"course_id": 1, "title": "Алгоритмы и структуры данных", "credits": 5}],
+        2: [{"course_id": 2, "title": "Прикладное машинное обучение", "credits": 5}],
+        3: [{"course_id": 3, "title": "Информационная безопасность", "credits": 5}],
+        4: [{"course_id": 4, "title": "Компьютерные сети", "credits": 5}],
+    }
+    stats = _infer_schedule_prerequisites(schedule)
+    assert schedule[2][0]["prerequisites"] == [1]
+    assert schedule[3][0]["prerequisites"] == []
+    assert stats["edge_count"] == 1
+
+
+def test_regulatory_research_is_not_inferred_as_coursework_prerequisite():
+    schedule = {
+        1: [
+            {
+                "course_id": 1,
+                "title": "Научно-исследовательская работа магистранта 1",
+                "credits": 6,
+                "regulatory_required": True,
+            },
+            {"course_id": 2, "title": "Методология научных исследований", "credits": 5},
+        ],
+        2: [
+            {
+                "course_id": 3,
+                "title": "Современные методы исследований и анализа данных",
+                "credits": 5,
+            }
+        ],
+    }
+    _infer_schedule_prerequisites(schedule)
+    assert schedule[2][0]["prerequisites"] == [2]
+
+
+def test_ict_competency_audit_detects_missing_security_block():
+    courses = [
+        SimpleNamespace(title="Алгоритмы и структуры данных"),
+        SimpleNamespace(title="Базы данных"),
+        SimpleNamespace(title="Операционные системы и компьютерные сети"),
+        SimpleNamespace(title="Системы искусственного интеллекта"),
+        SimpleNamespace(title="Основы научных исследований и проект"),
+    ]
+    audit = _ict_competency_audit(
+        courses,
+        {"education_level": "bachelor", "direction_code": "6B061", "group_code": "B057"},
+    )
+    assert audit["applicable"] is True
+    assert audit["passed"] is False
+    assert audit["missing"] == ["information_security"]
 
 
 def test_verified_translations_are_stored_in_database_without_json_write():
