@@ -1,10 +1,19 @@
 ﻿from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from check_text_encoding import looks_like_mojibake
+
+
+def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
+    assert looks_like_mojibake("РџР»Р°РЅ СѓС‡РµР±РЅРѕР№ РїСЂРѕРіСЂР°РјРјС‹")
+    assert looks_like_mojibake("ÐÐ»Ð°Ð½ ÑÑÐµÐ±Ð½Ð¾Ð¹ Ð¿ÑÐ¾Ð³ÑÐ°Ð¼Ð¼Ñ")
+    assert not looks_like_mojibake("План образовательной программы")
+    assert not looks_like_mojibake("Білім беру бағдарламасының жоспары")
 from app.kag.bridge_generator import call_llm, parse_llm_response
 from app.planner.scheduler import (
     _rebalance_semester_load,
     _repair_semester_appropriateness,
+    _select_exact_professional_subset,
     schedule_courses,
 )
 from app.planner.verifier import verify_curriculum_plan
@@ -112,3 +121,37 @@ def test_semester_repair_resolves_conflicting_source_recommendation():
     }
     assert semester_by_course[1] <= 3
     assert semester_by_course[2] >= 7
+
+
+def test_exact_goso_remainder_preserves_both_domain_quotas():
+    candidates = [
+        {"course_id": 1, "credits": 5},
+        {"course_id": 2, "credits": 5},
+        {"course_id": 3, "credits": 5},
+        {"course_id": 4, "credits": 5},
+        {"course_id": 5, "credits": 5},
+        {"course_id": 6, "credits": 5},
+    ]
+    # Domain 1 has the individually strongest courses. A coverage-only
+    # knapsack would select five of them and fail the interdisciplinary quota.
+    evidence = {
+        1: (0b0001, 0.99),
+        2: (0b0010, 0.98),
+        3: (0b0100, 0.97),
+        4: (0b1000, 0.96),
+        5: (0b0011, 0.80),
+        6: (0b1100, 0.79),
+    }
+    domain_index = {1: 0, 2: 0, 3: 0, 4: 0, 5: 1, 6: 1}
+    selected = _select_exact_professional_subset(
+        candidates,
+        evidence,
+        capacity=25,
+        domain_index_by_course=domain_index,
+        minimum_domain_credits=(7, 7),
+    )
+    selected_ids = {candidates[index]["course_id"] for index in selected}
+    assert sum(candidates[index]["credits"] for index in selected) == 25
+    assert sum(candidates[index]["credits"] for index in selected if domain_index[candidates[index]["course_id"]] == 0) >= 7
+    assert sum(candidates[index]["credits"] for index in selected if domain_index[candidates[index]["course_id"]] == 1) >= 7
+    assert selected_ids & {5, 6} == {5, 6}

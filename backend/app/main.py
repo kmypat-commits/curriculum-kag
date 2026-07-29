@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 from sqlalchemy import text
 
@@ -75,4 +76,21 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    database = engine.dialect.name
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "database": database,
+            "database_status": "connected",
+        }
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": database,
+                "database_status": "unavailable",
+            },
+        )

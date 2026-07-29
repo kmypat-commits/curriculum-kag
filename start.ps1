@@ -53,10 +53,33 @@ function Wait-Endpoint([string]$Name, [string]$Url, [int]$Seconds = 120) {
     throw "$Name did not start in $Seconds seconds. Check logs in .runtime."
 }
 
+function Get-EndpointJson([string]$Url) {
+    try {
+        return Invoke-RestMethod -Uri $Url -TimeoutSec 3
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-TcpPort([string]$HostName, [int]$Port, [int]$TimeoutMilliseconds = 1000) {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connect = $client.ConnectAsync($HostName, $Port)
+        return $connect.Wait($TimeoutMilliseconds) -and $client.Connected
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+
 function Wait-TcpPort([string]$HostName, [int]$Port, [int]$Seconds = 60) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
-        if (Test-NetConnection -ComputerName $HostName -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue) {
+        if (Test-TcpPort $HostName $Port 750) {
             return $true
         }
         Start-Sleep -Milliseconds 750
@@ -92,7 +115,13 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     if (-not $desktop) { return $false }
 
     Write-Host "Starting Docker Desktop..." -ForegroundColor Cyan
-    Start-Process -FilePath $desktop -WindowStyle Hidden | Out-Null
+    try {
+        Start-Process -FilePath $desktop -WindowStyle Hidden -ErrorAction Stop | Out-Null
+    }
+    catch {
+        Write-Host "Docker Desktop could not be started automatically; continuing with the available local database." -ForegroundColor Yellow
+        return $false
+    }
     $deadline = (Get-Date).AddSeconds(90)
     while ((Get-Date) -lt $deadline) {
         try {
@@ -275,12 +304,24 @@ if ($configuredDatabaseUrl -match '^postgresql') {
         $postgresHost = $Matches[1]
         if ($Matches[2]) { $postgresPort = [int]$Matches[2] }
     }
-    if (-not (Test-NetConnection -ComputerName $postgresHost -Port $postgresPort -InformationLevel Quiet -WarningAction SilentlyContinue)) {
+    if (-not (Test-TcpPort $postgresHost $postgresPort 1000)) {
         if ($Database -in @("postgres", "postgres-shadow")) {
             throw "PostgreSQL ${postgresHost}:${postgresPort} is unavailable. Start Docker/PostgreSQL or use -Database sqlite."
         }
         $env:DATABASE_URL = "sqlite:///$sqlitePath"
         Write-Host "PostgreSQL ${postgresHost}:${postgresPort} is unavailable; using the local SQLite database." -ForegroundColor Yellow
+    }
+}
+
+$effectiveDatabaseUrl = if ($env:DATABASE_URL) { $env:DATABASE_URL } else { $configuredDatabaseUrl }
+$expectedDatabaseDialect = if ($effectiveDatabaseUrl -match '^postgresql') { "postgresql" } else { "sqlite" }
+$existingBackendHealth = Get-EndpointJson "http://127.0.0.1:8000/health"
+if ($existingBackendHealth) {
+    if (-not $existingBackendHealth.database) {
+        throw "Backend is already running without database diagnostics. Run stop.ps1 once, then start again."
+    }
+    if ($existingBackendHealth.database -ne $expectedDatabaseDialect) {
+        throw "Backend is already using '$($existingBackendHealth.database)', but '$expectedDatabaseDialect' was requested. Run stop.ps1, then start again."
     }
 }
 
@@ -296,6 +337,13 @@ else {
 }
 
 Wait-Endpoint "backend" "http://127.0.0.1:8000/health"
+$backendHealth = Get-EndpointJson "http://127.0.0.1:8000/health"
+if (-not $backendHealth -or $backendHealth.database_status -ne "connected") {
+    throw "Backend started, but its database health check failed. Check .runtime/backend.err.log."
+}
+if ($backendHealth.database -ne $expectedDatabaseDialect) {
+    throw "Backend started with '$($backendHealth.database)' instead of '$expectedDatabaseDialect'."
+}
 
 if (-not (Test-Endpoint "http://127.0.0.1:3001/api/health")) {
     Write-Host "Starting frontend..."

@@ -35,6 +35,9 @@ ENV/
 *.swp
 *.swo
 *~
+*.bak
+*.bak[0-9]*
+*.bak_*
 
 # Node
 node_modules/
