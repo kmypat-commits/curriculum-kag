@@ -29,18 +29,34 @@ PROFESSIONAL_LOS = [
     "Руководить исследовательскими проектами и внедрять подтверждённые результаты в профессиональную практику.",
 ]
 
+BACHELOR_LOS = [
+    "Разрабатывать программные и информационные системы для решения профессиональных задач.",
+    "Применять алгоритмы, структуры данных и методы анализа данных при создании цифровых решений.",
+    "Проектировать архитектуру приложений, базы данных и компьютерные сети.",
+    "Обеспечивать информационную безопасность, тестирование и надёжность программных систем.",
+    "Работать в команде, управлять ИТ-проектами и представлять результаты профессиональной деятельности.",
+]
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--level", choices=("master", "doctorate"), required=True)
+    parser.add_argument("--level", choices=("bachelor", "master", "doctorate"), required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--variants", nargs="+", choices=("A", "B", "C"), default=("A", "B", "C"))
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
-    if args.level == "doctorate":
+    if args.level == "bachelor":
+        total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
+        professional_los = BACHELOR_LOS
+        max_allowed_bridges = 1
+    elif args.level == "doctorate":
         total_credits, semesters, direction, group, area = 180, 6, "8D061", "D094", "8D06"
+        professional_los = PROFESSIONAL_LOS
+        max_allowed_bridges = 0
     else:
         total_credits, semesters, direction, group, area = 120, 4, "7M061", "M094", "7M06"
+        professional_los = PROFESSIONAL_LOS
+        max_allowed_bridges = 0
     constraints = {
         "education_level": args.level,
         "jurisdiction": "KZ",
@@ -77,7 +93,7 @@ def main() -> None:
         db.add(project)
         db.flush()
         project_id = project.id
-        for index, text in enumerate(PROFESSIONAL_LOS, start=1):
+        for index, text in enumerate(professional_los, start=1):
             db.add(LearningOutcome(
                 project_version=version,
                 lo_code=f"LO{index}",
@@ -190,9 +206,11 @@ def main() -> None:
             "temporary_version_id": version.id if args.keep else None,
             "variants": variants,
             "variants_are_distinct": variants_are_distinct,
+            "max_allowed_bridges": max_allowed_bridges,
             "passed": variants_are_distinct and all(
                 row["credits"] == total_credits
                 and row["hard_violations"] == 0
+                and row["bridges"] <= max_allowed_bridges
                 and row["quality_passed"] is True
                 and row["goso_compliant"] is True
                 and row["wrong_semester"] == 0

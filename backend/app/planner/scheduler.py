@@ -163,6 +163,28 @@ def _foundation_equivalent_title_key(key: str) -> str:
     )
     if key in research_methodology_markers:
         return "semantic research methodology"
+    if "алгоритм" in key and "структур" in key and "данн" in key:
+        return "semantic algorithms and data structures"
+    if "операционн" in key and ("систем" in key or "сред" in key or "оболоч" in key):
+        return "semantic operating systems"
+    if key in {
+        "базы данных",
+        "базы данных и информационные системы",
+        "система управления базами данных",
+        "системы баз данных",
+        "database systems",
+        "database management systems",
+    }:
+        return "semantic database systems"
+    if key in {
+        "проектный менеджмент",
+        "управление it проектами",
+        "управление ит проектами",
+        "управление проектами",
+        "project management",
+        "it project management",
+    }:
+        return "semantic project management"
     prefixes = (
         "основы ", "введение в ", "введение в основы ", "базовый курс ",
         "fundamentals of ", "introduction to ", "basic course in ",
@@ -4793,6 +4815,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = admit_real_courses(result)
     result = top_up_with_real_epvo_courses(result)
     result = top_up_with_credit_bridges(result)
+    result = replace_redundant_bridges_with_real_courses(result)
     result = _trim_to_target_credits(result, target, db)
     result = rebalance_domain_quotas(result)
     if (

@@ -48,6 +48,12 @@ Invoke-Checked {
 if ($IncludeFreshGeneration) {
     Invoke-Checked {
         & $python (Join-Path $backend "scripts\audit_cross_level_generation.py") `
+            --level bachelor `
+            --output (Join-Path $runtime "fresh-bachelor-acceptance.json") `
+            --variants A B C
+    } "Fresh bachelor A/B/C generation"
+    Invoke-Checked {
+        & $python (Join-Path $backend "scripts\audit_cross_level_generation.py") `
             --level master `
             --output (Join-Path $runtime "fresh-master-acceptance.json") `
             --variants A B C

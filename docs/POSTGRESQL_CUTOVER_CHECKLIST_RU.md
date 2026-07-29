@@ -88,8 +88,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop.ps1
 контрольные программы всех уровней и варианты A/B/C, полнота RU/KK/EN,
 отсутствие повреждённых описаний и production-сборка frontend.
 
-Расширенная приёмка дополнительно строит новые магистерские и докторские A/B/C
-с нуля и поэтому выполняется дольше:
+Расширенная приёмка дополнительно строит новые бакалаврские, магистерские и
+докторские A/B/C с нуля и поэтому выполняется дольше:
 
 ```powershell
 .\acceptance-test.ps1 -RequireVerifiedBackup -IncludeFreshGeneration

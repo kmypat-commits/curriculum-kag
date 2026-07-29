@@ -9,6 +9,7 @@ from app.planner.scheduler import (
     _rebalance_semester_load,
     _repair_semester_appropriateness,
     _select_exact_professional_subset,
+    _unique_items_by_title,
     schedule_courses,
 )
 from app.planner.verifier import _semantic_min_semester, verify_curriculum_plan
@@ -41,6 +42,23 @@ def test_research_methodology_title_variants_share_semantic_key():
         _foundation_equivalent_title_key(title)
         for title in variants
     } == {"semantic research methodology"}
+
+
+def test_common_catalogue_aliases_are_semantically_deduplicated():
+    items = [
+        {"course_id": 1, "title": "Базы данных", "credits": 5},
+        {"course_id": 2, "title": "Системы баз данных", "credits": 4},
+        {"course_id": 3, "title": "Алгоритмы и структуры данных", "credits": 3},
+        {"course_id": 4, "title": "Алгоритмы, структуры данных и программирование", "credits": 5},
+        {"course_id": 5, "title": "Управление IT-проектами", "credits": 5},
+        {"course_id": 6, "title": "Проектный менеджмент", "credits": 2},
+    ]
+    titles = [item["title"] for item in _unique_items_by_title(items)]
+    assert titles == [
+        "Базы данных",
+        "Алгоритмы и структуры данных",
+        "Управление IT-проектами",
+    ]
 
 
 def test_verified_translations_are_stored_in_database_without_json_write():
