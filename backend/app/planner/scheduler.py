@@ -426,6 +426,60 @@ def _is_it_medicine_support_course(
     return 0 < int(course.credits or 0) <= 7
 
 
+def _has_foreign_professional_title(
+    course: Course,
+    project_domains: List[str],
+) -> bool:
+    """Detect a professional context not represented by selected fields.
+
+    Semantic similarity can be inflated by generic words such as "AI" or
+    "digital".  The title still has to belong to a selected professional
+    context; e.g. AI in marketing is not an IT-health course merely because it
+    contains "AI".
+    """
+    title = _title_key(course.title)
+    domains = " ".join(project_domains).casefold()
+    context_groups = (
+        (
+            (
+                "маркетинг", "marketing", "бизнес коммуникац",
+                "business communication", "цифровая экономика",
+                "digital economy", "экономик", "предприяти",
+                "enterprise management", "комплексная логистика",
+                "логистика", "logistics", "бухгалтер", "accounting",
+                "финанс", "finance",
+            ),
+            (
+                "бизнес", "управлен", "эконом", "менедж", "маркет",
+                "логист", "финанс", "account", "business", "management",
+                "econom", "marketing", "logistics", "finance",
+            ),
+        ),
+        (
+            ("промышленная безопасность", "industrial safety"),
+            (
+                "промышлен", "производ", "инженер", "безопасность труда",
+                "industrial", "manufactur", "engineering", "occupational safety",
+            ),
+        ),
+        (
+            (
+                "эмоциональн", "эмоциональный интеллект",
+                "emotional intelligence",
+            ),
+            (
+                "психолог", "человеческ ресурс", "hr", "управлен",
+                "psycholog", "human resource", "management",
+            ),
+        ),
+    )
+    return any(
+        _has_domain_term(title, title_markers)
+        and not _has_domain_term(domains, allowed_domain_markers)
+        for title_markers, allowed_domain_markers in context_groups
+    )
+
+
 def _course_domain_matches(course: Course, project_domains: List[str]) -> bool:
     domain = (course.domain or "").lower().strip()
     return bool(domain) and any(d and (d in domain or domain in d) for d in project_domains)
@@ -607,6 +661,7 @@ def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersio
         if code.startswith("GOSO-KZ-") and jurisdiction_kz:
             continue
         reason = None
+        minimum_semester = None
         if code.startswith("GOSO-KZ-"):
             reason = "goso_outside_kz_mode"
         elif not _education_level_course_allowed(course, constraints.get("education_level")):
@@ -632,6 +687,12 @@ def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersio
             violations.append({
                 "course_id": course.id, "title": course.title,
                 "semester": semester, "reason": reason,
+                "minimum_semester": minimum_semester,
+                "recommended_semester": (
+                    item.get("recommended_semester")
+                    or course.recommended_semester
+                ),
+                "selection_method": item.get("selection_method"),
             })
     return {"checked_real_courses": len(real_items), "passed": not violations, "violations": violations}
 
@@ -1768,15 +1829,98 @@ def _repair_final_admission_misplacements(
     }
     constraints = project_version.project.constraints_json or {}
     num_semesters = int(constraints.get("total_semesters", len(normalized)) or len(normalized))
-    candidate_ids = {
+    seed_candidate_ids = {
         int(item["course_id"]) for item in candidate_pool
         if item.get("course_id") is not None
     }
+    scored_candidate_ids = {
+        int(course_id)
+        for (course_id,) in db.query(MatchScore.course_id).filter(
+            MatchScore.project_version_id == project_version.id
+        ).distinct().all()
+    }
+    candidate_ids = seed_candidate_ids | scored_candidate_ids
     courses = {
         course.id: course
         for course in db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
     }
     credible = _credible_professional_lo_by_course(project_version, candidate_ids, db)
+    project_domains = _project_domain_terms(project_version, db)
+    interdisciplinary = (
+        str(constraints.get("program_type") or "standard").lower()
+        in {"interdisciplinary", "joint"}
+    )
+
+    def domain_family(value: str | None) -> str:
+        text = str(value or "").casefold()
+        if any(marker in text for marker in (
+            "информ", "computer", "software", "digital", "кибер",
+        )) or re.search(r"\bit\b", text):
+            return "it"
+        if any(marker in text for marker in (
+            "мед", "здрав", "health", "clinical", "medicine",
+        )):
+            return "medicine"
+        return _title_key(text)
+
+    project_families = {
+        domain_family(domain) for domain in project_domains if domain
+    }
+    prerequisite_map: Dict[int, List[int]] = {}
+    if candidate_ids:
+        for row in db.execute(
+            course_prerequisites.select().where(
+                course_prerequisites.c.course_id.in_(candidate_ids)
+            )
+        ).fetchall():
+            prerequisite_map.setdefault(int(row.course_id), []).append(
+                int(row.prerequisite_id)
+            )
+    max_score_by_course = {
+        int(course_id): float(max_score or 0.0)
+        for course_id, max_score in db.query(
+            MatchScore.course_id,
+            func.max(MatchScore.score),
+        ).filter(
+            MatchScore.project_version_id == project_version.id,
+        ).group_by(MatchScore.course_id).all()
+    }
+    expanded_pool = [dict(item) for item in candidate_pool]
+    existing_pool_ids = {
+        int(item["course_id"])
+        for item in expanded_pool if item.get("course_id") is not None
+    }
+    for course_id, course in courses.items():
+        course_code = str(course.course_id or "")
+        family = domain_family(course.domain)
+        if (
+            course_id in existing_pool_ids
+            or course_id not in credible
+            or course_code.startswith("GOSO-KZ-")
+            or not _education_level_course_allowed(
+                course, constraints.get("education_level")
+            )
+            or (project_families and family not in project_families)
+            or _has_foreign_professional_title(course, project_domains)
+            or (
+                interdisciplinary
+                and not _is_it_medicine_support_course(course, project_domains)
+            )
+        ):
+            continue
+        expanded_pool.append({
+            "course_id": course.id,
+            "title": course.title,
+            "domain": course.domain,
+            "credits": int(course.credits or 5),
+            "recommended_semester": course.recommended_semester,
+            "prerequisites": prerequisite_map.get(course.id, []),
+            "type": course.cycle_component or "elective",
+            "admission_los": sorted(credible.get(course.id) or []),
+            "admission_score": round(max_score_by_course.get(course.id, 0.0), 4),
+            "selection_method": "final_admission_repository_candidate",
+        })
+    candidate_pool = _unique_items_by_title(expanded_pool)
 
     for _ in range(6):
         admission = _audit_final_course_admission(normalized, project_version, db)
@@ -1800,6 +1944,87 @@ def _repair_final_admission_misplacements(
         if old_index is None:
             break
         old_item = normalized[semester][old_index]
+        current_check = verify_curriculum_plan(normalized, project_version, db)
+        current_admission_count = len(admission["violations"])
+        current_misplacements = len(
+            (current_check.get("pedagogical_audit") or {}).get(
+                "semester_misplacements"
+            ) or []
+        )
+        minimum_target = int(misplaced.get("minimum_semester") or semester + 1)
+        loads = {
+            value: sum(int(item.get("credits") or 0) for item in items)
+            for value, items in normalized.items()
+        }
+        lower_load = int(constraints.get("max_credits_per_semester", 30) or 30) - 3
+        upper_load = int(constraints.get("max_credits_per_semester", 30) or 30) + 3
+        relocated = False
+        for target_semester in range(minimum_target, num_semesters + 1):
+            for target_index, displaced in enumerate(normalized[target_semester]):
+                if (
+                    displaced.get("course_id") is None
+                    or displaced.get("regulatory_required")
+                ):
+                    continue
+                displaced_course = courses.get(int(displaced["course_id"]))
+                if (
+                    displaced_course is None
+                    or semester < _minimum_appropriate_semester(
+                        displaced, displaced_course, num_semesters
+                    )
+                ):
+                    continue
+                old_credits = int(old_item.get("credits") or 0)
+                displaced_credits = int(displaced.get("credits") or 0)
+                source_load = loads[semester] - old_credits + displaced_credits
+                target_load = (
+                    loads[target_semester] - displaced_credits + old_credits
+                )
+                if not (
+                    lower_load <= source_load <= upper_load
+                    and lower_load <= target_load <= upper_load
+                ):
+                    continue
+                trial = {
+                    value: [dict(item) for item in items]
+                    for value, items in normalized.items()
+                }
+                moved_late = dict(old_item)
+                moved_late["selection_method"] = (
+                    f"{old_item.get('selection_method') or 'selected'}"
+                    "+final_semester_swap"
+                )
+                moved_early = dict(displaced)
+                moved_early["selection_method"] = (
+                    f"{displaced.get('selection_method') or 'selected'}"
+                    "+final_semester_swap"
+                )
+                trial[semester][old_index] = moved_early
+                trial[target_semester][target_index] = moved_late
+                checked = verify_curriculum_plan(trial, project_version, db)
+                checked_admission = _audit_final_course_admission(
+                    trial, project_version, db
+                )
+                checked_misplacements = len(
+                    (checked.get("pedagogical_audit") or {}).get(
+                        "semester_misplacements"
+                    ) or []
+                )
+                if (
+                    int(checked.get("hard_violation_count") or 0)
+                    > int(current_check.get("hard_violation_count") or 0)
+                    or len(checked_admission["violations"])
+                    >= current_admission_count
+                    or checked_misplacements > current_misplacements
+                ):
+                    continue
+                normalized = trial
+                relocated = True
+                break
+            if relocated:
+                break
+        if relocated:
+            continue
         selected_ids = {
             int(item["course_id"])
             for items in normalized.values()
@@ -1811,6 +2036,7 @@ def _repair_final_admission_misplacements(
             for item in items if item.get("title")
         }
         old_domain = str(old_item.get("domain") or "").casefold().strip()
+        old_family = domain_family(old_domain)
         alternatives = [
             item for item in candidate_pool
             if item.get("course_id") is not None
@@ -1820,7 +2046,7 @@ def _repair_final_admission_misplacements(
             and int(item.get("credits") or 0) == int(old_item.get("credits") or 0)
             and (
                 not old_domain
-                or old_domain == str(item.get("domain") or "").casefold().strip()
+                or old_family == domain_family(item.get("domain"))
             )
         ]
         alternatives.sort(key=lambda item: (
@@ -1828,10 +2054,6 @@ def _repair_final_admission_misplacements(
             int(item.get("recommended_semester") or 99),
             int(item.get("course_id") or 0),
         ))
-        current_check = verify_curriculum_plan(normalized, project_version, db)
-        current_misplacements = len(
-            (current_check.get("pedagogical_audit") or {}).get("semester_misplacements") or []
-        )
         repaired = False
         for alternative in alternatives:
             course = courses.get(int(alternative["course_id"]))
@@ -3524,6 +3746,73 @@ def build_curriculum_plan(
 
     # Close residual credit/load gaps even when prerequisite verification was
     # already clean. This fixes plans such as 238/240 with a 24-credit semester.
+    residual_gap = target_credits - sum(
+        int(item.get("credits") or 0) for item in selected_courses
+    )
+    if 3 <= residual_gap <= 7:
+        selected_ids = {
+            int(item["course_id"])
+            for item in selected_courses
+            if item.get("course_id") is not None
+        }
+        selected_titles = {
+            _title_key(item.get("title"))
+            for item in selected_courses
+            if item.get("title")
+        }
+        residual_ids = {
+            int(item["course_id"])
+            for item in domain_repair_candidates
+            if item.get("course_id") is not None
+            and int(item.get("credits") or 0) == residual_gap
+            and int(item["course_id"]) not in selected_ids
+            and _title_key(item.get("title")) not in selected_titles
+        }
+        residual_courses = {
+            course.id: course
+            for course in db.query(Course).filter(
+                Course.id.in_(residual_ids or {-1})
+            ).all()
+        }
+        residual_evidence = _credible_professional_lo_by_course(
+            project_version, residual_ids, db
+        )
+        residual_candidates = []
+        for candidate in domain_repair_candidates:
+            course_id = candidate.get("course_id")
+            if course_id is None or int(course_id) not in residual_ids:
+                continue
+            course = residual_courses.get(int(course_id))
+            prerequisites = {
+                int(value) for value in (candidate.get("prerequisites") or [])
+            }
+            if (
+                course is None
+                or int(course_id) not in residual_evidence
+                or not prerequisites.issubset(selected_ids)
+                or not _education_level_course_allowed(
+                    course, constraints.get("education_level")
+                )
+                or _has_foreign_professional_title(course, project_domains)
+                or (
+                    build_is_interdisciplinary
+                    and not _is_it_medicine_support_course(
+                        course, project_domains
+                    )
+                )
+            ):
+                continue
+            residual_candidates.append(candidate)
+        residual_candidates.sort(key=lambda item: (
+            -float(item.get("admission_score") or item.get("score") or 0.0),
+            int(item.get("recommended_semester") or 99),
+            int(item.get("course_id") or 0),
+        ))
+        if residual_candidates:
+            real_fill = dict(residual_candidates[0])
+            real_fill["selection_method"] = "final_real_credit_fill"
+            selected_courses.append(real_fill)
+
     schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
     schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
     provisional = verify_curriculum_plan(schedule, project_version, db)
@@ -3624,6 +3913,10 @@ def build_curriculum_plan(
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )
+    # The inferred graph can make a late source recommendation authoritative
+    # and therefore change the admissible semester window. Build it before
+    # the final admission repair, then rebuild after any bounded swap.
+    prerequisite_graph = _infer_schedule_prerequisites(schedule)
     schedule = _repair_final_admission_misplacements(
         schedule, domain_repair_candidates, project_version, db
     )
@@ -3662,9 +3955,46 @@ def build_curriculum_plan(
     admission_audit = _audit_final_course_admission(schedule, project_version, db)
     if not admission_audit["passed"]:
         examples = admission_audit["violations"][:8]
+        late_schedule = {
+            int(semester): {
+                "credits": sum(
+                    int(item.get("credits") or 0) for item in items
+                ),
+                "items": [
+                    {
+                        "title": item.get("title"),
+                        "credits": int(item.get("credits") or 0),
+                        "minimum": (
+                            _minimum_appropriate_semester(
+                                item,
+                                db.get(Course, int(item["course_id"])),
+                                num_semesters,
+                            )
+                            if item.get("course_id") is not None
+                            and db.get(Course, int(item["course_id"])) is not None
+                            else None
+                        ),
+                        "regulatory": bool(item.get("regulatory_required")),
+                        "competency": bool(item.get("competency_required")),
+                    }
+                    for item in items
+                ],
+            }
+            for semester, items in schedule.items()
+            if int(semester) >= max(1, num_semesters - 2)
+        }
         raise ValueError(
             "Admission filter rejected real courses: "
-            + ", ".join(f"{row.get('title')} [{row.get('reason')}]" for row in examples)
+            + ", ".join(
+                (
+                    f"{row.get('title')} [{row.get('reason')}; "
+                    f"semester={row.get('semester')}; "
+                    f"minimum={row.get('minimum_semester')}; "
+                    f"source={row.get('selection_method')}]"
+                )
+                for row in examples
+            )
+            + f"; late_schedule={late_schedule}"
         )
     verification = verify_curriculum_plan(schedule, project_version, db)
     verification["prerequisite_graph"] = prerequisite_graph
@@ -3772,6 +4102,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
 
     def is_project_domain(course: Course) -> bool:
         if not _education_level_course_allowed(course, constraints.get("education_level")):
+            return False
+        if (
+            professional_scope
+            and _has_foreign_professional_title(course, project_domains)
+        ):
             return False
         if (
             interdisciplinary_professional
@@ -6039,7 +6374,12 @@ def _infer_schedule_prerequisites(schedule: Dict[int, List[Dict]]) -> Dict[str, 
 def calculate_plan_metrics(schedule, selected_courses, project_version, db, verification=None) -> Dict:
     verification = verification or verify_curriculum_plan(schedule, project_version, db)
     international_quality = evaluate_international_quality(schedule, project_version, db, verification)
-    selection_method = "nsga2" if any(item.get("selection_method") == "nsga2" for item in selected_courses) else "deterministic_bridge_heuristic"
+    persisted_items = [
+        item for semester_items in schedule.values() for item in semester_items
+    ]
+    selection_method = "nsga2" if any(
+        item.get("selection_method") == "nsga2" for item in persisted_items
+    ) else "deterministic_bridge_heuristic"
     optimizer = {
         "name": "NSGA-II" if selection_method == "nsga2" else "Deterministic bridge heuristic",
         "selection_method": selection_method,
@@ -6052,7 +6392,7 @@ def calculate_plan_metrics(schedule, selected_courses, project_version, db, veri
             "mutation_probability": settings.NSGA2_MUTATION_PROBABILITY,
             "objectives": ["LO coverage", "redundancy", "domain entropy"],
         })
-    return {"total_credits": verification["total_credits"], "target_credits": verification["target_credits"], "total_courses": len(selected_courses), "num_bridge_modules": sum(1 for c in selected_courses if c.get("bridge_module_id")), "lo_coverage_percentage": round(verification["average_lo_coverage"] * 100, 1), "min_lo_coverage": verification["min_lo_coverage"], "evidence_count": verification["evidence_count"], "redundancy": verification["redundancy"], "prerequisite_violations": len(verification["prerequisite_violations"]), "semester_load_violations": len(verification["semester_load_violations"]), "feasible": verification["feasible"], "optimizer": optimizer, "international_quality": international_quality, "verification": verification}
+    return {"total_credits": verification["total_credits"], "target_credits": verification["target_credits"], "total_courses": len(persisted_items), "num_bridge_modules": sum(1 for item in persisted_items if item.get("bridge_module_id") is not None), "lo_coverage_percentage": round(verification["average_lo_coverage"] * 100, 1), "min_lo_coverage": verification["min_lo_coverage"], "evidence_count": verification["evidence_count"], "redundancy": verification["redundancy"], "prerequisite_violations": len(verification["prerequisite_violations"]), "semester_load_violations": len(verification["semester_load_violations"]), "feasible": verification["feasible"], "optimizer": optimizer, "international_quality": international_quality, "verification": verification}
 
 
 

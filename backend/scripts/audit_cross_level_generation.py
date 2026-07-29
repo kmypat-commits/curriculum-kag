@@ -18,7 +18,10 @@ from app.models.course import Course
 from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchScore
 from app.planner.goso import ensure_goso_learning_outcomes
-from app.planner.scheduler import build_curriculum_plan
+from app.planner.scheduler import (
+    _has_foreign_professional_title,
+    build_curriculum_plan,
+)
 from app.services.epvo_repository import approve_epvo_candidates
 
 
@@ -202,6 +205,25 @@ def main() -> None:
                 and int(item.get("credits") or 0)
                 != int(selected_real_courses[int(item["course_id"])].credits or 5)
             ]
+            project_domains = [
+                str(project.domain1 or ""),
+                str(project.domain2 or ""),
+            ]
+            foreign_professional_titles = [
+                {
+                    "course_id": int(item["course_id"]),
+                    "title": item.get("title"),
+                }
+                for items in schedule.values()
+                for item in items
+                if item.get("course_id") is not None
+                and not item.get("regulatory_required")
+                and int(item["course_id"]) in selected_real_courses
+                and _has_foreign_professional_title(
+                    selected_real_courses[int(item["course_id"])],
+                    project_domains,
+                )
+            ]
             bridge_rows = {
                 bridge.id: bridge
                 for bridge in db.query(BridgeModule).filter(
@@ -265,6 +287,7 @@ def main() -> None:
                 "load_violations": verification.get("semester_load_violations"),
                 "credit_violations": verification.get("credit_violations"),
                 "credit_integrity_violations": credit_integrity_violations,
+                "foreign_professional_titles": foreign_professional_titles,
                 "domain_quota_violations": verification.get("domain_quota_violations"),
                 "quality_violations": verification.get("quality_violations"),
                 "lo_without_real_course": audit.get("lo_without_real_course"),
@@ -335,6 +358,9 @@ def main() -> None:
             variant_summary["credit_integrity_errors"] = len(
                 variants[code]["credit_integrity_violations"]
             )
+            variant_summary["foreign_context_errors"] = len(
+                variants[code]["foreign_professional_titles"]
+            )
             print(
                 f"variant {code}: "
                 + json.dumps(variant_summary, ensure_ascii=False),
@@ -349,6 +375,19 @@ def main() -> None:
             if args.profile != "ict-medicine":
                 return row["bridges"] <= max_allowed_bridges
             details = row.get("bridge_details") or []
+            real_titles = " ".join(
+                str(title or "").casefold()
+                for title in (row.get("real_courses") or [])
+            )
+            has_real_integration = (
+                any(marker in real_titles for marker in (
+                    "искусственн интеллект", "цифров", "данн",
+                    "информационн технолог",
+                ))
+                and any(marker in real_titles for marker in (
+                    "медицин", "здравоохран", "клиническ",
+                ))
+            )
             meaningful = [
                 item for item in details
                 if (
@@ -369,9 +408,15 @@ def main() -> None:
                 )
             ]
             return (
-                1 <= len(details) <= 3
+                len(details) <= 3
                 and len(meaningful) == len(details)
-                and any(str(item.get("code") or "").startswith("CORE_BRIDGE_") for item in meaningful)
+                and (
+                    has_real_integration
+                    or any(
+                        str(item.get("code") or "").startswith("CORE_BRIDGE_")
+                        for item in meaningful
+                    )
+                )
                 and not generic
                 and all(bool(item.get("target_los")) for item in meaningful)
                 and all(2 <= int(item.get("semester") or 0) <= semesters - 1 for item in meaningful)
@@ -394,6 +439,7 @@ def main() -> None:
                 row["credits"] == total_credits
                 and row["hard_violations"] == 0
                 and not row["credit_integrity_violations"]
+                and not row["foreign_professional_titles"]
                 and bridge_contract(row)
                 and int(row["prerequisite_graph"].get("edge_count") or 0) >= min_prerequisite_edges
                 and row["quality_passed"] is True

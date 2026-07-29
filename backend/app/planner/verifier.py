@@ -35,6 +35,7 @@ def _semantic_min_semester(title: str | None, num_semesters: int) -> int:
         "хирург", "surgery", "кардио", "гастро", "онколог", "уролог",
         "невролог", "паразитолог", "психиатр", "офтальм", "реаним",
         "терапи", "педиатр", "акуш", "гинек", "дермат", "клиническ",
+        "диагност", "врачебн",
     )
     research = (
         "методология науч", "scientific methodology", "доказательная медицина",
@@ -62,6 +63,12 @@ def _semantic_max_semester(title: str | None, num_semesters: int) -> int:
             text = repaired
             break
     text = text.casefold().strip()
+    if any(marker in text for marker in (
+        "клиническ", "диагност", "врачебн", "хирург", "терапи",
+        "педиатр", "акуш", "гинек", "онколог", "кардио",
+        "clinical", "diagnostic", "surgery",
+    )):
+        return num_semesters
     if any(marker in text for marker in (
         "информационной безопасности", "кибербезопасности",
         "цифровой криминалистики", "digital forensics", "cybersecurity",

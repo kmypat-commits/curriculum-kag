@@ -9,9 +9,11 @@ from app.planner.scheduler import (
     _foundation_equivalent_title_key,
     _foundation_max_semester,
     _force_bridge_item,
+    _has_foreign_professional_title,
     _infer_schedule_prerequisites,
     _is_it_medicine_support_course,
     _item_minimum_appropriate_semester,
+    _minimum_appropriate_semester,
     _rebalance_semester_load,
     _repair_semester_appropriateness,
     _select_exact_professional_subset,
@@ -21,7 +23,12 @@ from app.planner.scheduler import (
     ensure_credit_bridge_modules,
     schedule_courses,
 )
-from app.planner.verifier import _ict_competency_audit, _semantic_min_semester, verify_curriculum_plan
+from app.planner.verifier import (
+    _ict_competency_audit,
+    _semantic_max_semester,
+    _semantic_min_semester,
+    verify_curriculum_plan,
+)
 from app.services.content_localization import register_course_translations
 
 
@@ -67,6 +74,25 @@ def test_foundation_source_semester_is_advisory_except_for_clinical_depth():
     assert _item_minimum_appropriate_semester(ai, 8) == 1
     assert _item_minimum_appropriate_semester(surgery, 8) >= 5
     assert _foundation_max_semester(surgery["title"], 8) == 8
+    assert _semantic_min_semester("Основы общей врачебной практики", 8) >= 5
+    assert _semantic_max_semester("Основы общей врачебной практики", 8) == 8
+
+
+def test_inferred_prerequisite_can_raise_final_admission_semester():
+    course = SimpleNamespace(
+        title="Искусственный интеллект для информационной безопасности",
+        domain="it",
+        cycle_component="elective",
+        recommended_semester=8,
+    )
+    item = {
+        "title": course.title,
+        "recommended_semester": 8,
+        "prerequisites": [],
+    }
+    assert _minimum_appropriate_semester(item, course, 8) < 7
+    item["prerequisites"] = [42]
+    assert _minimum_appropriate_semester(item, course, 8) == 7
 
 
 def test_it_medicine_rejects_physician_training_without_digital_content():
@@ -96,6 +122,41 @@ def test_it_medicine_rejects_physician_training_without_digital_content():
     assert not _is_it_medicine_support_course(clinical, domains)
     assert _is_it_medicine_support_course(digital, domains)
     assert _is_it_medicine_support_course(compact_context, domains)
+
+
+def test_foreign_professional_context_is_not_hidden_by_ai_or_digital_words():
+    domains = [
+        "информационно-коммуникационные технологии",
+        "здравоохранение",
+    ]
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Искусственный интеллект в маркетинге"),
+        domains,
+    )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Цифровая экономика"),
+        domains,
+    )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Информационные технологии в экономике"),
+        domains,
+    )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Технологии ИИ в управлении предприятием"),
+        domains,
+    )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Эмоциональный интеллект"),
+        domains,
+    )
+    assert not _has_foreign_professional_title(
+        SimpleNamespace(title="Управление IT-проектами"),
+        domains,
+    )
+    assert not _has_foreign_professional_title(
+        SimpleNamespace(title="Базы данных и Business Intelligence"),
+        domains,
+    )
 
 
 def test_load_shift_never_splits_real_epvo_course_credits():
