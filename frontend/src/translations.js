@@ -205,7 +205,20 @@ export const translations = {
         activation_success: 'Дайын: нұсқа таңдалды және жоба белсенді мәртебесіне өтті.',
         verification: 'Жоспарды тексеру', feasible: 'Орындалатын жоспар', yes: 'Иә', no: 'Жоқ', minimum: 'Минимум',
         prerequisite_violations: 'Пререквизит бұзушылықтары', load_violations: 'Жүктеме бұзушылықтары',
-        min_lo_coverage: 'LO ең төмен қамтылуы', evidence_count: 'Дәлелдер саны', redundancy: 'Артықтық', covered: 'Қамтылған', not_covered: 'Қамтылмаған'
+        min_lo_coverage: 'LO ең төмен қамтылуы', evidence_count: 'Дәлелдер саны', redundancy: 'Артықтық', covered: 'Қамтылған', not_covered: 'Қамтылмаған',
+        'Outcome-based curriculum mapping': 'Оқу нәтижелерімен байланыс',
+        'Structured progression and prerequisite integrity': 'Оқыту реттілігі және пререквизиттердің тұтастығы',
+        'Domain relevance control': 'Пәндік салаларға сәйкестік',
+        'Integrated interdisciplinary curriculum': 'Интеграцияланған пәнаралық бағдарлама',
+        'Assessment alignment': 'Бағалау әдістерінің келісімі',
+        'Continuous improvement and expert-in-the-loop learning': 'Сарапшының қатысуымен үздіксіз жетілдіру',
+        'Ensure every programme LO has explicit course or bridge-module evidence.': 'Әрбір ОН-ның пән немесе bridge-модуль арқылы нақты дәлелін қамтамасыз етіңіз.',
+        'Fix prerequisite order, semester load, or total-credit violations.': 'Пререквизиттер ретін, семестрлік жүктемені немесе кредиттер сомасын түзетіңіз.',
+        'Remove unrelated courses or replace them with domain-specific/bridge modules.': 'Сәйкес келмейтін пәндерді алып тастаңыз немесе оларды пәндік/bridge модульдермен ауыстырыңыз.',
+        'Review only the unsupported professional courses; RK mandatory components, practices, and final attestation are not removed in KZ mode.': 'Тек расталмаған бейіндік пәндерді тексеріңіз; ҚР міндетті компоненттері, практикалар және қорытынды аттестация ҚР режимінде жойылмайды.',
+        'Add bridge modules that connect the two programme domains.': 'Бағдарламаның екі саласын байланыстыратын bridge-модульдерді қосыңыз.',
+        'Add assessment methods for courses/modules to support outcome-attainment evidence.': 'Оқу нәтижелеріне қол жеткізуді растайтын бағалау әдістерін қосыңыз.',
+        'Use Promote to Course and regenerate variants to document the learning loop.': 'Тиісті модульдерді растап, жаңа нұсқаларды құрыңыз.'
     },
     en: {
         select_education_area: 'Select education area',
@@ -317,6 +330,19 @@ export const translations = {
         graph_effect: 'Rebuilding the graph updates retrieval but does not rewrite an existing plan.',
         bridge_effect: 'Generating bridge modules creates proposals for weak LOs; they are not courses yet.',
         promote_effect: 'Approval adds a bridge module to the repository and updates the knowledge base.',
-        regenerate_effect: 'Build variants again for a new course to appear in the plan.'
+        regenerate_effect: 'Build variants again for a new course to appear in the plan.',
+        'Outcome-based curriculum mapping': 'Outcome-based curriculum mapping',
+        'Structured progression and prerequisite integrity': 'Structured progression and prerequisite integrity',
+        'Domain relevance control': 'Domain relevance control',
+        'Integrated interdisciplinary curriculum': 'Integrated interdisciplinary curriculum',
+        'Assessment alignment': 'Assessment alignment',
+        'Continuous improvement and expert-in-the-loop learning': 'Continuous improvement and expert-in-the-loop learning',
+        'Ensure every programme LO has explicit course or bridge-module evidence.': 'Ensure every programme LO has explicit course or bridge-module evidence.',
+        'Fix prerequisite order, semester load, or total-credit violations.': 'Fix prerequisite order, semester load, or total-credit violations.',
+        'Remove unrelated courses or replace them with domain-specific/bridge modules.': 'Remove unrelated courses or replace them with domain-specific/bridge modules.',
+        'Review only the unsupported professional courses; RK mandatory components, practices, and final attestation are not removed in KZ mode.': 'Review only the unsupported professional courses; RK mandatory components, practices, and final attestation are not removed in KZ mode.',
+        'Add bridge modules that connect the two programme domains.': 'Add bridge modules that connect the two programme domains.',
+        'Add assessment methods for courses/modules to support outcome-attainment evidence.': 'Add assessment methods for courses/modules to support outcome-attainment evidence.',
+        'Use Promote to Course and regenerate variants to document the learning loop.': 'Use Promote to Course and regenerate variants to document the learning loop.'
     }
 }

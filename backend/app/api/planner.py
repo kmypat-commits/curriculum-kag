@@ -520,23 +520,70 @@ async def get_plan_graph(
             "Закрывает результаты программы и поддерживает последовательность пререквизитов"
             if evidence else "Включена для кредитного баланса и предметной целостности"
         )
+        node["selection_reason_translations"] = (
+            {"ru": node["selection_reason"], "kk": "Бағдарлама нәтижелерін жабады және пререквизиттер реттілігін қолдайды", "en": "Covers programme outcomes and supports prerequisite sequence"}
+            if evidence else {"ru": node["selection_reason"], "kk": "Кредит балансы және пәндік тұтастық үшін қосылды", "en": "Included for credit balance and domain integrity"}
+        )
         top_expert = next((item for item in lo_details if item.get("source") == "epvo_expert"), None)
         domain_key = (node.get("domain") or "").lower().strip()
         quota = next((percent for key, percent in domain_quota.items() if key and (key in domain_key or domain_key in key)), 0)
         epvo_scope = node.get("epvo_scope") or {}
+        semester = node['semester']
+        rec_sem = node.get('recommended_semester')
+        rec_sem_ru = rec_sem or 'не указан'
+        rec_sem_kk = rec_sem or 'көрсетілмеген'
+        rec_sem_en = rec_sem or 'not specified'
+        domain = node.get('domain')
+        domain_ru = domain or 'не указан'
+        domain_kk = domain or 'көрсетілмеген'
+        domain_en = domain or 'not specified'
         node["why_selected"] = {
             "main_reason": node["selection_reason"],
             "role": node.get("curriculum_role") or ("bridge" if node["kind"] == "bridge" else "course"),
-            "semester_reason": f"Размещена в семестре {node['semester']} с учётом пререквизитов, нагрузки и рекомендуемого семестра {node.get('recommended_semester') or 'не указан'}.",
-            "domain_reason": f"Домен: {node.get('domain') or 'не указан'}; минимальная квота области: {quota}%.",
+            "semester_reason": f"Размещена в семестре {semester} с учётом пререквизитов, нагрузки и рекомендуемого семестра {rec_sem_ru}.",
+            "semester_reason_translations": {
+                "ru": f"Размещена в семестре {semester} с учётом пререквизитов, нагрузки и рекомендуемого семестра {rec_sem_ru}.",
+                "kk": f"{semester}-семестрге пререквизиттер, жүктеме және ұсынылатын семестр {rec_sem_kk} ескеріліп орналастырылды.",
+                "en": f"Placed in semester {semester} considering prerequisites, load, and recommended semester {rec_sem_en}.",
+            },
+            "domain_reason": f"Домен: {domain_ru}; минимальная квота области: {quota}%.",
+            "domain_reason_translations": {
+                "ru": f"Домен: {domain_ru}; минимальная квота области: {quota}%.",
+                "kk": f"Домен: {domain_kk}; саланың ең төменгі квотасы: {quota}%.",
+                "en": f"Domain: {domain_en}; minimum domain quota: {quota}%.",
+            },
             "epvo_reason": (
                 f"ЕПВО: группа {epvo_scope.get('matched_group') or '—'}, направление {epvo_scope.get('matched_direction') or '—'}; "
                 f"типовой семестр {epvo_scope.get('typical_semester') or '—'}, источников программ {epvo_scope.get('source_program_count') or 0}."
                 if epvo_scope else "Не является дисциплиной из нормализованного слоя ЕПВО."
             ),
+            "epvo_reason_translations": (
+                {
+                    "ru": f"ЕПВО: группа {epvo_scope.get('matched_group') or '—'}, направление {epvo_scope.get('matched_direction') or '—'}; типовой семестр {epvo_scope.get('typical_semester') or '—'}, источников программ {epvo_scope.get('source_program_count') or 0}.",
+                    "kk": f"ЕПВО: тобы {epvo_scope.get('matched_group') or '—'}, бағыты {epvo_scope.get('matched_direction') or '—'}; үлгілік семестр {epvo_scope.get('typical_semester') or '—'}, бағдарлама көздері {epvo_scope.get('source_program_count') or 0}.",
+                    "en": f"EPVO: group {epvo_scope.get('matched_group') or '—'}, direction {epvo_scope.get('matched_direction') or '—'}; typical semester {epvo_scope.get('typical_semester') or '—'}, source programmes {epvo_scope.get('source_program_count') or 0}.",
+                }
+                if epvo_scope else {
+                    "ru": "Не является дисциплиной из нормализованного слоя ЕПВО.",
+                    "kk": "ЕПВО нормаланған қабатының пәні емес.",
+                    "en": "Not an EPVO normalized-layer course.",
+                }
+            ),
             "expert_reason": (
                 f"Экспертная поддержка ЕПВО для {top_expert.get('lo_code')}: {round((top_expert.get('evidence') or {}).get('epvo_expert_score', 0) * 100)}%."
                 if top_expert else "Экспертная поддержка ЕПВО для текущих LO не найдена."
+            ),
+            "expert_reason_translations": (
+                {
+                    "ru": f"Экспертная поддержка ЕПВО для {top_expert.get('lo_code')}: {round((top_expert.get('evidence') or {}).get('epvo_expert_score', 0) * 100)}%.",
+                    "kk": f"ЕПВО сараптамалық қолдауы {top_expert.get('lo_code')}: {round((top_expert.get('evidence') or {}).get('epvo_expert_score', 0) * 100)}%.",
+                    "en": f"EPVO expert support for {top_expert.get('lo_code')}: {round((top_expert.get('evidence') or {}).get('epvo_expert_score', 0) * 100)}%.",
+                }
+                if top_expert else {
+                    "ru": "Экспертная поддержка ЕПВО для текущих LO не найдена.",
+                    "kk": "Ағымдағы LO үшін ЕПВО сараптамалық қолдауы табылмады.",
+                    "en": "EPVO expert support for current LOs not found.",
+                }
             ),
             "lo_count": len(lo_details),
             "top_lo": lo_details[0] if lo_details else None,
@@ -1355,6 +1402,25 @@ def build_plan(
                 timings=dict(timings),
             )
 
+        rejected_variants = []
+        for variant_name, result in variants.items():
+            verification = result.get("verification") or {}
+            if not verification.get("feasible") or not verification.get("quality_passed"):
+                rejected_variants.append({
+                    "variant": variant_name,
+                    "hard": int(verification.get("hard_violation_count") or 0),
+                    "quality_violations": verification.get("quality_violations") or [],
+                })
+        if rejected_variants:
+            summary = "; ".join(
+                f"{row['variant']}: hard={row['hard']}, quality={len(row['quality_violations'])}"
+                for row in rejected_variants
+            )
+            raise ValueError(
+                "Новые варианты не прошли финальную проверку; старые планы сохранены. "
+                + summary
+            )
+
         stage_started = time.perf_counter()
         _set_build_status(
             project_version_id, stage="saving", progress=92,
@@ -1936,16 +2002,43 @@ async def get_variants(
                             if (row.course_id, row.lo_id) in latest_feedback_by_pair else None
                         ),
                     })
+                sem = item.semester
+                domain_name = course_obj.domain if course_obj else None
+                domain_ru = domain_name or 'не указан'
+                domain_kk = domain_name or 'көрсетілмеген'
+                domain_en = domain_name or 'not specified'
                 why_selected = {
                     "role": role,
                     "max_score": round(max_score, 4),
                     "expert_supported": expert_supported,
                     "top_lo_matches": top_matches,
-                    "semester_reason": f"Семестр {item.semester}: учтены рекомендуемый семестр, пререквизиты и нагрузка.",
-                    "domain_reason": f"Домен дисциплины: {course_obj.domain if course_obj else 'не указан'}.",
+                    "semester_reason": f"Семестр {sem}: учтены рекомендуемый семестр, пререквизиты и нагрузка.",
+                    "semester_reason_translations": {
+                        "ru": f"Семестр {sem}: учтены рекомендуемый семестр, пререквизиты и нагрузка.",
+                        "kk": f"{sem}-семестр: ұсынылатын семестр, пререквизиттер және жүктеме ескерілді.",
+                        "en": f"Semester {sem}: recommended semester, prerequisites, and load considered.",
+                    },
+                    "domain_reason": f"Домен дисциплины: {domain_ru}.",
+                    "domain_reason_translations": {
+                        "ru": f"Домен дисциплины: {domain_ru}.",
+                        "kk": f"Пән домені: {domain_kk}.",
+                        "en": f"Course domain: {domain_en}.",
+                    },
                     "selection_reason": (
                         f"Наиболее сильная связь — {top_matches[0]['lo_code']}: итоговая уверенность {round(top_matches[0]['effective_score'] * 100)}%. Оценки ИИ и ЕПВО относятся к одной паре «дисциплина → результат обучения» и не складываются."
                         if top_matches else "Дисциплина включена для структуры, кредитов или доменной целостности плана."
+                    ),
+                    "selection_reason_translations": (
+                        {
+                            "ru": f"Наиболее сильная связь — {top_matches[0]['lo_code']}: итоговая уверенность {round(top_matches[0]['effective_score'] * 100)}%. Оценки ИИ и ЕПВО относятся к одной паре «дисциплина → результат обучения» и не складываются.",
+                            "kk": f"Ең күшті байланыс — {top_matches[0]['lo_code']}: қорытынды сенімділік {round(top_matches[0]['effective_score'] * 100)}%. ЖИ және ЕПВО бағалары бір «пән → оқу нәтижесі» жұбына жатады және қосылмайды.",
+                            "en": f"Strongest link — {top_matches[0]['lo_code']}: effective confidence {round(top_matches[0]['effective_score'] * 100)}%. AI and EPVO scores refer to the same «course → learning outcome» pair and are not additive.",
+                        }
+                        if top_matches else {
+                            "ru": "Дисциплина включена для структуры, кредитов или доменной целостности плана.",
+                            "kk": "Пән жоспардың құрылымы, кредиттері немесе домендік тұтастығы үшін қосылды.",
+                            "en": "Course included for structure, credits, or domain integrity of the plan.",
+                        }
                     ),
                 }
             elif item.bridge_module_id:
@@ -1959,6 +2052,7 @@ async def get_variants(
                 elif bridge_code.startswith("CORE_BRIDGE_"):
                     bridge_domain_credits[0] += bridge_credits / 2.0
                     bridge_domain_credits[1] += bridge_credits / 2.0
+                bridge_sem = item.semester
                 why_selected = {
                     "role": "bridge",
                     "max_score": 0.75,
@@ -1967,9 +2061,24 @@ async def get_variants(
                         {"lo_code": code, "lo_text": lo_by_code.get(code).lo_text if lo_by_code.get(code) else code, "score": 0.75, "effective_score": 0.75, "ai_score": None, "expert_score": None, "source": "bridge_target"}
                         for code in (bm_obj.target_los or [])[:3]
                     ] if bm_obj else [],
-                    "semester_reason": f"Семестр {item.semester}: bridge-модуль размещён для закрытия междисциплинарного/кредитного пробела.",
+                    "semester_reason": f"Семестр {bridge_sem}: bridge-модуль размещён для закрытия междисциплинарного/кредитного пробела.",
+                    "semester_reason_translations": {
+                        "ru": f"Семестр {bridge_sem}: bridge-модуль размещён для закрытия междисциплинарного/кредитного пробела.",
+                        "kk": f"{bridge_sem}-семестр: bridge-модуль пәнаралық/кредиттік олқылықты жабу үшін орналастырылды.",
+                        "en": f"Semester {bridge_sem}: bridge module placed to close interdisciplinary/credit gap.",
+                    },
                     "domain_reason": "Bridge-модуль относится к междисциплинарной части плана.",
+                    "domain_reason_translations": {
+                        "ru": "Bridge-модуль относится к междисциплинарной части плана.",
+                        "kk": "Bridge-модуль жоспардың пәнаралық бөлігіне жатады.",
+                        "en": "Bridge module belongs to the interdisciplinary part of the plan.",
+                    },
                     "selection_reason": "Bridge-модуль добавлен системой для усиления связей между областями и результатами обучения.",
+                    "selection_reason_translations": {
+                        "ru": "Bridge-модуль добавлен системой для усиления связей между областями и результатами обучения.",
+                        "kk": "Bridge-модуль жүйе тарапынан салалар мен оқу нәтижелері арасындағы байланыстарды күшейту үшін қосылды.",
+                        "en": "Bridge module added by the system to strengthen links between domains and learning outcomes.",
+                    },
                 }
 
             schedule[item.semester].append({
@@ -3050,6 +3159,7 @@ async def course_replacement_preview(
             "scope_score": round(scope_fit, 4),
             "recommended_semester": recommended_semester,
             "selection_reason": "Совпадает по уровню, направлению, кредитам, семестру и профессиональным LO",
+            "selection_reason_translations": {"ru": "Совпадает по уровню, направлению, кредитам, семестру и профессиональным LO", "kk": "Деңгейі, бағыты, кредиттері, семестрі және кәсіби LO сәйкес келеді", "en": "Matches by level, direction, credits, semester, and professional LOs"},
             "rank": round(rank_score, 4),
         })
     ranked.sort(key=lambda row: (row["rank"], row["expert_score"], row["model_score"]), reverse=True)

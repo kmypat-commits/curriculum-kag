@@ -155,3 +155,27 @@ def test_exact_goso_remainder_preserves_both_domain_quotas():
     assert sum(candidates[index]["credits"] for index in selected if domain_index[candidates[index]["course_id"]] == 0) >= 7
     assert sum(candidates[index]["credits"] for index in selected if domain_index[candidates[index]["course_id"]] == 1) >= 7
     assert selected_ids & {5, 6} == {5, 6}
+
+
+def test_exact_goso_remainder_keeps_near_optimal_variants_distinct():
+    candidates = [
+        {"course_id": course_id, "credits": 5}
+        for course_id in range(1, 7)
+    ]
+    evidence = {
+        course_id: (0b1111, 1.0 - course_id * 0.005)
+        for course_id in range(1, 7)
+    }
+    domains = {course_id: course_id % 2 for course_id in range(1, 7)}
+    selected_a = _select_exact_professional_subset(
+        candidates, evidence, 25, domains, (5, 5), "A"
+    )
+    selected_b = _select_exact_professional_subset(
+        candidates, evidence, 25, domains, (5, 5), "B"
+    )
+    selected_c = _select_exact_professional_subset(
+        candidates, evidence, 25, domains, (5, 5), "C"
+    )
+    assert selected_a != selected_b
+    assert selected_a != selected_c
+    assert sum(candidates[index]["credits"] for index in selected_b) == 25

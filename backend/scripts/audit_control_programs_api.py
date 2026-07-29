@@ -69,9 +69,16 @@ def audit_variant(base_url: str, token: str, version_id: int, variant: dict, con
     tolerance = int(constraints.get("credit_tolerance") or 0)
     course_lo_violations = int(verification.get("course_lo_violations") or 0)
     wrong_level = [row for row in suspicious if "wrong_education_level" in (row.get("reasons") or [])]
+    schedule_fingerprint = "|".join(
+        f"{semester}:{unit.get('course_id') or ('bridge:' + title_key(unit.get('title')))}"
+        for semester in sorted(schedule, key=lambda value: int(value))
+        for unit in (schedule.get(semester) or [])
+    )
     checks = {
         "credits_within_tolerance": target <= total <= target + tolerance,
         "no_duplicate_titles": not duplicates,
+        "verifier_feasible": bool(verification.get("feasible")),
+        "quality_gate_passed": bool(verification.get("quality_passed")),
         "no_hard_violations": int(verification.get("hard_violation_count") or 0) == 0,
         "every_course_has_lo": course_lo_violations == 0 and not audit.get("weak_courses") and not audit.get("structural_foundations"),
         "no_wrong_education_level": not wrong_level,
@@ -92,6 +99,7 @@ def audit_variant(base_url: str, token: str, version_id: int, variant: dict, con
         "wrong_level_courses": [{"title": row.get("title"), "semester": row.get("semester")} for row in wrong_level],
         "duplicate_titles": duplicates,
         "lo_summary": sources.get("summary") or {},
+        "schedule_fingerprint": schedule_fingerprint,
         "checks": checks,
         "passed": all(checks.values()),
     }
@@ -111,28 +119,43 @@ def main() -> int:
         version_id = int(project["latest_version"]["id"])
         variants = request_json(f"{args.base_url}/planner/{version_id}/variants", token)
         constraints = project.get("constraints") or {}
+        audited_variants = [audit_variant(args.base_url, token, version_id, row, constraints) for row in variants]
+        variant_codes = sorted(row.get("variant") for row in audited_variants)
+        project_checks = {
+            "has_exactly_abc": variant_codes == ["A", "B", "C"],
+            "exactly_one_active": sum(1 for row in audited_variants if row.get("active")) == 1,
+            "variants_are_distinct": len({row.get("schedule_fingerprint") for row in audited_variants}) == 3,
+        }
         project_result = {
             "project_id": project_id,
             "version_id": version_id,
             "title": project.get("title"),
             "education_level": constraints.get("education_level"),
             "group_codes": [value for value in (constraints.get("group_code"), constraints.get("secondary_group_code")) if value],
-            "variants": [audit_variant(args.base_url, token, version_id, row, constraints) for row in variants],
+            "checks": project_checks,
+            "variants": audited_variants,
         }
-        project_result["passed"] = bool(project_result["variants"]) and all(row["passed"] for row in project_result["variants"])
+        project_result["passed"] = (
+            bool(project_result["variants"])
+            and all(project_checks.values())
+            and all(row["passed"] for row in project_result["variants"])
+        )
         projects.append(project_result)
     level_counts = {}
     for project in projects:
         level = str(project.get("education_level") or "unknown")
         level_counts[level] = level_counts.get(level, 0) + 1
+    missing_control_levels = [
+        level for level in ("bachelor", "master", "doctorate") if not level_counts.get(level)
+    ]
     report = {
         "schema_version": 1,
         "generated_at_epoch": int(time.time()),
         "elapsed_seconds": round(time.perf_counter() - started, 2),
         "project_count": len(projects),
         "education_level_counts": level_counts,
-        "missing_control_levels": [level for level in ("bachelor", "master", "doctorate") if not level_counts.get(level)],
-        "passed": bool(projects) and all(project["passed"] for project in projects),
+        "missing_control_levels": missing_control_levels,
+        "passed": bool(projects) and not missing_control_levels and all(project["passed"] for project in projects),
         "projects": projects,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -144,7 +167,7 @@ def main() -> int:
         "missing_levels": report["missing_control_levels"],
         "output": str(args.output),
     }, ensure_ascii=False))
-    return 0
+    return 0 if report["passed"] else 1
 
 
 if __name__ == "__main__":

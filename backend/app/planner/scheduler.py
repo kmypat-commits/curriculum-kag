@@ -995,11 +995,13 @@ def _repair_semester_appropriateness(
             return 1, num_semesters
         recommended = int(item.get("recommended_semester") or course.recommended_semester or 0)
         semantic_upper = _foundation_max_semester(course.title, num_semesters)
-        if item.get("prerequisites") or recommended >= 4:
+        if item.get("prerequisites"):
             # "Основы" can name a domain foundation built on earlier general
             # prerequisites (for example engineering calculations after
             # mathematics).  In that case the source semester and graph are
-            # stronger evidence than the lexical prefix alone.
+            # stronger evidence than the lexical prefix alone. A late source
+            # recommendation by itself is not enough: EPVO often contains the
+            # same introductory course in different programme semesters.
             semantic_upper = max(semantic_upper, min(num_semesters, recommended + 2))
         recommended_lower = max(1, recommended - 1) if recommended else 1
         # A late semester copied from one source programme must not turn an
@@ -1172,6 +1174,238 @@ def _repair_semester_appropriateness(
         if not rotated:
             break
     return schedule
+
+
+def _repair_final_domain_quotas(
+    schedule: Dict[int, List[Dict]],
+    candidate_pool: List[Dict],
+    project_version: ProjectVersion,
+    db: Session,
+) -> Dict[int, List[Dict]]:
+    """Restore domain quotas after late bridge/LO repairs.
+
+    Earlier selection already has a broad, evidence-filtered candidate pool,
+    but later exact-credit and LO repairs can replace a subject course with a
+    shared bridge. This bounded equal-credit swap accepts a candidate only
+    when the verifier reports a strictly smaller domain deficit and no new
+    non-domain hard violation.
+    """
+    constraints = project_version.project.constraints_json or {}
+    if (
+        str(constraints.get("program_type") or "standard").lower()
+        not in {"interdisciplinary", "joint"}
+    ):
+        return schedule
+    project_domains = [
+        str(project_version.project.domain1 or "").casefold().strip(),
+        str(project_version.project.domain2 or "").casefold().strip(),
+    ]
+
+    def domain_index(item: Dict) -> int | None:
+        item_domain = str(item.get("domain") or "").casefold().strip()
+        for index, domain in enumerate(project_domains):
+            if domain and (domain in item_domain or item_domain in domain):
+                return index
+        return None
+
+    def domain_deficit(verification: Dict) -> float:
+        return sum(
+            max(
+                0.0,
+                float(row.get("required_credits") or 0.0)
+                - float(row.get("tolerance_credits") or 0.0)
+                - float(row.get("actual_credits") or 0.0),
+            )
+            for row in (verification.get("domain_quota_violations") or [])
+        )
+
+    def non_domain_hard_count(verification: Dict) -> int:
+        goso = verification.get("goso_compliance") or {}
+        pedagogical = verification.get("pedagogical_audit") or {}
+        return (
+            len(verification.get("prerequisite_violations") or [])
+            + len(verification.get("semester_load_violations") or [])
+            + len(verification.get("credit_violations") or [])
+            + len(goso.get("violations") or [])
+            + int(verification.get("course_lo_violations") or 0)
+            + len(pedagogical.get("lo_without_real_course") or [])
+            + len(pedagogical.get("weak_courses") or [])
+            + len(pedagogical.get("structural_foundations") or [])
+            + len(pedagogical.get("semester_misplacements") or [])
+        )
+
+    normalized = {
+        semester: [dict(item) for item in items]
+        for semester, items in schedule.items()
+    }
+    candidates = [
+        dict(item) for item in _unique_items_by_title(candidate_pool)
+        if item.get("course_id") is not None and domain_index(item) in (0, 1)
+    ]
+    candidates.sort(
+        key=lambda item: (
+            float(item.get("admission_score") or 0.0),
+            -len(item.get("prerequisites") or []),
+            -int(item.get("recommended_semester") or 99),
+        ),
+        reverse=True,
+    )
+
+    for _ in range(max(8, len(candidates))):
+        current = verify_curriculum_plan(normalized, project_version, db)
+        current_deficit = domain_deficit(current)
+        if current_deficit <= 1e-9:
+            break
+        missing_domains = {
+            int(row.get("domain_index") or 0) - 1
+            for row in (current.get("domain_quota_violations") or [])
+        }
+        selected_ids = {
+            int(item["course_id"])
+            for items in normalized.values()
+            for item in items
+            if item.get("course_id") is not None
+        }
+        selected_titles = {
+            _title_key(item.get("title"))
+            for items in normalized.values()
+            for item in items
+            if item.get("title")
+        }
+        protected_ids = {
+            int(prerequisite_id)
+            for items in normalized.values()
+            for item in items
+            for prerequisite_id in (item.get("prerequisites") or [])
+            if prerequisite_id in selected_ids
+        }
+        improved = False
+        for candidate in candidates:
+            candidate_id = int(candidate["course_id"])
+            candidate_domain = domain_index(candidate)
+            if (
+                candidate_domain not in missing_domains
+                or candidate_id in selected_ids
+                or _title_key(candidate.get("title")) in selected_titles
+            ):
+                continue
+            prerequisites = {
+                int(value) for value in (candidate.get("prerequisites") or [])
+            }
+            if not prerequisites.issubset(selected_ids):
+                continue
+            candidate_credits = int(candidate.get("credits") or 0)
+            replaceable = [
+                (semester, index, item)
+                for semester, items in normalized.items()
+                for index, item in enumerate(items)
+                if not item.get("regulatory_required")
+                and int(item.get("credits") or 0) == candidate_credits
+                and item.get("course_id") not in protected_ids
+                and domain_index(item) != candidate_domain
+                and item.get("course_id") not in prerequisites
+            ]
+            replaceable.sort(
+                key=lambda row: (
+                    0 if row[2].get("bridge_module_id") is not None else 1,
+                    float(row[2].get("admission_score") or 0.0),
+                    -row[0],
+                )
+            )
+            for semester, index, old_item in replaceable:
+                trial = {
+                    value: [dict(item) for item in items]
+                    for value, items in normalized.items()
+                }
+                replacement = dict(candidate)
+                replacement["selection_method"] = "final_domain_quota_repair"
+                trial[semester][index] = replacement
+                trial = _repair_semester_appropriateness(
+                    trial,
+                    int(constraints.get("total_semesters", len(trial)) or len(trial)),
+                    int(constraints.get("max_credits_per_semester", 30) or 30),
+                    db,
+                )
+                checked = verify_curriculum_plan(trial, project_version, db)
+                if (
+                    non_domain_hard_count(checked) <= non_domain_hard_count(current)
+                    and domain_deficit(checked) + 1e-9 < current_deficit
+                ):
+                    normalized = trial
+                    improved = True
+                    break
+            if improved:
+                break
+        if not improved:
+            eligible = [
+                candidate
+                for candidate in candidates
+                if domain_index(candidate) in missing_domains
+                and int(candidate["course_id"]) not in selected_ids
+                and _title_key(candidate.get("title")) not in selected_titles
+                and {
+                    int(value) for value in (candidate.get("prerequisites") or [])
+                }.issubset(selected_ids)
+            ][:40]
+            replaceable = [
+                (semester, index, item)
+                for semester, items in normalized.items()
+                for index, item in enumerate(items)
+                if not item.get("regulatory_required")
+                and item.get("course_id") not in protected_ids
+                and domain_index(item) not in missing_domains
+            ]
+            replacement_groups: Dict[int, List[tuple]] = {}
+            for size in (1, 2):
+                for group in combinations(replaceable, size):
+                    credits = sum(int(row[2].get("credits") or 0) for row in group)
+                    replacement_groups.setdefault(credits, []).append(group)
+            for candidate_group in combinations(eligible, 2):
+                candidate_ids = {int(item["course_id"]) for item in candidate_group}
+                if any(
+                    set(int(value) for value in (item.get("prerequisites") or []))
+                    & candidate_ids
+                    for item in candidate_group
+                ):
+                    continue
+                credits = sum(int(item.get("credits") or 0) for item in candidate_group)
+                groups = replacement_groups.get(credits) or []
+                for replacement_group in groups:
+                    trial = {
+                        value: [dict(item) for item in items]
+                        for value, items in normalized.items()
+                    }
+                    target_semesters = [row[0] for row in replacement_group]
+                    for semester, index, _item in sorted(
+                        replacement_group,
+                        key=lambda row: (row[0], row[1]),
+                        reverse=True,
+                    ):
+                        del trial[semester][index]
+                    for index, candidate in enumerate(candidate_group):
+                        replacement = dict(candidate)
+                        replacement["selection_method"] = "final_domain_quota_group_repair"
+                        target = target_semesters[min(index, len(target_semesters) - 1)]
+                        trial[target].append(replacement)
+                    trial = _repair_semester_appropriateness(
+                        trial,
+                        int(constraints.get("total_semesters", len(trial)) or len(trial)),
+                        int(constraints.get("max_credits_per_semester", 30) or 30),
+                        db,
+                    )
+                    checked = verify_curriculum_plan(trial, project_version, db)
+                    if (
+                        non_domain_hard_count(checked) <= non_domain_hard_count(current)
+                        and domain_deficit(checked) + 1e-9 < current_deficit
+                    ):
+                        normalized = trial
+                        improved = True
+                        break
+                if improved:
+                    break
+        if not improved:
+            break
+    return normalized
 
 
 def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_credits: int, db: Session) -> Dict[int, List[Dict]]:
@@ -1579,12 +1813,34 @@ def _diversify_variant_items(
         .group_by(MatchScore.course_id)
         .all()
     }
+    professional_lo_codes = {
+        int(lo.id): str(lo.lo_code)
+        for lo in project_version.learning_outcomes
+        if not str(lo.lo_code or "").startswith("LO-GOSO-")
+    }
+    admission_by_course: Dict[int, Dict[str, object]] = {}
+    for match in db.query(MatchScore).filter(
+        MatchScore.project_version_id == project_version.id
+    ).all():
+        lo_code = professional_lo_codes.get(int(match.lo_id))
+        if not lo_code:
+            continue
+        expert_score = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+        score = max(float(match.score or 0.0), expert_score)
+        if score < 0.4:
+            continue
+        row = admission_by_course.setdefault(
+            int(match.course_id), {"los": set(), "score": 0.0}
+        )
+        row["los"].add(lo_code)
+        row["score"] = max(float(row["score"]), score)
     alternatives_by_credit: Dict[int, List[Course]] = {}
     for course in db.query(Course).all():
         key = _title_key(course.title)
         if (
             course.id not in selected_ids
             and course.id in match_max_by_course
+            and course.id in admission_by_course
             and key not in selected_titles
             and is_project_domain(course)
             and match_max_by_course.get(course.id, 0.0) >= 0.4
@@ -1633,6 +1889,9 @@ def _diversify_variant_items(
             "prerequisites": [],
             "type": candidate.cycle_component or "mandatory",
             "selection_method": item.get("selection_method") or "diversified_alternative",
+            "admission_reason": "diversified_course_and_lo",
+            "admission_los": sorted(admission_by_course[candidate.id]["los"]),
+            "admission_score": round(float(admission_by_course[candidate.id]["score"]), 4),
         }
         swaps += 1
     return normalized
@@ -2012,10 +2271,105 @@ def _trim_to_target_credits(items: List[Dict], target_credits: int, db: Session)
     return _unique_items_by_title(normalized)
 
 
+def _select_exact_professional_subset(
+    candidates: List[Dict],
+    evidence: Dict[int, tuple[int, float]],
+    capacity: int,
+    domain_index_by_course: Dict[int, int],
+    minimum_domain_credits: tuple[int, int],
+    variant_type: str = "A",
+) -> List[int]:
+    """Return an exact-credit subset that preserves LO and domain constraints.
+
+    Domain credits are capped at their required minima in the state key. This
+    keeps the dynamic programme bounded even for a 240-credit curriculum while
+    still distinguishing every state that can change quota feasibility.
+    """
+    # (credits, LO mask, capped domain-1 credits, capped domain-2 credits)
+    # -> several best (evidence utility, selected candidate indexes) options.
+    # Retaining alternatives is essential: otherwise the exact-credit DP
+    # collapses A/B/C to the same optimum even when near-equivalent curricula
+    # exist. Six options keep the state bounded while preserving alternatives.
+    states: Dict[tuple[int, int, int, int], List[tuple[float, List[int]]]] = {
+        (0, 0, 0, 0): [(0.0, [])]
+    }
+    for index, item in enumerate(candidates):
+        credits = int(item.get("credits") or 0)
+        course_id = int(item.get("course_id") or 0)
+        if credits <= 0 or credits > capacity or course_id <= 0:
+            continue
+        mask, utility = evidence.get(course_id, (0, 0.0))
+        if not mask:
+            continue
+        domain_index = domain_index_by_course.get(course_id)
+        snapshot = [
+            (key, value)
+            for key, options in states.items()
+            for value in options
+        ]
+        for (used, covered, domain1, domain2), (current_utility, indexes) in snapshot:
+            new_used = used + credits
+            if new_used > capacity:
+                continue
+            new_domain1 = domain1
+            new_domain2 = domain2
+            if domain_index == 0:
+                new_domain1 = min(minimum_domain_credits[0], domain1 + credits)
+            elif domain_index == 1:
+                new_domain2 = min(minimum_domain_credits[1], domain2 + credits)
+            key = (new_used, covered | mask, new_domain1, new_domain2)
+            proposal = (current_utility + utility, indexes + [index])
+            options = states.setdefault(key, [])
+            if any(existing_indexes == proposal[1] for _, existing_indexes in options):
+                continue
+            options.append(proposal)
+            options.sort(key=lambda row: row[0], reverse=True)
+            del options[6:]
+
+    exact = [
+        (covered, domain1, domain2, value)
+        for (used, covered, domain1, domain2), values in states.items()
+        if used == capacity
+        for value in values
+    ]
+    if not exact:
+        return []
+    compliant = [
+        row for row in exact
+        if row[1] >= minimum_domain_credits[0]
+        and row[2] >= minimum_domain_credits[1]
+    ]
+    pool = compliant or exact
+    maximum_coverage = max(row[0].bit_count() for row in pool)
+    pool = [row for row in pool if row[0].bit_count() == maximum_coverage]
+    maximum_domain_credits = max(row[1] + row[2] for row in pool)
+    pool = [row for row in pool if row[1] + row[2] == maximum_domain_credits]
+    best = max(pool, key=lambda row: (row[3][0], -len(row[3][1])))
+    best_utility, best_indexes = best[3]
+    utility_floor = best_utility - max(0.15, abs(best_utility) * 0.03)
+    alternatives = [
+        row for row in pool
+        if row[3][1] != best_indexes and row[3][0] >= utility_floor
+    ]
+    if variant_type == "B" and alternatives:
+        return max(alternatives, key=lambda row: (row[3][0], -len(row[3][1])))[3][1]
+    if variant_type == "C" and alternatives:
+        best_set = set(best_indexes)
+        return max(
+            alternatives,
+            key=lambda row: (
+                len(best_set.symmetric_difference(row[3][1])),
+                row[3][0],
+            ),
+        )[3][1]
+    return best_indexes
+
+
 def _fit_real_professional_block_after_goso(
     items: List[Dict],
     project_version: ProjectVersion,
     db: Session,
+    variant_type: str = "A",
 ) -> List[Dict]:
     """Fit the post-GOSO professional remainder with whole real courses.
 
@@ -2061,33 +2415,73 @@ def _fit_real_professional_block_after_goso(
         mask, value = evidence.get(int(match.course_id), (0, 0.0))
         evidence[int(match.course_id)] = (mask | lo_bit[match.lo_id], value + score)
 
-    # (credits, LO mask) -> (evidence utility, selected candidate indexes)
-    states: Dict[tuple[int, int], tuple[float, List[int]]] = {(0, 0): (0.0, [])}
-    for index, item in enumerate(candidates):
-        credits = int(item.get("credits") or 0)
-        if credits <= 0 or credits > capacity:
+    project_domains = [
+        str(project_version.project.domain1 or "").casefold().strip(),
+        str(project_version.project.domain2 or "").casefold().strip(),
+    ]
+    primary_group = str(constraints.get("group_code") or "").strip()
+    secondary_group = str(constraints.get("secondary_group_code") or "").strip()
+    primary_direction = str(constraints.get("direction_code") or "").strip()
+    secondary_direction = str(constraints.get("secondary_direction_code") or "").strip()
+    scope_evidence: Dict[int, List[int]] = {}
+    for row in db.query(EpvoDisciplineNormalized).filter(
+        EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or [-1])
+    ).all():
+        row_groups = set(row.group_codes or [])
+        row_directions = set(row.direction_codes or [])
+        primary_scope = (
+            3 if primary_group and primary_group in row_groups
+            else 2 if primary_direction and primary_direction in row_directions
+            else 0
+        )
+        secondary_scope = (
+            3 if secondary_group and secondary_group in row_groups
+            else 2 if secondary_direction and secondary_direction in row_directions
+            else 0
+        )
+        if row.approved_course_id and (primary_scope or secondary_scope):
+            values = scope_evidence.setdefault(int(row.approved_course_id), [0, 0])
+            values[0] = max(values[0], primary_scope)
+            values[1] = max(values[1], secondary_scope)
+    domain_index_by_course = {
+        course_id: 1 if secondary > primary else 0
+        for course_id, (primary, secondary) in scope_evidence.items()
+    }
+    for item in candidates:
+        course_id = int(item.get("course_id") or 0)
+        if course_id in domain_index_by_course:
             continue
-        mask, utility = evidence.get(int(item["course_id"]), (0, 0.0))
-        if not mask:
-            continue
-        for (used, covered), (current_utility, indexes) in list(states.items())[::-1]:
-            new_used = used + credits
-            if new_used > capacity:
-                continue
-            key = (new_used, covered | mask)
-            proposal = (current_utility + utility, indexes + [index])
-            previous = states.get(key)
-            if previous is None or proposal[0] > previous[0]:
-                states[key] = proposal
+        item_domain = str(item.get("domain") or "").casefold().strip()
+        for domain_index, domain in enumerate(project_domains):
+            if domain and (domain in item_domain or item_domain in domain):
+                domain_index_by_course[course_id] = domain_index
+                break
 
-    exact = [(mask, value) for (used, mask), value in states.items() if used == capacity]
-    if not exact:
-        return items
-    best_mask, (_utility, best_indexes) = max(
-        exact,
-        key=lambda row: (row[0].bit_count(), row[1][0], -len(row[1][1])),
+    interdisciplinary = (
+        str(constraints.get("program_type") or "standard").lower()
+        in {"interdisciplinary", "joint"}
     )
-    if best_mask == 0:
+    tolerance = max(
+        0.0, float(constraints.get("domain_quota_tolerance_credits", 3) or 0)
+    )
+    percentages = (
+        max(0.0, float(constraints.get("min_domain1_percent") or 0)),
+        max(0.0, float(constraints.get("min_domain2_percent") or 0))
+        if interdisciplinary else 0.0,
+    )
+    minimum_domain_credits = tuple(
+        max(0, math.ceil(capacity * percentage / 100.0 - tolerance - 1e-9))
+        for percentage in percentages
+    )
+    best_indexes = _select_exact_professional_subset(
+        candidates,
+        evidence,
+        capacity,
+        domain_index_by_course,
+        minimum_domain_credits,
+        variant_type,
+    )
+    if not best_indexes:
         return items
     selected = [candidates[index] for index in best_indexes]
     for item in selected:
@@ -2116,6 +2510,7 @@ def build_curriculum_plan(
     ]
     selected_courses = _unique_items_by_title(selected_courses)
     selected_courses = _remap_equivalent_prerequisites(selected_courses, db)
+    domain_repair_candidates = [dict(item) for item in selected_courses]
     selected_real_ids = {
         int(item["course_id"]) for item in selected_courses if item.get("course_id") is not None
     }
@@ -2146,7 +2541,7 @@ def build_curriculum_plan(
         selected_courses = _normalize_selected_courses_for_quality(selected_courses, project_version, db, variant_type)
     selected_courses = merge_goso_items(selected_courses, project_version, db)
     selected_courses = _fit_real_professional_block_after_goso(
-        selected_courses, project_version, db
+        selected_courses, project_version, db, variant_type
     )
     confirmed_bridge_ids = {
         int(bridge_id)
@@ -2430,6 +2825,15 @@ def build_curriculum_plan(
     # it can change which semester has room for a foundation course.  Re-run
     # the semantic repair so the persisted plan, not only the provisional
     # schedule, satisfies the same semester bounds as the verifier.
+    schedule = _repair_semester_appropriateness(
+        schedule, num_semesters, nominal_load, db
+    )
+    schedule = _repair_final_domain_quotas(
+        schedule, domain_repair_candidates, project_version, db
+    )
+    # Equal-credit quota swaps preserve load, but a replacement can have a
+    # different semantic study window. Keep the persisted semester ordering
+    # subject to the same final appropriateness rule.
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )

@@ -10,7 +10,7 @@ import hashlib
 import json
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditEvent
@@ -23,7 +23,7 @@ from app.models.epvo import (
 from app.models.project import ProjectVersion
 
 
-EPVO_CACHE_VERSION = "epvo-approval-v1"
+EPVO_CACHE_VERSION = "epvo-approval-v2-scoped"
 SCORING_CACHE_VERSION = "course-lo-scoring-v1"
 EPVO_CACHE_ACTION = "cache_epvo_repository"
 SCORING_CACHE_ACTION = "cache_course_lo_matches"
@@ -56,16 +56,43 @@ def _table_stamp(db: Session, model) -> list[Any]:
     return [model.__tablename__, int(latest_id)]
 
 
+def _approved_scope_stamp(version: ProjectVersion, db: Session) -> list[Any]:
+    """Track approvals relevant to this programme, not every EPVO direction."""
+    pairs = _scope_pairs(version)
+    codes = sorted({
+        code
+        for group, direction in pairs
+        for code in (group, direction)
+        if code
+    })
+    query = db.query(
+        func.count(EpvoDisciplineNormalized.approved_course_id),
+        func.max(EpvoDisciplineNormalized.approved_course_id),
+    ).filter(EpvoDisciplineNormalized.approved_course_id.isnot(None))
+    if codes:
+        conditions = [
+            cast(EpvoDisciplineNormalized.group_codes, String).like(f'%"{code}"%')
+            for code in codes
+        ] + [
+            cast(EpvoDisciplineNormalized.direction_codes, String).like(f'%"{code}"%')
+            for code in codes
+        ]
+        query = query.filter(or_(*conditions))
+    approved = query.one()
+    return [
+        "approved_scope",
+        codes,
+        int(approved[0] or 0),
+        int(approved[1] or 0),
+    ]
+
+
 def epvo_input_signature(version: ProjectVersion, db: Session) -> str:
     constraints = version.project.constraints_json or {}
     keys = (
         "education_level", "program_type", "instruction_language",
         "group_code", "direction_code", "secondary_group_code", "secondary_direction_code",
     )
-    approved = db.query(
-        func.count(EpvoDisciplineNormalized.approved_course_id),
-        func.max(EpvoDisciplineNormalized.approved_course_id),
-    ).one()
     rows = [
         ["cache_version", EPVO_CACHE_VERSION],
         ["constraints", {key: constraints.get(key) for key in keys}],
@@ -75,7 +102,7 @@ def epvo_input_signature(version: ProjectVersion, db: Session) -> str:
         _table_stamp(db, RawEpvoExpertCheck),
         _table_stamp(db, EpvoDisciplineNormalized),
         _table_stamp(db, EpvoDisciplineLoLink),
-        ["approved", int(approved[0] or 0), int(approved[1] or 0)],
+        _approved_scope_stamp(version, db),
     ]
     return _digest(rows)
 

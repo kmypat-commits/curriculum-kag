@@ -328,7 +328,11 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             recommended = int(item.get("recommended_semester") or course.recommended_semester or 0)
             semantic_minimum = _semantic_min_semester(course.title, num_semesters)
             semantic_maximum = _semantic_max_semester(course.title, num_semesters)
-            if item.get("prerequisites") or recommended >= 4:
+            if item.get("prerequisites"):
+                # A real prerequisite chain can justify a later foundation
+                # course. A late semester copied from one EPVO programme
+                # cannot, by itself, turn an introductory course into an
+                # advanced unit; keep this rule aligned with the scheduler.
                 semantic_maximum = max(
                     semantic_maximum,
                     min(num_semesters, recommended + 2 if recommended else num_semesters),
@@ -336,18 +340,23 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             recommended_minimum = max(1, recommended - 1) if recommended else 1
             if recommended_minimum > semantic_maximum:
                 recommended_minimum = 1
+            effective_minimum = max(semantic_minimum, recommended_minimum)
+            # Domain language can contain both a foundation marker and a
+            # genuinely advanced clinical/technical role ("Основы хирургии").
+            # Such signals must produce a valid interval, never min=5/max=3.
+            effective_maximum = max(effective_minimum, semantic_maximum)
             if (
-                semester < max(semantic_minimum, recommended_minimum)
-                or semester > semantic_maximum
+                semester < effective_minimum
+                or semester > effective_maximum
             ):
                 semester_misplacements.append({
                     "course_id": course.id,
                     "title": course.title,
                     "semester": semester,
                     "recommended_semester": recommended,
-                    "semantic_minimum_semester": semantic_minimum,
-                    "semantic_maximum_semester": semantic_maximum,
-                    "reason": "course_too_early" if semester < max(semantic_minimum, recommended_minimum) else "course_too_late",
+                    "semantic_minimum_semester": effective_minimum,
+                    "semantic_maximum_semester": effective_maximum,
+                    "reason": "course_too_early" if semester < effective_minimum else "course_too_late",
                 })
     if lo_without_real_course:
         quality_violations.append({

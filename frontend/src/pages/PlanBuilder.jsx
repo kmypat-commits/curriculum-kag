@@ -74,22 +74,34 @@ export default function PlanBuilder() {
         if (detail && typeof detail === 'object') {
             return detail.message || detail.error || JSON.stringify(detail)
         }
-        return detail || err?.message || localText('РќРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°', 'Р‘РµР»РіС–СЃС–Р· Т›Р°С‚Рµ', 'Unknown error')
+        return detail || err?.message || localText('Неизвестная ошибка', 'Белгісіз қате', 'Unknown error')
     }
 
     const localizeQualityEvidence = (text = '') => {
-        if (language !== 'ru') return text
-        const patterns = [
-            [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РѕР±СѓС‡РµРЅРёСЏ РґРѕСЃС‚РёРіР»Рё РїРѕСЂРѕРіР° РїРѕРєСЂС‹С‚РёСЏ.'],
-            [/^Hard violations: (\d+)\.$/, 'Р–С‘СЃС‚РєРёС… РЅР°СЂСѓС€РµРЅРёР№: $1.'],
-            [/^(\d+)\/(\d+) repository courses match the project domains\.$/, '$1/$2 РґРёСЃС†РёРїР»РёРЅ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‚ РѕР±Р»Р°СЃС‚СЏРј РїСЂРѕРµРєС‚Р°.'],
-            [/^(\d+)\/(\d+) courses are supported by the selected EPVO scope, programme LO evidence, or RK mandatory requirements\.$/, '$1/$2 РґРёСЃС†РёРїР»РёРЅ РїРѕРґС‚РІРµСЂР¶РґРµРЅС‹ РІС‹Р±СЂР°РЅРЅС‹Рј РЅР°РїСЂР°РІР»РµРЅРёРµРј Р•РџР’Рћ, СЃРІСЏР·СЊСЋ СЃ СЂРµР·СѓР»СЊС‚Р°С‚Р°РјРё РѕР±СѓС‡РµРЅРёСЏ РёР»Рё РѕР±СЏР·Р°С‚РµР»СЊРЅС‹РјРё С‚СЂРµР±РѕРІР°РЅРёСЏРјРё Р Рљ.'],
-            [/^Interdisciplinary\/bridge units: (\d+)\.$/, 'РњРµР¶РґРёСЃС†РёРїР»РёРЅР°СЂРЅС‹С…/bridge-РјРѕРґСѓР»РµР№: $1.'],
-            [/^Not applicable: this is a standard single-direction programme\.$/, 'РќРµ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ: СЌС‚Рѕ СЃС‚Р°РЅРґР°СЂС‚РЅР°СЏ РїСЂРѕРіСЂР°РјРјР° РѕРґРЅРѕРіРѕ РЅР°РїСЂР°РІР»РµРЅРёСЏ.'],
-            [/^(\d+)\/(\d+) learning units include assessment methods\.$/, '$1/$2 СѓС‡РµР±РЅС‹С… РµРґРёРЅРёС† СЃРѕРґРµСЂР¶Р°С‚ РјРµС‚РѕРґС‹ РѕС†РµРЅРёРІР°РЅРёСЏ.'],
-            [/^Promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'РџРѕРґС‚РІРµСЂР¶РґРµРЅРёР№ bridge-РјРѕРґСѓР»РµР№: $1; bridge-РјРѕРґСѓР»РµР№ РІ РїР»Р°РЅРµ: $2.'],
-            [/^Expert feedback: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Р­РєСЃРїРµСЂС‚РЅС‹С… РѕС†РµРЅРѕРє: $1; РїРѕРґС‚РІРµСЂР¶РґРµРЅРёР№ bridge-РјРѕРґСѓР»РµР№: $2; bridge-РјРѕРґСѓР»РµР№ РІ РїР»Р°РЅРµ: $3.'],
-        ]
+        if (language === 'en') return text
+        const patterns = language === 'kk'
+            ? [
+                [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 оқу нәтижесі қамту шегіне жетті.'],
+                [/^Hard violations: (\d+)\.$/, 'Қатаң бұзушылықтар: $1.'],
+                [/^(\d+)\/(\d+) repository courses match the project domains\.$/, '$1/$2 пән репозиторийі жоба бағыттарына сәйкес келеді.'],
+                [/^(\d+)\/(\d+) courses are supported by the selected EPVO scope, programme LO evidence, or RK mandatory requirements\.$/, '$1/$2 пән ЕПВО бағытымен, ОН байланысымен немесе ҚР міндетті талаптарымен расталды.'],
+                [/^Interdisciplinary\/bridge units: (\d+)\.$/, 'Пәнаралық/bridge модульдер: $1.'],
+                [/^Not applicable: this is a standard single-direction programme\.$/, 'Қолданылмайды: бұл стандартты бір бағытты бағдарлама.'],
+                [/^(\d+)\/(\d+) learning units include assessment methods\.$/, '$1/$2 оқу бірлігі бағалау әдістерін қамтиды.'],
+                [/^Promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Жаңартылған bridge оқиғалары: $1; жоспардағы bridge модульдер: $2.'],
+                [/^Expert feedback: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Сарапшылық кері байланыс: $1; жаңартылған bridge оқиғалары: $2; жоспардағы bridge модульдер: $3.'],
+            ]
+            : [
+                [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 результатов обучения достигли порога покрытия.'],
+                [/^Hard violations: (\d+)\.$/, 'Жёстких нарушений: $1.'],
+                [/^(\d+)\/(\d+) repository courses match the project domains\.$/, '$1/$2 дисциплин соответствуют областям проекта.'],
+                [/^(\d+)\/(\d+) courses are supported by the selected EPVO scope, programme LO evidence, or RK mandatory requirements\.$/, '$1/$2 дисциплин подтверждены выбранным направлением ЕПВО, связью с результатами обучения или обязательными требованиями РК.'],
+                [/^Interdisciplinary\/bridge units: (\d+)\.$/, 'Междисциплинарных/bridge-модулей: $1.'],
+                [/^Not applicable: this is a standard single-direction programme\.$/, 'Не применяется: это стандартная программа одного направления.'],
+                [/^(\d+)\/(\d+) learning units include assessment methods\.$/, '$1/$2 учебных единиц содержат методы оценивания.'],
+                [/^Promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Подтверждений bridge-модулей: $1; bridge-модулей в плане: $2.'],
+                [/^Expert feedback: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Экспертных оценок: $1; подтверждений bridge-модулей: $2; bridge-модулей в плане: $3.'],
+            ]
         return patterns.reduce((value, [pattern, replacement]) => pattern.test(value) ? value.replace(pattern, replacement) : value, text)
     }
 
@@ -103,50 +115,50 @@ export default function PlanBuilder() {
 
     const componentLabel = (value = '') => {
         const normalized = String(value).trim().toLowerCase()
-        if (['elective', 'elective component', 'РєРѕРјРїРѕРЅРµРЅС‚ РїРѕ РІС‹Р±РѕСЂСѓ'].includes(normalized)) return t('elective')
-        if (['university', 'university component', 'РІСѓР·РѕРІСЃРєРёР№ РєРѕРјРїРѕРЅРµРЅС‚'].includes(normalized)) return t('university')
+        if (['elective', 'elective component', 'компонент по выбору'].includes(normalized)) return t('elective')
+        if (['university', 'university component', 'вузовский компонент'].includes(normalized)) return t('university')
         return t('mandatory')
     }
 
     const buildStageLabel = (stage = 'idle') => {
         const dictionary = {
             ru: {
-                idle: 'РћР¶РёРґР°РЅРёРµ',
-                matching: 'РЎРѕРїРѕСЃС‚Р°РІР»СЏРµРј СЂРµР·СѓР»СЊС‚Р°С‚С‹ РѕР±СѓС‡РµРЅРёСЏ СЃ РґРёСЃС†РёРїР»РёРЅР°РјРё',
-                epvo_repository: 'РџРѕРґС‚СЏРіРёРІР°РµРј РґРёСЃС†РёРїР»РёРЅС‹ Р•РџР’Рћ РїРѕ РІС‹Р±СЂР°РЅРЅС‹Рј РЅР°РїСЂР°РІР»РµРЅРёСЏРј',
-                scoring: 'РћС†РµРЅРёРІР°РµРј СЃРІСЏР·Рё РґРёСЃС†РёРїР»РёРЅР°вЂ“СЂРµР·СѓР»СЊС‚Р°С‚ РѕР±СѓС‡РµРЅРёСЏ',
-                variants: 'Р“РѕС‚РѕРІРёРј РІР°СЂРёР°РЅС‚С‹ A/B/C',
-                variant_A_start: 'РЎС‚СЂРѕРёРј РІР°СЂРёР°РЅС‚ A',
-                variant_A: 'РџСЂРѕРІРµСЂСЏРµРј РІР°СЂРёР°РЅС‚ A',
-                variant_B_start: 'РЎС‚СЂРѕРёРј РІР°СЂРёР°РЅС‚ B',
-                variant_B: 'РџСЂРѕРІРµСЂСЏРµРј РІР°СЂРёР°РЅС‚ B',
-                variant_C_start: 'РЎС‚СЂРѕРёРј РІР°СЂРёР°РЅС‚ C',
-                variant_C: 'РџСЂРѕРІРµСЂСЏРµРј РІР°СЂРёР°РЅС‚ C',
-                saving: 'РЎРѕС…СЂР°РЅСЏРµРј РЅРѕРІС‹Рµ РїР»Р°РЅС‹ Р±РµР· РїРѕСЂС‡Рё СЃС‚Р°СЂРѕРіРѕ Р°РєС‚РёРІРЅРѕРіРѕ',
-                complete: 'Р“РѕС‚РѕРІРѕ',
-                failed: 'РћС€РёР±РєР°',
+                idle: 'Ожидание',
+                matching: 'Сопоставляем результаты обучения с дисциплинами',
+                epvo_repository: 'Подтягиваем дисциплины ЕПВО по выбранным направлениям',
+                scoring: 'Оцениваем связи дисциплина–результат обучения',
+                variants: 'Готовим варианты A/B/C',
+                variant_A_start: 'Строим вариант A',
+                variant_A: 'Проверяем вариант A',
+                variant_B_start: 'Строим вариант B',
+                variant_B: 'Проверяем вариант B',
+                variant_C_start: 'Строим вариант C',
+                variant_C: 'Проверяем вариант C',
+                saving: 'Сохраняем новые планы без порчи старого активного',
+                complete: 'Готово',
+                failed: 'Ошибка',
             },
             kk: {
-                idle: 'РљТЇС‚Сѓ',
-                matching: 'РћТ›Сѓ РЅУ™С‚РёР¶РµР»РµСЂС–РЅ РїУ™РЅРґРµСЂРјРµРЅ СЃУ™Р№РєРµСЃС‚РµРЅРґС–СЂСѓ',
-                epvo_repository: 'РўР°ТЈРґР°Р»Т“Р°РЅ Р±Р°Т“С‹С‚С‚Р°СЂ Р±РѕР№С‹РЅС€Р° Р•РџР’Рћ РїУ™РЅРґРµСЂС–РЅ Т›РѕСЃСѓ',
-                scoring: 'РџУ™РЅвЂ“РѕТ›Сѓ РЅУ™С‚РёР¶РµСЃС– Р±Р°Р№Р»Р°РЅС‹СЃС‚Р°СЂС‹РЅ Р±Р°Т“Р°Р»Р°Сѓ',
-                variants: 'A/B/C РЅТ±СЃТ›Р°Р»Р°СЂС‹РЅ РґР°Р№С‹РЅРґР°Сѓ',
-                variant_A_start: 'A РЅТ±СЃТ›Р°СЃС‹РЅ Т›Т±СЂСѓ',
-                variant_A: 'A РЅТ±СЃТ›Р°СЃС‹РЅ С‚РµРєСЃРµСЂСѓ',
-                variant_B_start: 'B РЅТ±СЃТ›Р°СЃС‹РЅ Т›Т±СЂСѓ',
-                variant_B: 'B РЅТ±СЃТ›Р°СЃС‹РЅ С‚РµРєСЃРµСЂСѓ',
-                variant_C_start: 'C РЅТ±СЃТ›Р°СЃС‹РЅ Т›Т±СЂСѓ',
-                variant_C: 'C РЅТ±СЃТ›Р°СЃС‹РЅ С‚РµРєСЃРµСЂСѓ',
-                saving: 'Р•СЃРєС– Р±РµР»СЃРµРЅРґС– Р¶РѕСЃРїР°СЂРґС‹ Р±Т±Р·Р±Р°Р№ Р¶Р°ТЈР° Р¶РѕСЃРїР°СЂР»Р°СЂРґС‹ СЃР°Т›С‚Р°Сѓ',
-                complete: 'Р”Р°Р№С‹РЅ',
-                failed: 'ТљР°С‚Рµ',
+                idle: 'Күту',
+                matching: 'Оқу нәтижелерін пәндермен сәйкестендіру',
+                epvo_repository: 'Таңдалған бағыттар бойынша ЕПВО пәндерін қосу',
+                scoring: 'Пән–оқу нәтижесі байланыстарын бағалау',
+                variants: 'A/B/C нұсқаларын дайындау',
+                variant_A_start: 'A нұсқасын құру',
+                variant_A: 'A нұсқасын тексеру',
+                variant_B_start: 'B нұсқасын құру',
+                variant_B: 'B нұсқасын тексеру',
+                variant_C_start: 'C нұсқасын құру',
+                variant_C: 'C нұсқасын тексеру',
+                saving: 'Ескі белсенді жоспарды бұзбай жаңа жоспарларды сақтау',
+                complete: 'Дайын',
+                failed: 'Қате',
             },
             en: {
                 idle: 'Waiting',
                 matching: 'Matching learning outcomes with courses',
                 epvo_repository: 'Adding EPVO courses for selected fields',
-                scoring: 'Scoring courseвЂ“learning outcome links',
+                scoring: 'Scoring course–learning outcome links',
                 variants: 'Preparing A/B/C variants',
                 variant_A_start: 'Building variant A',
                 variant_A: 'Checking variant A',
@@ -165,13 +177,13 @@ export default function PlanBuilder() {
 
     const buildStageDetail = () => {
         if (buildStatus.stage === 'scoring' && buildStatus.lo_total) {
-            const linkWord = language === 'kk' ? 'Р±Р°Р№Р»Р°РЅС‹СЃ' : language === 'en' ? 'links' : 'СЃРІСЏР·РµР№'
-            return `LO ${buildStatus.lo_index}/${buildStatus.lo_total}${buildStatus.lo_code ? ` вЂ” ${buildStatus.lo_code}` : ''}${buildStatus.matches ? `, ${linkWord}: ${buildStatus.matches}` : ''}`
+            const linkWord = language === 'kk' ? 'байланыс' : language === 'en' ? 'links' : 'связей'
+            return `LO ${buildStatus.lo_index}/${buildStatus.lo_total}${buildStatus.lo_code ? ` — ${buildStatus.lo_code}` : ''}${buildStatus.matches ? `, ${linkWord}: ${buildStatus.matches}` : ''}`
         }
         if (buildStatus.stage?.startsWith?.('variant_')) {
-            if (language === 'kk') return 'РџУ™РЅРґРµСЂ С‚Р°ТЈРґР°Р»С‹Рї, РєСЂРµРґРёС‚С‚РµСЂ, РїСЂРµСЂРµРєРІРёР·РёС‚С‚РµСЂ Р¶У™РЅРµ РґРѕРјРµРЅ С€РµРєС‚РµСѓР»РµСЂС– С‚РµРєСЃРµСЂС–Р»С–Рї Р¶Р°С‚С‹СЂ.'
+            if (language === 'kk') return 'Пәндер таңдалып, кредиттер, пререквизиттер және домен шектеулері тексеріліп жатыр.'
             if (language === 'en') return 'Selecting courses and checking credits, prerequisites, and domain constraints.'
-            return 'РРґС‘С‚ РїРѕРґР±РѕСЂ РґРёСЃС†РёРїР»РёРЅ, РїСЂРѕРІРµСЂРєР° РєСЂРµРґРёС‚РѕРІ, РїСЂРµСЂРµРєРІРёР·РёС‚РѕРІ Рё РґРѕРјРµРЅРЅС‹С… РѕРіСЂР°РЅРёС‡РµРЅРёР№.'
+            return 'Идёт подбор дисциплин, проверка кредитов, пререквизитов и доменных ограничений.'
         }
         return null
     }
@@ -181,22 +193,22 @@ export default function PlanBuilder() {
         if (!total) return null
         const minutes = Math.floor(total / 60)
         const seconds = total % 60
-        const value = minutes ? `${minutes} ${language === 'en' ? 'min' : 'РјРёРЅ'} ${seconds} ${language === 'en' ? 'sec' : 'СЃРµРє'}` : `${seconds} ${language === 'en' ? 'sec' : 'СЃРµРє'}`
-        if (language === 'kk') return `УЁС‚РєРµРЅ СѓР°Т›С‹С‚: ${value}`
+        const value = minutes ? `${minutes} ${language === 'en' ? 'min' : 'мин'} ${seconds} ${language === 'en' ? 'sec' : 'сек'}` : `${seconds} ${language === 'en' ? 'sec' : 'сек'}`
+        if (language === 'kk') return `Өткен уақыт: ${value}`
         if (language === 'en') return `Elapsed: ${value}`
-        return `РџСЂРѕС€Р»Рѕ: ${value}`
+        return `Прошло: ${value}`
     }
 
     const buildAlreadyRunningText = () => {
-        if (language === 'kk') return 'ТљТ±СЂСѓ РїСЂРѕС†РµСЃС– Р¶ТЇСЂС–Рї Р¶Р°С‚С‹СЂ. РђТ“С‹РјРґР°Т“С‹ РїСЂРѕС†РµСЃСЃ Р°СЏТ›С‚Р°Р»Т“Р°РЅС‹РЅ РєТЇС‚С–ТЈС–Р·.'
+        if (language === 'kk') return 'Құру процесі жүріп жатыр. Ағымдағы процесс аяқталғанын күтіңіз.'
         if (language === 'en') return 'Plan generation is already running. Please wait for the current process to finish.'
-        return 'РџРѕСЃС‚СЂРѕРµРЅРёРµ СѓР¶Рµ РёРґС‘С‚. Р”РѕР¶РґРёС‚РµСЃСЊ Р·Р°РІРµСЂС€РµРЅРёСЏ С‚РµРєСѓС‰РµРіРѕ РїСЂРѕС†РµСЃСЃР°.'
+        return 'Построение уже идёт. Дождитесь завершения текущего процесса.'
     }
 
     const buildLongRunningHint = () => {
-        if (language === 'kk') return 'Р•РџР’Рћ Р±Р°Р·Р°СЃС‹ ТЇР»РєРµРЅ Р±РѕР»СЃР°, Р±Т±Р» РєРµР·РµТЈ Р±С–СЂРЅРµС€Рµ РјРёРЅСѓС‚Т›Р° СЃРѕР·С‹Р»СѓС‹ РјТЇРјРєС–РЅ. Р•СЃРєС– Р±РµР»СЃРµРЅРґС– Р¶РѕСЃРїР°СЂ Р±Р°СЂР»С‹Т› РЅТ±СЃТ›Р°Р»Р°СЂ СЃУ™С‚С‚С– Т›Т±СЂС‹Р»Т“Р°РЅС€Р° СЃР°Т›С‚Р°Р»Р°РґС‹.'
+        if (language === 'kk') return 'ЕПВО базасы үлкен болса, бұл кезең бірнеше минутқа созылуы мүмкін. Ескі белсенді жоспар барлық нұсқалар сәтті құрылғанша сақталады.'
         if (language === 'en') return 'If the EPVO catalogue is large, this step may take several minutes. The old active plan is kept until all variants are built successfully.'
-        return 'Р•СЃР»Рё Р±Р°Р·Р° Р•РџР’Рћ Р±РѕР»СЊС€Р°СЏ, СЌС‚Р°Рї РјРѕР¶РµС‚ РёРґС‚Рё РЅРµСЃРєРѕР»СЊРєРѕ РјРёРЅСѓС‚. РЎС‚Р°СЂС‹Р№ Р°РєС‚РёРІРЅС‹Р№ РїР»Р°РЅ СЃРѕС…СЂР°РЅСЏРµС‚СЃСЏ РґРѕ СѓСЃРїРµС€РЅРѕРіРѕ РїРѕСЃС‚СЂРѕРµРЅРёСЏ РІСЃРµС… РІР°СЂРёР°РЅС‚РѕРІ.'
+        return 'Если база ЕПВО большая, этап может идти несколько минут. Старый активный план сохраняется до успешного построения всех вариантов.'
     }
 
     const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
@@ -359,8 +371,8 @@ export default function PlanBuilder() {
                 setBuildStatus({ state: 'complete', stage: 'complete', progress: 100 })
                 const protectedCount = applyResponse.data?.protected_regulatory_courses || 0
                 const message = protectedCount
-                    ? `${t('quality_improvements_applied')} ${protectedCount} Р“РћРЎРћ-РєРѕРјРїРѕРЅРµРЅС‚РѕРІ Р·Р°С‰РёС‰РµРЅС‹; РїРµСЂРµСЃР±РѕСЂРєР° РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ.`
-                    : `${t('quality_improvements_applied')} РџРµСЂРµСЃР±РѕСЂРєР° РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ.`
+                    ? `${t('quality_improvements_applied')} ${protectedCount} ГОСО-компонентов защищены; пересборка не требуется.`
+                    : `${t('quality_improvements_applied')} Пересборка не требуется.`
                 setQualityNotice({ type: 'success', text: message })
                 return
             }
@@ -411,14 +423,14 @@ export default function PlanBuilder() {
             setBuildNotice({
                 type: 'success',
                 text: localText(
-                    `РЎРІСЏР·Рё РґРёСЃС†РёРїР»РёРЅР°вЂ“LO РїРµСЂРµСЃС‡РёС‚Р°РЅС‹: ${response.data?.total_matches || 0}. РўРµРїРµСЂСЊ РјРѕР¶РЅРѕ РїРµСЂРµСЃС‚СЂРѕРёС‚СЊ РІР°СЂРёР°РЅС‚С‹.`,
-                    `РџУ™РЅвЂ“LO Р±Р°Р№Р»Р°РЅС‹СЃС‚Р°СЂС‹ Т›Р°Р№С‚Р° РµСЃРµРїС‚РµР»РґС–: ${response.data?.total_matches || 0}. Р•РЅРґС– РЅТ±СЃТ›Р°Р»Р°СЂРґС‹ Т›Р°Р№С‚Р° Т›Т±СЂСѓТ“Р° Р±РѕР»Р°РґС‹.`,
-                    `CourseвЂ“LO links recomputed: ${response.data?.total_matches || 0}. You can now rebuild variants.`,
+                    `Связи дисциплина–LO пересчитаны: ${response.data?.total_matches || 0}. Теперь можно перестроить варианты.`,
+                    `Пән–LO байланыстары қайта есептелді: ${response.data?.total_matches || 0}. Енді нұсқаларды қайта құруға болады.`,
+                    `Course–LO links recomputed: ${response.data?.total_matches || 0}. You can now rebuild variants.`,
                 )
             })
         } catch (err) {
             setBuildStatus({ state: 'failed', stage: 'failed', progress: 0, error: errorMessage(err) })
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµСЃС‡РёС‚Р°С‚СЊ СЃРІСЏР·Рё', 'Р‘Р°Р№Р»Р°РЅС‹СЃС‚Р°СЂРґС‹ Т›Р°Р№С‚Р° РµСЃРµРїС‚РµСѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not recompute links') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось пересчитать связи', 'Байланыстарды қайта есептеу мүмкін болмады', 'Could not recompute links') + ': ' + (errorMessage(err)) })
         } finally {
             setRecomputingMatches(false)
             window.setTimeout(() => setBuildProgress(0), 600)
@@ -433,7 +445,7 @@ export default function PlanBuilder() {
             const response = await axios.get(`/api/planner/${versionId}/bridge-replacement-preview`, { params: { variant: activeVariant } })
             setBridgePreview(response.data)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ preview Р·Р°РјРµРЅС‹ bridge', 'Bridge Р°СѓС‹СЃС‚С‹СЂСѓ preview Р°Р»Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not load bridge replacement preview') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось получить preview замены bridge', 'Bridge ауыстыру preview алу мүмкін болмады', 'Could not load bridge replacement preview') + ': ' + (errorMessage(err)) })
         } finally {
             setLoadingBridgePreview(false)
         }
@@ -449,7 +461,7 @@ export default function PlanBuilder() {
                 bridge_item_id: bridgeItemId,
                 course_id: courseId,
             })
-            setBuildNotice({ type: 'success', text: response.data?.message || localText('Р”РёСЃС†РёРїР»РёРЅР° РґРѕР±Р°РІР»РµРЅР° РІ РїР»Р°РЅ.', 'РџУ™РЅ Р¶РѕСЃРїР°СЂТ“Р° Т›РѕСЃС‹Р»РґС‹.', 'Course added to the plan.') })
+            setBuildNotice({ type: 'success', text: response.data?.message || localText('Дисциплина добавлена в план.', 'Пән жоспарға қосылды.', 'Course added to the plan.') })
             setBridgePreview(current => current ? {
                 ...current,
                 suggestions: (current.suggestions || []).filter(row => row.bridge_item_id !== bridgeItemId),
@@ -462,7 +474,7 @@ export default function PlanBuilder() {
             setRequiresRegeneration(Boolean(response.data?.requires_regeneration))
             await fetchVariants(versionId)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РјРµРЅРёС‚СЊ bridge-РјРѕРґСѓР»СЊ', 'Bridge-РјРѕРґСѓР»СЊРґС– Р°СѓС‹СЃС‚С‹СЂСѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not replace bridge module') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось заменить bridge-модуль', 'Bridge-модульді ауыстыру мүмкін болмады', 'Could not replace bridge module') + ': ' + (errorMessage(err)) })
         } finally {
             setReplacingBridge(null)
         }
@@ -490,7 +502,7 @@ export default function PlanBuilder() {
             setSelectedBridgeReplacements({})
             await fetchVariants(versionId)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РјР°СЃСЃРѕРІРѕ Р·Р°РјРµРЅРёС‚СЊ bridge-РјРѕРґСѓР»Рё', 'Bridge-РјРѕРґСѓР»СЊРґРµСЂРґС– Р¶Р°РїРїР°Р№ Р°СѓС‹СЃС‚С‹СЂСѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not replace bridge modules') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось массово заменить bridge-модули', 'Bridge-модульдерді жаппай ауыстыру мүмкін болмады', 'Could not replace bridge modules') + ': ' + (errorMessage(err)) })
         } finally {
             setReplacingAllBridges(false)
         }
@@ -506,8 +518,8 @@ export default function PlanBuilder() {
         setBuildNotice({
             type: Object.keys(selected).length ? 'success' : 'info',
             text: Object.keys(selected).length
-                ? localText(`Р’С‹Р±СЂР°РЅРѕ СЃСЂРµРґРЅРёС… Р·Р°РјРµРЅ: ${Object.keys(selected).length}. РџСЂРѕРІРµСЂСЊС‚Рµ СЃРїРёСЃРѕРє Рё РЅР°Р¶РјРёС‚Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ.`, `РћСЂС‚Р°С€Р° Р°СѓС‹СЃС‚С‹СЂСѓР»Р°СЂ С‚Р°ТЈРґР°Р»РґС‹: ${Object.keys(selected).length}. РўС–Р·С–РјРґС– С‚РµРєСЃРµСЂС–Рї, СЂР°СЃС‚Р°ТЈС‹Р·.`, `Selected medium replacements: ${Object.keys(selected).length}. Review and confirm.`)
-                : localText('РЎСЂРµРґРЅРёС… Р·Р°РјРµРЅ РїРѕРєР° РЅРµС‚.', 'РћСЂС‚Р°С€Р° Р°СѓС‹СЃС‚С‹СЂСѓР»Р°СЂ Р¶РѕТ›.', 'No medium replacements available.'),
+                ? localText(`Выбрано средних замен: ${Object.keys(selected).length}. Проверьте список и нажмите подтверждение.`, `Орташа ауыстырулар таңдалды: ${Object.keys(selected).length}. Тізімді тексеріп, растаңыз.`, `Selected medium replacements: ${Object.keys(selected).length}. Review and confirm.`)
+                : localText('Средних замен пока нет.', 'Орташа ауыстырулар жоқ.', 'No medium replacements available.'),
         })
     }
 
@@ -519,7 +531,7 @@ export default function PlanBuilder() {
             const response = await axios.get(`/api/planner/${versionId}/bridge-ai-candidates`, { params: { bridge_item_id: bridgeItemId } })
             setAiBridgeCandidates(current => ({ ...current, [bridgeItemId]: response.data }))
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРѕР±СЂР°С‚СЊ РґРёСЃС†РёРїР»РёРЅС‹ С‡РµСЂРµР· РР', 'Р–Р Р°СЂТ›С‹Р»С‹ РїУ™РЅРґРµСЂРґС– С‚Р°ТЈРґР°Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not generate AI course candidates') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось подобрать дисциплины через ИИ', 'ЖИ арқылы пәндерді таңдау мүмкін болмады', 'Could not generate AI course candidates') + ': ' + (errorMessage(err)) })
         } finally {
             setLoadingAiBridge(null)
         }
@@ -545,7 +557,7 @@ export default function PlanBuilder() {
             })
             await fetchVariants(versionId)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґС‚РІРµСЂРґРёС‚СЊ РґРёСЃС†РёРїР»РёРЅСѓ', 'РџУ™РЅРґС– СЂР°СЃС‚Р°Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not confirm the course') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось подтвердить дисциплину', 'Пәнді растау мүмкін болмады', 'Could not confirm the course') + ': ' + (errorMessage(err)) })
         } finally {
             setConfirmingAiBridge(null)
         }
@@ -565,7 +577,7 @@ export default function PlanBuilder() {
             setBuildNotice({ type: 'success', text: response.data?.message || title })
         } catch (err) {
             setExcludedCourses(current => ({ ...current, [courseId]: !excluded }))
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ РёСЃРєР»СЋС‡РµРЅРёРµ РґРёСЃС†РёРїР»РёРЅС‹', 'РџУ™РЅРґС– Р°Р»С‹Рї С‚Р°СЃС‚Р°Сѓ Р±РµР»РіС–СЃС–РЅ У©Р·РіРµСЂС‚Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not update course exclusion') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось изменить исключение дисциплины', 'Пәнді алып тастау белгісін өзгерту мүмкін болмады', 'Could not update course exclusion') + ': ' + (errorMessage(err)) })
         }
     }
 
@@ -578,10 +590,10 @@ export default function PlanBuilder() {
                 reason: 'expert_confirmed_in_planner',
             })
             setExcludedCourses(current => ({ ...current, [courseId]: false }))
-            setBuildNotice({ type: 'success', text: response.data?.message || `${title}: РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ СЌРєСЃРїРµСЂС‚РѕРј` })
+            setBuildNotice({ type: 'success', text: response.data?.message || `${title}: подтверждено экспертом` })
             await fetchVariants(versionId)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґС‚РІРµСЂРґРёС‚СЊ РґРёСЃС†РёРїР»РёРЅСѓ', 'РџУ™РЅРґС– СЂР°СЃС‚Р°Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not confirm the course') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось подтвердить дисциплину', 'Пәнді растау мүмкін болмады', 'Could not confirm the course') + ': ' + (errorMessage(err)) })
         }
     }
 
@@ -595,7 +607,7 @@ export default function PlanBuilder() {
             })
             setCourseReplacementPreviews(current => ({ ...current, [courseId]: response.data }))
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРѕР±СЂР°С‚СЊ Р·Р°РјРµРЅС‹', 'РђСѓС‹СЃС‚С‹СЂСѓР»Р°СЂРґС‹ С‚Р°ТЈРґР°Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not find replacements') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось подобрать замены', 'Ауыстыруларды таңдау мүмкін болмады', 'Could not find replacements') + ': ' + (errorMessage(err)) })
         } finally {
             setLoadingCourseReplacement(null)
         }
@@ -625,8 +637,8 @@ export default function PlanBuilder() {
             setBuildNotice({
                 type: ok ? 'success' : 'error',
                 text: ok
-                    ? localText(`РџРѕРґРѕР±СЂР°РЅС‹ Р·Р°РјРµРЅС‹ РґР»СЏ ${ok} РґРёСЃС†РёРїР»РёРЅ.`, `${ok} РїУ™РЅ ТЇС€С–РЅ Р°СѓС‹СЃС‚С‹СЂСѓР»Р°СЂ С‚Р°ТЈРґР°Р»РґС‹.`, `Loaded replacements for ${ok} courses.`)
-                    : localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРѕР±СЂР°С‚СЊ Р·Р°РјРµРЅС‹ РґР»СЏ РІРёРґРёРјС‹С… РґРёСЃС†РёРїР»РёРЅ.', 'РљУ©СЂС–РЅРµС‚С–РЅ РїУ™РЅРґРµСЂ ТЇС€С–РЅ Р°СѓС‹СЃС‚С‹СЂСѓ С‚Р°Р±С‹Р»РјР°РґС‹.', 'Could not load replacements for visible courses.'),
+                    ? localText(`Подобраны замены для ${ok} дисциплин.`, `${ok} пән үшін ауыстырулар таңдалды.`, `Loaded replacements for ${ok} courses.`)
+                    : localText('Не удалось подобрать замены для видимых дисциплин.', 'Көрінетін пәндер үшін ауыстыру табылмады.', 'Could not load replacements for visible courses.'),
             })
         } finally {
             setLoadingCourseReplacement(null)
@@ -651,7 +663,7 @@ export default function PlanBuilder() {
             })
             await fetchVariants(versionId)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґС‚РІРµСЂРґРёС‚СЊ Р·Р°РјРµРЅСѓ', 'РђСѓС‹СЃС‚С‹СЂСѓРґС‹ СЂР°СЃС‚Р°Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not confirm replacement') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось подтвердить замену', 'Ауыстыруды растау мүмкін болмады', 'Could not confirm replacement') + ': ' + (errorMessage(err)) })
         } finally {
             setApplyingCourseReplacement(null)
         }
@@ -665,7 +677,7 @@ export default function PlanBuilder() {
             const response = await axios.get(`/api/planner/${versionId}/lo-coverage-sources`, { params: { variant: activeVariant } })
             setLoCoverageSources(response.data)
         } catch (err) {
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ РёСЃС‚РѕС‡РЅРёРєРё РїРѕРєСЂС‹С‚РёСЏ LO', 'LO Т›Р°РјС‚Сѓ РєУ©Р·РґРµСЂС–РЅ Р°Р»Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not load LO coverage sources') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось получить источники покрытия LO', 'LO қамту көздерін алу мүмкін болмады', 'Could not load LO coverage sources') + ': ' + (errorMessage(err)) })
         } finally {
             setLoadingLoCoverageSources(false)
         }
@@ -686,7 +698,7 @@ export default function PlanBuilder() {
             setMatchFeedbackState(prev => ({ ...prev, [key]: verdict }))
         } catch (err) {
             setMatchFeedbackState(prev => ({ ...prev, [key]: 'error' }))
-            setBuildNotice({ type: 'error', text: localText('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СЌРєСЃРїРµСЂС‚РЅСѓСЋ РѕС†РµРЅРєСѓ', 'РЎР°СЂР°РїС€С‹ Р±Р°Т“Р°СЃС‹РЅ СЃР°Т›С‚Р°Сѓ РјТЇРјРєС–РЅ Р±РѕР»РјР°РґС‹', 'Could not save expert feedback') + ': ' + (errorMessage(err)) })
+            setBuildNotice({ type: 'error', text: localText('Не удалось сохранить экспертную оценку', 'Сарапшы бағасын сақтау мүмкін болмады', 'Could not save expert feedback') + ': ' + (errorMessage(err)) })
         }
     }
 
@@ -703,7 +715,7 @@ export default function PlanBuilder() {
             <header className="workspace-header" style={{ background: 'white', borderBottom: '1px solid #e0e0e0', padding: '15px 0' }}>
                 <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <Link to={`/projects/${id}`} style={{ textDecoration: 'none', color: '#666' }}>в†ђ {t('open')}</Link>
+                        <Link to={`/projects/${id}`} style={{ textDecoration: 'none', color: '#666' }}>← {t('open')}</Link>
                         <h1 style={{ margin: 0, fontSize: '24px', color: '#366092' }}>{t('plan_builder')}</h1>
                         <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#666', marginLeft: '20px' }}>({t('total_credits')}: {project?.constraints?.total_credits || 0})</span>
                     </div>
@@ -714,14 +726,14 @@ export default function PlanBuilder() {
                             onClick={handleBuild}
                             disabled={building}
                         >
-                            {building ? `${t('building_plan')} ${buildProgress}%` : 'вњЁ ' + t('generate_variants')}
+                            {building ? `${t('building_plan')} ${buildProgress}%` : '✨ ' + t('generate_variants')}
                         </button>
                         <button
                             className="btn btn-secondary"
                             onClick={handleRecomputeMatches}
                             disabled={building || recomputingMatches}
                         >
-                            {recomputingMatches ? `${buildProgress}%` : localText('РџРµСЂРµСЃС‡РёС‚Р°С‚СЊ LO-СЃРІСЏР·Рё', 'LO Р±Р°Р№Р»Р°РЅС‹СЃС‚Р°СЂС‹РЅ Т›Р°Р№С‚Р° РµСЃРµРїС‚РµСѓ', 'Recompute LO links')}
+                            {recomputingMatches ? `${buildProgress}%` : localText('Пересчитать LO-связи', 'LO байланыстарын қайта есептеу', 'Recompute LO links')}
                         </button>
                     </div>
                 </div>
@@ -732,9 +744,9 @@ export default function PlanBuilder() {
                     <div className="card" style={{ marginBottom: '20px', borderLeft: '5px solid #366092' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                             <div>
-                                <strong>{localText('EPVO-РєР°РЅРґРёРґР°С‚С‹ РґРѕР±Р°РІР»РµРЅС‹', 'Р•РџР’Рћ РєР°РЅРґРёРґР°С‚С‚Р°СЂС‹ Т›РѕСЃС‹Р»РґС‹', 'EPVO candidates added')}</strong>
+                                <strong>{localText('EPVO-кандидаты добавлены', 'ЕПВО кандидаттары қосылды', 'EPVO candidates added')}</strong>
                                 <div style={{ color: '#667', fontSize: 13, marginTop: 4 }}>
-                                    {localText('РќР°Р¶РјРёС‚Рµ вЂњРџРѕСЃС‚СЂРѕРёС‚СЊ РІР°СЂРёР°РЅС‚С‹вЂќ, С‡С‚РѕР±С‹ A/B/C РёСЃРїРѕР»СЊР·РѕРІР°Р»Рё РЅРѕРІС‹Рµ РґРёСЃС†РёРїР»РёРЅС‹.', 'Р–Р°ТЈР° РїУ™РЅРґРµСЂ A/B/C РЅТ±СЃТ›Р°Р»Р°СЂС‹РЅРґР° Т›РѕР»РґР°РЅС‹Р»СѓС‹ ТЇС€С–РЅ вЂњРќТ±СЃТ›Р°Р»Р°СЂРґС‹ Т›Т±СЂСѓвЂќ С‚ТЇР№РјРµСЃС–РЅ Р±Р°СЃС‹ТЈС‹Р·.', 'Click вЂњBuild variantsвЂќ so A/B/C can use the new courses.')}
+                                    {localText('Нажмите “Построить варианты”, чтобы A/B/C использовали новые дисциплины.', 'Жаңа пәндер A/B/C нұсқаларында қолданылуы үшін “Нұсқаларды құру” түймесін басыңыз.', 'Click “Build variants” so A/B/C can use the new courses.')}
                                 </div>
                             </div>
                             <button className="btn btn-primary" onClick={handleBuild}>{t('generate_variants')}</button>
@@ -745,13 +757,13 @@ export default function PlanBuilder() {
                     <div className="card" style={{ marginBottom: '20px', borderLeft: '5px solid #ef6c00', background: '#fffaf2' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                             <div>
-                                <strong>{localText('Р•СЃС‚СЊ РёР·РјРµРЅРµРЅРёСЏ РґР»СЏ СЃР»РµРґСѓСЋС‰РµР№ РіРµРЅРµСЂР°С†РёРё', 'РљРµР»РµСЃС– Т›Т±СЂСѓ ТЇС€С–РЅ У©Р·РіРµСЂС–СЃС‚РµСЂ Р±Р°СЂ', 'Changes are ready for the next generation')}</strong>
+                                <strong>{localText('Есть изменения для следующей генерации', 'Келесі құру үшін өзгерістер бар', 'Changes are ready for the next generation')}</strong>
                                 <div style={{ color: '#6d4c41', fontSize: 13, marginTop: 4 }}>
-                                    {localText('РЎРёСЃС‚РµРјР° СѓС‡С‚С‘С‚ Р·Р°РјРµРЅС‹ bridge Рё РѕС‚РјРµС‡РµРЅРЅС‹Рµ РёСЃРєР»СЋС‡РµРЅРёСЏ, Р·Р°С‚РµРј Р·Р°РЅРѕРІРѕ СЂР°СЃСЃС‡РёС‚Р°РµС‚ A/B/C, РєСЂРµРґРёС‚С‹, Р Рћ Рё РїСЂРµСЂРµРєРІРёР·РёС‚С‹.', 'Р–ТЇР№Рµ bridge Р°СѓС‹СЃС‚С‹СЂСѓР»Р°СЂС‹РЅ Р¶У™РЅРµ Р±РµР»РіС–Р»РµРЅРіРµРЅ Р°Р»С‹Рї С‚Р°СЃС‚Р°СѓР»Р°СЂРґС‹ РµСЃРєРµСЂС–Рї, A/B/C, РєСЂРµРґРёС‚С‚РµСЂ, РћРќ Р¶У™РЅРµ РїСЂРµСЂРµРєРІРёР·РёС‚С‚РµСЂРґС– Т›Р°Р№С‚Р° РµСЃРµРїС‚РµР№РґС–.', 'The system will apply bridge replacements and exclusions, then recalculate A/B/C, credits, LOs, and prerequisites.')}
+                                    {localText('Система учтёт замены bridge и отмеченные исключения, затем заново рассчитает A/B/C, кредиты, РО и пререквизиты.', 'Жүйе bridge ауыстыруларын және белгіленген алып тастауларды ескеріп, A/B/C, кредиттер, ОН және пререквизиттерді қайта есептейді.', 'The system will apply bridge replacements and exclusions, then recalculate A/B/C, credits, LOs, and prerequisites.')}
                                 </div>
                             </div>
                             <button className="btn btn-primary" onClick={handleBuild}>
-                                {localText('РџРµСЂРµРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ A/B/C', 'A/B/C Т›Р°Р№С‚Р° Т›Т±СЂСѓ', 'Regenerate A/B/C')}
+                                {localText('Перегенерировать A/B/C', 'A/B/C қайта құру', 'Regenerate A/B/C')}
                             </button>
                         </div>
                     </div>
@@ -782,22 +794,22 @@ export default function PlanBuilder() {
                 )}
                 {changeReport?.available && !building && (
                     <div className="card" style={{ marginBottom: '20px', borderLeft: '5px solid #7b1fa2' }}>
-                        <h3 style={{ marginTop: 0 }}>{localText('Р§С‚Рѕ РёР·РјРµРЅРёР»РѕСЃСЊ РїРѕСЃР»Рµ РїРµСЂРµСЃС‚СЂРѕР№РєРё', 'ТљР°Р№С‚Р° Т›Т±СЂСѓРґР°РЅ РєРµР№С–РЅ РЅРµ У©Р·РіРµСЂРґС–', 'What changed after rebuild')}</h3>
+                        <h3 style={{ marginTop: 0 }}>{localText('Что изменилось после перестройки', 'Қайта құрудан кейін не өзгерді', 'What changed after rebuild')}</h3>
                         <div className="quick-grid">
-                            <div><b>{localText('РљСЂРµРґРёС‚С‹', 'РљСЂРµРґРёС‚С‚РµСЂ', 'Credits')}</b><br />{changeReport.credits_delta > 0 ? '+' : ''}{changeReport.credits_delta}</div>
+                            <div><b>{localText('Кредиты', 'Кредиттер', 'Credits')}</b><br />{changeReport.credits_delta > 0 ? '+' : ''}{changeReport.credits_delta}</div>
                             <div><b>Bridge</b><br />{changeReport.bridges_delta > 0 ? '+' : ''}{changeReport.bridges_delta}</div>
-                            <div><b>Min LO</b><br />{changeReport.min_lo_delta == null ? 'вЂ”' : `${changeReport.min_lo_delta > 0 ? '+' : ''}${Math.round(changeReport.min_lo_delta * 100)}%`}</div>
-                            <div><b>{localText('РљР°С‡РµСЃС‚РІРѕ', 'РЎР°РїР°', 'Quality')}</b><br />{String(changeReport.quality_before)} в†’ {String(changeReport.quality_after)}</div>
+                            <div><b>Min LO</b><br />{changeReport.min_lo_delta == null ? '—' : `${changeReport.min_lo_delta > 0 ? '+' : ''}${Math.round(changeReport.min_lo_delta * 100)}%`}</div>
+                            <div><b>{localText('Качество', 'Сапа', 'Quality')}</b><br />{String(changeReport.quality_before)} → {String(changeReport.quality_after)}</div>
                         </div>
                         <p style={{ color: '#667', fontSize: 13, marginTop: 10 }}>
-                            {localText('Р”РѕР±Р°РІР»РµРЅРѕ', 'ТљРѕСЃС‹Р»РґС‹', 'Added')}: {changeReport.added_count}; {localText('СѓРґР°Р»РµРЅРѕ', 'Р¶РѕР№С‹Р»РґС‹', 'removed')}: {changeReport.removed_count}; hard: {changeReport.hard_before} в†’ {changeReport.hard_after}.
+                            {localText('Добавлено', 'Қосылды', 'Added')}: {changeReport.added_count}; {localText('удалено', 'жойылды', 'removed')}: {changeReport.removed_count}; hard: {changeReport.hard_before} → {changeReport.hard_after}.
                         </p>
                         {(changeReport.added_titles_sample?.length > 0 || changeReport.removed_titles_sample?.length > 0) && (
                             <details style={{ marginTop: 8 }}>
-                                <summary style={{ cursor: 'pointer', color: '#366092', fontWeight: 600 }}>{localText('РџРѕРєР°Р·Р°С‚СЊ РїСЂРёРјРµСЂС‹ РёР·РјРµРЅРµРЅРёР№', 'УЁР·РіРµСЂС–СЃС‚РµСЂ РјС‹СЃР°Р»РґР°СЂС‹РЅ РєУ©СЂСЃРµС‚Сѓ', 'Show change examples')}</summary>
+                                <summary style={{ cursor: 'pointer', color: '#366092', fontWeight: 600 }}>{localText('Показать примеры изменений', 'Өзгерістер мысалдарын көрсету', 'Show change examples')}</summary>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8, fontSize: 12 }}>
-                                    <div><b>{localText('Р”РѕР±Р°РІР»РµРЅРѕ', 'ТљРѕСЃС‹Р»РґС‹', 'Added')}</b>{(changeReport.added_titles_sample || []).map((title, index) => <div key={`a-${index}`}>+ {title}</div>)}</div>
-                                    <div><b>{localText('РЈРґР°Р»РµРЅРѕ', 'Р–РѕР№С‹Р»РґС‹', 'Removed')}</b>{(changeReport.removed_titles_sample || []).map((title, index) => <div key={`r-${index}`}>в€’ {title}</div>)}</div>
+                                    <div><b>{localText('Добавлено', 'Қосылды', 'Added')}</b>{(changeReport.added_titles_sample || []).map((title, index) => <div key={`a-${index}`}>+ {title}</div>)}</div>
+                                    <div><b>{localText('Удалено', 'Жойылды', 'Removed')}</b>{(changeReport.removed_titles_sample || []).map((title, index) => <div key={`r-${index}`}>− {title}</div>)}</div>
                                 </div>
                             </details>
                         )}
@@ -899,6 +911,7 @@ export default function PlanBuilder() {
 
                         {currentPlan?.metrics?.verification && (
                             <CompactSection title={t('verification')} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
+                                <h3 style={{ marginTop: 0 }}>{t('verification')}</h3>
                                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                                     <span>{t('feasible')}: <strong>{currentPlan.metrics.verification.feasible ? t('yes') : t('no')}</strong></span>
                                     <span>{t('total_credits')}: <strong>{currentPlan.metrics.total_credits}/{currentPlan.metrics.target_credits}</strong></span>
@@ -915,21 +928,21 @@ export default function PlanBuilder() {
                                         disabled={applyingQuality || building}
                                         style={{ marginTop: 12 }}
                                     >
-                                        {applyingQuality ? t('applying_quality_improvements') : localText('РСЃРїСЂР°РІРёС‚СЊ РїРѕСЂСЏРґРѕРє, РЅР°РіСЂСѓР·РєСѓ Рё РєСЂРµРґРёС‚С‹', 'Р РµС‚С‚С–, Р¶ТЇРєС‚РµРјРµРЅС– Р¶У™РЅРµ РєСЂРµРґРёС‚С‚РµСЂРґС– С‚ТЇР·РµС‚Сѓ', 'Fix order, load, and credits')}
+                                        {applyingQuality ? t('applying_quality_improvements') : localText('Исправить порядок, нагрузку и кредиты', 'Ретті, жүктемені және кредиттерді түзету', 'Fix order, load, and credits')}
                                     </button>
                                 )}
                                 {(currentPlan.metrics.num_bridge_modules || 0) > 0 && (
                                     <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082', color: '#6d4c41' }}>
-                                        <strong>{localText('Bridge-РјРѕРґСѓР»Рё С‚СЂРµР±СѓСЋС‚ СЌРєСЃРїРµСЂС‚РЅРѕРіРѕ СЂРµС€РµРЅРёСЏ', 'Bridge-РјРѕРґСѓР»СЊРґРµСЂ СЃР°СЂР°РїС‚Р°РјР°Р»С‹Т› С€РµС€С–РјРґС– Т›Р°Р¶РµС‚ РµС‚РµРґС–', 'Bridge modules require expert review')}: {currentPlan.metrics.num_bridge_modules}</strong>
+                                        <strong>{localText('Bridge-модули требуют экспертного решения', 'Bridge-модульдер сараптамалық шешімді қажет етеді', 'Bridge modules require expert review')}: {currentPlan.metrics.num_bridge_modules}</strong>
                                         <div style={{ fontSize: 12, marginTop: 4 }}>
                                             {localText(
-                                                'Р­С‚Рѕ Р·РЅР°С‡РёС‚, С‡С‚Рѕ СЂРµР°Р»СЊРЅС‹С… РґРёСЃС†РёРїР»РёРЅ Р•РџР’Рћ РЅРµ С…РІР°С‚РёР»Рѕ РґР»СЏ С‡Р°СЃС‚Рё LO РёР»Рё РЅР°РіСЂСѓР·РєРё. Р›СѓС‡С€Рµ РїРµСЂРµРЅР°СЃС‚СЂРѕРёС‚СЊ Р•РџР’Рћ-РЅР°РїСЂР°РІР»РµРЅРёРµ РёР»Рё Р·Р°РјРµРЅРёС‚СЊ bridge СЂРµР°Р»СЊРЅС‹РјРё РґРёСЃС†РёРїР»РёРЅР°РјРё.',
-                                                'Р‘Т±Р» РєРµР№Р±С–СЂ LO РЅРµРјРµСЃРµ Р¶ТЇРєС‚РµРјРµ ТЇС€С–РЅ РЅР°Т›С‚С‹ Р•РџР’Рћ РїУ™РЅРґРµСЂС– Р¶РµС‚РєС–Р»С–РєСЃС–Р· РµРєРµРЅС–РЅ Р±С–Р»РґС–СЂРµРґС–. Р•РџР’Рћ Р±Р°Т“С‹С‚С‹РЅ Т›Р°Р№С‚Р° Р±Р°РїС‚Р°Сѓ РЅРµРјРµСЃРµ bridge РѕСЂРЅС‹РЅР° РЅР°Т›С‚С‹ РїУ™РЅРґРµСЂРґС– С‚Р°ТЈРґР°Сѓ Т±СЃС‹РЅС‹Р»Р°РґС‹.',
+                                                'Это значит, что реальных дисциплин ЕПВО не хватило для части LO или нагрузки. Лучше перенастроить ЕПВО-направление или заменить bridge реальными дисциплинами.',
+                                                'Бұл кейбір LO немесе жүктеме үшін нақты ЕПВО пәндері жеткіліксіз екенін білдіреді. ЕПВО бағытын қайта баптау немесе bridge орнына нақты пәндерді таңдау ұсынылады.',
                                                 'This means real EPVO courses were insufficient for some LOs or workload. Reconfigure the EPVO scope or replace bridges with real courses.'
                                             )}
                                         </div>
                                         <button className="btn btn-secondary" onClick={loadBridgePreview} disabled={loadingBridgePreview} style={{ marginTop: 8 }}>
-                                            {loadingBridgePreview ? localText('РџРѕРёСЃРєвЂ¦', 'Р†Р·РґРµСѓвЂ¦', 'SearchingвЂ¦') : localText('РќР°Р№С‚Рё СЂРµР°Р»СЊРЅС‹Рµ РґРёСЃС†РёРїР»РёРЅС‹ РІРјРµСЃС‚Рѕ bridge', 'Bridge РѕСЂРЅС‹РЅР° РЅР°Т›С‚С‹ РїУ™РЅРґРµСЂРґС– С‚Р°Р±Сѓ', 'Find real courses instead of bridges')}
+                                            {loadingBridgePreview ? localText('Поиск…', 'Іздеу…', 'Searching…') : localText('Найти реальные дисциплины вместо bridge', 'Bridge орнына нақты пәндерді табу', 'Find real courses instead of bridges')}
                                         </button>
                                         {bridgePreview?.variant === activeVariant && (
                                             Object.keys(selectedBridgeReplacements).length > 0
@@ -944,10 +957,10 @@ export default function PlanBuilder() {
                                                 style={{ marginTop: 8, marginLeft: 8 }}
                                             >
                                                 {replacingAllBridges
-                                                    ? localText('Р—Р°РјРµРЅР°вЂ¦', 'РђСѓС‹СЃС‚С‹СЂСѓвЂ¦', 'ReplacingвЂ¦')
+                                                    ? localText('Замена…', 'Ауыстыру…', 'Replacing…')
                                                     : Object.keys(selectedBridgeReplacements).length
-                                                        ? localText(`РџРѕРґС‚РІРµСЂРґРёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Рµ: ${Object.keys(selectedBridgeReplacements).length}`, `РўР°ТЈРґР°Р»Т“Р°РЅРґР°СЂРґС‹ СЂР°СЃС‚Р°Сѓ: ${Object.keys(selectedBridgeReplacements).length}`, `Confirm selected: ${Object.keys(selectedBridgeReplacements).length}`)
-                                                        : localText('Р—Р°РјРµРЅРёС‚СЊ РІСЃРµ РїРѕРґС…РѕРґСЏС‰РёРµ bridge', 'Р‘Р°СЂР»С‹Т› Т›РѕР»Р°Р№Р»С‹ bridge-РјРѕРґСѓР»СЊРґРµСЂРґС– Р°СѓС‹СЃС‚С‹СЂСѓ', 'Replace all suitable bridges')}
+                                                        ? localText(`Подтвердить выбранные: ${Object.keys(selectedBridgeReplacements).length}`, `Таңдалғандарды растау: ${Object.keys(selectedBridgeReplacements).length}`, `Confirm selected: ${Object.keys(selectedBridgeReplacements).length}`)
+                                                        : localText('Заменить все подходящие bridge', 'Барлық қолайлы bridge-модульдерді ауыстыру', 'Replace all suitable bridges')}
                                             </button>
                                         )}
                                         {bridgePreview?.variant === activeVariant && (bridgePreview.suggestions || []).some(row => (row.candidates || []).some(c => c.quality_level === 'medium' || c.medium_candidate)) && (
@@ -957,18 +970,18 @@ export default function PlanBuilder() {
                                                 disabled={replacingAllBridges || Boolean(replacingBridge)}
                                                 style={{ marginTop: 8, marginLeft: 8, borderColor: '#c17b00', color: '#8a5a00' }}
                                             >
-                                                {localText('Р’С‹Р±СЂР°С‚СЊ РІСЃРµ СЃСЂРµРґРЅРёРµ Р·Р°РјРµРЅС‹', 'Р‘Р°СЂР»С‹Т› РѕСЂС‚Р°С€Р° Р°СѓС‹СЃС‚С‹СЂСѓР»Р°СЂРґС‹ С‚Р°ТЈРґР°Сѓ', 'Select all medium replacements')}
+                                                {localText('Выбрать все средние замены', 'Барлық орташа ауыстыруларды таңдау', 'Select all medium replacements')}
                                             </button>
                                         )}
                                         {bridgePreview?.variant === activeVariant && (
                                             <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
                                                 {bridgePreview.summary && (
                                                     <div style={{ padding: '8px 10px', borderRadius: 8, background: '#fff3cd', border: '1px solid #ffecb5', color: '#6d4c00', fontSize: 12 }}>
-                                                        <strong>{localText('РС‚РѕРі РїРѕРёСЃРєР° Р·Р°РјРµРЅ', 'РђСѓС‹СЃС‚С‹СЂСѓ С–Р·РґРµСѓ Т›РѕСЂС‹С‚С‹РЅРґС‹СЃС‹', 'Replacement search summary')}:</strong>{' '}
+                                                        <strong>{localText('Итог поиска замен', 'Ауыстыру іздеу қорытындысы', 'Replacement search summary')}:</strong>{' '}
                                                         {localText(
-                                                            `${bridgePreview.summary.bridge_count} bridge В· ${bridgePreview.summary.bridge_credits} РєСЂРµРґРёС‚РѕРІ В· СЃРёР»СЊРЅС‹С…: ${bridgePreview.summary.with_strong_candidate} В· СЃСЂРµРґРЅРёС…: ${bridgePreview.summary.with_medium_candidate || 0} В· Р±РµР· СЃРёР»СЊРЅРѕР№: ${bridgePreview.summary.without_strong_candidate}.`,
-                                                            `${bridgePreview.summary.bridge_count} bridge В· ${bridgePreview.summary.bridge_credits} РєСЂРµРґРёС‚ В· РєТЇС€С‚С–: ${bridgePreview.summary.with_strong_candidate} В· РѕСЂС‚Р°С€Р°: ${bridgePreview.summary.with_medium_candidate || 0} В· РєТЇС€С‚С–СЃС–Р·: ${bridgePreview.summary.without_strong_candidate}.`,
-                                                            `${bridgePreview.summary.bridge_count} bridges В· ${bridgePreview.summary.bridge_credits} credits В· strong: ${bridgePreview.summary.with_strong_candidate} В· medium: ${bridgePreview.summary.with_medium_candidate || 0} В· without strong: ${bridgePreview.summary.without_strong_candidate}.`
+                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредитов · сильных: ${bridgePreview.summary.with_strong_candidate} · средних: ${bridgePreview.summary.with_medium_candidate || 0} · без сильной: ${bridgePreview.summary.without_strong_candidate}.`,
+                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредит · күшті: ${bridgePreview.summary.with_strong_candidate} · орташа: ${bridgePreview.summary.with_medium_candidate || 0} · күштісіз: ${bridgePreview.summary.without_strong_candidate}.`,
+                                                            `${bridgePreview.summary.bridge_count} bridges · ${bridgePreview.summary.bridge_credits} credits · strong: ${bridgePreview.summary.with_strong_candidate} · medium: ${bridgePreview.summary.with_medium_candidate || 0} · without strong: ${bridgePreview.summary.without_strong_candidate}.`
                                                         )}
                                                         <div style={{ marginTop: 4 }}>
                                                             {bridgePreview.summary.diagnosis}
@@ -977,14 +990,14 @@ export default function PlanBuilder() {
                                                 )}
                                                 {bridgePreview.elapsed_seconds !== undefined && (
                                                     <div style={{ fontSize: 12, color: '#6d4c41' }}>
-                                                        {localText(`РџРѕРёСЃРє Р·Р°РјРµРЅ РІС‹РїРѕР»РЅРµРЅ Р·Р° ${bridgePreview.elapsed_seconds}s.`, `РђСѓС‹СЃС‚С‹СЂСѓР»Р°СЂРґС‹ С–Р·РґРµСѓ ${bridgePreview.elapsed_seconds}s С–С€С–РЅРґРµ РѕСЂС‹РЅРґР°Р»РґС‹.`, `Replacement search completed in ${bridgePreview.elapsed_seconds}s.`)}
+                                                        {localText(`Поиск замен выполнен за ${bridgePreview.elapsed_seconds}s.`, `Ауыстыруларды іздеу ${bridgePreview.elapsed_seconds}s ішінде орындалды.`, `Replacement search completed in ${bridgePreview.elapsed_seconds}s.`)}
                                                     </div>
                                                 )}
                                                 {(bridgePreview.suggestions || []).map(row => {
                                                     const good = (row.candidates || []).filter(c => c.strong_candidate || c.medium_candidate)
                                                     return (
                                                         <div key={row.bridge_item_id} style={{ fontSize: 12, padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #f3d27a' }}>
-                                                            <b>{row.bridge_title}</b> В· {row.credits} {t('credits')} В· LO: {(row.target_los || []).join(', ')}
+                                                            <b>{row.bridge_title}</b> · {row.credits} {t('credits')} · LO: {(row.target_los || []).join(', ')}
                                                             {good.length > 0 ? (
                                                                 <div style={{ marginTop: 4 }}>
                                                                     {good.slice(0, 3).map(c => (
@@ -997,8 +1010,8 @@ export default function PlanBuilder() {
                                                                                         checked={Number(selectedBridgeReplacements[row.bridge_item_id]) === Number(c.course_id)}
                                                                                         onChange={() => setSelectedBridgeReplacements(current => ({ ...current, [row.bridge_item_id]: c.course_id }))}
                                                                                     />
-                                                                                    <strong>в†’ {(c.title_translations || {})[language] || c.title}</strong>
-                                                                                </label> В· {c.credits} {t('credits')} В· {c.quality_level === 'strong' ? localText('СЃРёР»СЊРЅР°СЏ', 'РєТЇС€С‚С–', 'strong') : localText('СЃСЂРµРґРЅСЏСЏ, РЅСѓР¶РЅРѕ РїРѕРґС‚РІРµСЂРґРёС‚СЊ', 'РѕСЂС‚Р°С€Р°, СЂР°СЃС‚Р°Сѓ РєРµСЂРµРє', 'medium, needs confirmation')} В· AI {Math.round((c.model_score || 0) * 100)}% В· EPVO {Math.round((c.expert_score || 0) * 100)}% В· LO {Math.round((c.coverage_ratio || 0) * 100)}%
+                                                                                    <strong>→ {(c.title_translations || {})[language] || c.title}</strong>
+                                                                                </label> · {c.credits} {t('credits')} · {c.quality_level === 'strong' ? localText('сильная', 'күшті', 'strong') : localText('средняя, нужно подтвердить', 'орташа, растау керек', 'medium, needs confirmation')} · AI {Math.round((c.model_score || 0) * 100)}% · EPVO {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
                                                                                 <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{c.description}</div>
                                                                             </span>
                                                                             <button
@@ -1008,14 +1021,14 @@ export default function PlanBuilder() {
                                                                                 onClick={() => applyBridgeReplacement(row.bridge_item_id, c.course_id)}
                                                                             >
                                                                                 {replacingBridge === `${row.bridge_item_id}:${c.course_id}`
-                                                                                    ? localText('Р”РѕР±Р°РІР»РµРЅРёРµвЂ¦', 'ТљРѕСЃСѓвЂ¦', 'AddingвЂ¦')
-                                                                                    : localText('РџРѕРґС‚РІРµСЂРґРёС‚СЊ Р·Р°РјРµРЅСѓ', 'РђСѓС‹СЃС‚С‹СЂСѓРґС‹ СЂР°СЃС‚Р°Сѓ', 'Confirm replacement')}
+                                                                                    ? localText('Добавление…', 'Қосу…', 'Adding…')
+                                                                                    : localText('Подтвердить замену', 'Ауыстыруды растау', 'Confirm replacement')}
                                                                             </button>
                                                                         </div>
                                                                     ))}
                                                                 </div>
                                                             ) : (
-                                                                <div style={{ marginTop: 4, color: '#8a5a00' }}>{localText('РЎРёР»СЊРЅРѕР№ Р·Р°РјРµРЅС‹ РїРѕРєР° РЅРµС‚. РђРІС‚РѕР·Р°РјРµРЅР° С‚СЂРµР±СѓРµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ Р•РџР’Рћ в‰Ґ 50%, РїРѕРєСЂС‹С‚РёРµ в‰Ґ 75% РїСЂРѕС„РµСЃСЃРёРѕРЅР°Р»СЊРЅС‹С… LO, Р±Р»РёР·РєРёРµ РєСЂРµРґРёС‚С‹ Рё РѕР±Р»Р°СЃС‚СЊ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РЅР°РїСЂР°РІР»РµРЅРёСЏ.', 'УР·С–СЂС€Рµ РєТЇС€С‚С– Р°СѓС‹СЃС‚С‹СЂСѓ Р¶РѕТ›. РђРІС‚РѕР°СѓС‹СЃС‚С‹СЂСѓ ТЇС€С–РЅ Р•РџР’Рћ СЂР°СЃС‚Р°СѓС‹ в‰Ґ 50%, РєУ™СЃС–Р±Рё РћРќ Т›Р°РјС‚СѓС‹ в‰Ґ 75%, Р¶Р°Т›С‹РЅ РєСЂРµРґРёС‚С‚РµСЂ Р¶У™РЅРµ С‚Р°ТЈРґР°Р»Т“Р°РЅ Р±Р°Т“С‹С‚ Т›Р°Р¶РµС‚.', 'No strong replacement yet. Automatic replacement requires EPVO evidence в‰Ґ 50%, coverage of в‰Ґ 75% of professional LOs, similar credits, and the selected programme scope.')}</div>
+                                                                <div style={{ marginTop: 4, color: '#8a5a00' }}>{localText('Сильной замены пока нет. Автозамена требует подтверждение ЕПВО ≥ 50%, покрытие ≥ 75% профессиональных LO, близкие кредиты и область выбранного направления.', 'Әзірше күшті ауыстыру жоқ. Автоауыстыру үшін ЕПВО растауы ≥ 50%, кәсіби ОН қамтуы ≥ 75%, жақын кредиттер және таңдалған бағыт қажет.', 'No strong replacement yet. Automatic replacement requires EPVO evidence ≥ 50%, coverage of ≥ 75% of professional LOs, similar credits, and the selected programme scope.')}</div>
                                                             )}
                                                             <button
                                                                 className="btn btn-secondary"
@@ -1024,14 +1037,14 @@ export default function PlanBuilder() {
                                                                 onClick={() => loadAiBridgeCandidates(row.bridge_item_id)}
                                                             >
                                                                 {loadingAiBridge === row.bridge_item_id
-                                                                    ? localText('РР РїРѕРґР±РёСЂР°РµС‚ 3 РІР°СЂРёР°РЅС‚Р°вЂ¦', 'Р–Р 3 РЅТ±СЃТ›Р° С‚Р°ТЈРґР°СѓРґР°вЂ¦', 'AI is generating 3 optionsвЂ¦')
-                                                                    : localText('РџРѕРґРѕР±СЂР°С‚СЊ 3 РґРёСЃС†РёРїР»РёРЅС‹ С‡РµСЂРµР· РР', 'Р–Р Р°СЂТ›С‹Р»С‹ 3 РїУ™РЅ Т±СЃС‹РЅСѓ', 'Generate 3 courses with AI')}
+                                                                    ? localText('ИИ подбирает 3 варианта…', 'ЖИ 3 нұсқа таңдауда…', 'AI is generating 3 options…')
+                                                                    : localText('Подобрать 3 дисциплины через ИИ', 'ЖИ арқылы 3 пән ұсыну', 'Generate 3 courses with AI')}
                                                             </button>
                                                             {aiBridgeCandidates[row.bridge_item_id] && (
                                                                 <div style={{ marginTop: 8, display: 'grid', gap: 7 }}>
                                                                     {(aiBridgeCandidates[row.bridge_item_id].candidates || []).map(candidate => (
                                                                         <div key={candidate.candidate_id} style={{ padding: 8, borderRadius: 6, background: '#f7f9fc', border: '1px solid #dce5ef' }}>
-                                                                            <strong>{candidate[`title_${language}`] || candidate.title_ru}</strong> В· {row.credits} {t('credits')}
+                                                                            <strong>{candidate[`title_${language}`] || candidate.title_ru}</strong> · {row.credits} {t('credits')}
                                                                             <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{candidate[`description_${language}`] || candidate.description_ru}</div>
                                                                             <div style={{ marginTop: 4, color: '#53657a' }}>LO: {(candidate.target_los || []).join(', ')}</div>
                                                                             <button
@@ -1041,13 +1054,13 @@ export default function PlanBuilder() {
                                                                                 onClick={() => confirmAiBridgeCandidate(row.bridge_item_id, candidate)}
                                                                             >
                                                                                 {confirmingAiBridge === `${row.bridge_item_id}:${candidate.candidate_id}`
-                                                                                    ? localText('РџРѕРґС‚РІРµСЂР¶РґРµРЅРёРµвЂ¦', 'Р Р°СЃС‚Р°СѓвЂ¦', 'ConfirmingвЂ¦')
-                                                                                    : localText('РџРѕРґС‚РІРµСЂРґРёС‚СЊ Рё Р·Р°РјРµРЅРёС‚СЊ bridge', 'Р Р°СЃС‚Р°Сѓ Р¶У™РЅРµ bridge Р°СѓС‹СЃС‚С‹СЂСѓ', 'Confirm and replace bridge')}
+                                                                                    ? localText('Подтверждение…', 'Растау…', 'Confirming…')
+                                                                                    : localText('Подтвердить и заменить bridge', 'Растау және bridge ауыстыру', 'Confirm and replace bridge')}
                                                                             </button>
                                                                         </div>
                                                                     ))}
                                                                     <div style={{ fontSize: 11, color: '#7a6570' }}>
-                                                                        {localText('Р­С‚Рѕ РїСЂРµРґР»РѕР¶РµРЅРёРµ РР. Р’ РїР»Р°РЅ РѕРЅРѕ РїРѕРїР°РґС‘С‚ С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ РІР°С€РµРіРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ.', 'Р‘Т±Р» Р–Р Т±СЃС‹РЅС‹СЃС‹. Р–РѕСЃРїР°СЂТ“Р° С‚РµРє СЃС–Р· СЂР°СЃС‚Р°Т“Р°РЅРЅР°РЅ РєРµР№С–РЅ РµРЅРіС–Р·С–Р»РµРґС–.', 'This is an AI proposal. It enters the plan only after your confirmation.')}
+                                                                        {localText('Это предложение ИИ. В план оно попадёт только после вашего подтверждения.', 'Бұл ЖИ ұсынысы. Жоспарға тек сіз растағаннан кейін енгізіледі.', 'This is an AI proposal. It enters the plan only after your confirmation.')}
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -1059,8 +1072,8 @@ export default function PlanBuilder() {
                                         {requiresRegeneration && (
                                             <button className="btn btn-primary" onClick={handleBuild} disabled={building} style={{ marginTop: 10 }}>
                                                 {building
-                                                    ? localText('РџРµСЂРµСЃС‚СЂРѕРµРЅРёРµвЂ¦', 'ТљР°Р№С‚Р° Т›Т±СЂСѓвЂ¦', 'RebuildingвЂ¦')
-                                                    : localText('РџРµСЂРµРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ A/B/C СЃ РёР·РјРµРЅРµРЅРёСЏРјРё', 'УЁР·РіРµСЂС–СЃС‚РµСЂРјРµРЅ A/B/C Т›Р°Р№С‚Р° Т›Т±СЂСѓ', 'Regenerate A/B/C with changes')}
+                                                    ? localText('Перестроение…', 'Қайта құру…', 'Rebuilding…')
+                                                    : localText('Перегенерировать A/B/C с изменениями', 'Өзгерістермен A/B/C қайта құру', 'Regenerate A/B/C with changes')}
                                             </button>
                                         )}
                                     </div>
@@ -1081,16 +1094,16 @@ export default function PlanBuilder() {
                                     <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f5fbff', border: '1px solid #d7ecfb' }}>
                                         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
                                             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                                            <strong>{localText('\u0414\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u043f\u043b\u0430\u043d\u0430 \u0438\u0437 \u0415\u041f\u0412\u041e', '\u0416\u043e\u0441\u043f\u0430\u0440\u0434\u0430\u0493\u044b \u0415\u041f\u0412\u041e \u043f\u04d9\u043d\u0434\u0435\u0440\u0456', 'Plan courses from EPVO')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
+                                            <strong>{localText('Дисциплины плана из ЕПВО', 'Жоспардағы ЕПВО пәндері', 'Plan courses from EPVO')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
                                             <span style={{ color: '#566' }}>
-                                                {localText('\u0442\u0438\u043f\u043e\u0432\u044b\u0445 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d', '\u0442\u0438\u043f\u0442\u0456\u043a \u043f\u04d9\u043d\u0434\u0435\u0440', 'typical courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
+                                                {localText('типовых дисциплин', 'типтік пәндер', 'typical courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
                                             </span>
                                             <span style={{ color: '#566' }}>
-                                                {localText('\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u044b\u0445 \u0441\u0432\u044f\u0437\u0435\u0439', '\u0441\u0430\u0440\u0430\u043f\u0442\u0430\u043c\u0430\u043b\u044b\u049b \u0431\u0430\u0439\u043b\u0430\u043d\u044b\u0441\u0442\u0430\u0440', 'expert links')}: {currentPlan.epvo_plan_quality.expert_links}
+                                                {localText('экспертных связей', 'сараптамалық байланыстар', 'expert links')}: {currentPlan.epvo_plan_quality.expert_links}
                                             </span>
                                             </div>
                                             <Link to={`/projects/${id}/epvo`} className="btn btn-secondary" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                                                {localText('\u041f\u043e\u043b\u043d\u044b\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 \u0415\u041f\u0412\u041e', '\u0415\u041f\u0412\u041e \u0442\u043e\u043b\u044b\u049b \u0442\u0430\u043b\u0434\u0430\u0443\u044b', 'Full EPVO analysis')}
+                                                {localText('Полный анализ ЕПВО', 'ЕПВО толық талдауы', 'Full EPVO analysis')}
                                             </Link>
                                         </div>
                                     </div>
@@ -1098,22 +1111,67 @@ export default function PlanBuilder() {
                                 <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f8fbff', border: '1px solid #dce9f7' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                                         <div>
-                                            <strong>{localText('\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438 \u043f\u043e\u043a\u0440\u044b\u0442\u0438\u044f LO', 'LO \u049b\u0430\u043c\u0442\u0443 \u043a\u04e9\u0437\u0434\u0435\u0440\u0456', 'LO coverage sources')}</strong>
+                                            <strong>{localText('Источники покрытия LO', 'LO қамту көздері', 'LO coverage sources')}</strong>
                                             <div style={{ fontSize: 12, color: '#566', marginTop: 2 }}>
-                                                {localText('\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442, \u043a\u0430\u043a\u0438\u0435 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0437\u0430\u043a\u0440\u044b\u0442\u044b \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u043c\u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430\u043c\u0438, \u0430 \u043a\u0430\u043a\u0438\u0435 \u0442\u043e\u043b\u044c\u043a\u043e bridge-\u043c\u043e\u0434\u0443\u043b\u044f\u043c\u0438.', '\u049a\u0430\u0439 \u043d\u04d9\u0442\u0438\u0436\u0435\u043b\u0435\u0440 \u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440\u043c\u0435\u043d, \u049b\u0430\u0439\u0441\u044b\u0441\u044b bridge-\u043c\u043e\u0434\u0443\u043b\u044c\u0434\u0435\u0440\u043c\u0435\u043d \u0436\u0430\u0431\u044b\u043b\u0493\u0430\u043d\u044b\u043d \u043a\u04e9\u0440\u0441\u0435\u0442\u0435\u0434\u0456.', 'Shows which outcomes are covered by real courses and which only by bridge modules.')}
+                                                {localText('Показывает, какие результаты закрыты реальными дисциплинами, а какие только bridge-модулями.', 'Қай нәтижелер нақты пәндермен, қайсысы bridge-модульдермен жабылғанын көрсетеді.', 'Shows which outcomes are covered by real courses and which only by bridge modules.')}
                                             </div>
                                         </div>
                                         <button className="btn btn-secondary" onClick={loadLoCoverageSources} disabled={loadingLoCoverageSources}>
-                                            {loadingLoCoverageSources ? localText('\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026', '\u0416\u04af\u043a\u0442\u0435\u0443\u2026', 'Loading...') : localText('\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c LO-\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438', 'LO \u043a\u04e9\u0437\u0434\u0435\u0440\u0456\u043d \u043a\u04e9\u0440\u0441\u0435\u0442\u0443', 'Show LO sources')}
+                                            {loadingLoCoverageSources ? localText('Загрузка…', 'Жүктеу…', 'Loading…') : localText('Показать LO-источники', 'LO көздерін көрсету', 'Show LO sources')}
                                         </button>
                                     </div>
                                     {loCoverageSources?.variant === activeVariant && (
                                         <div style={{ marginTop: 10 }}>
                                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                                                <span>{localText('\u0412\u0441\u0435\u0433\u043e LO', '\u0411\u0430\u0440\u043b\u044b\u049b LO', 'Total LOs')}: <b>{loCoverageSources.summary?.los || 0}</b></span>
-                                                <span style={{ color: '#2e7d32' }}>{localText('\u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440', 'real courses')}: <b>{loCoverageSources.summary?.real_confirmed || 0}</b></span>
+                                                <span>{localText('Всего LO', 'Барлық LO', 'Total LOs')}: <b>{loCoverageSources.summary?.los || 0}</b></span>
+                                                <span style={{ color: '#2e7d32' }}>{localText('реальные дисциплины', 'нақты пәндер', 'real courses')}: <b>{loCoverageSources.summary?.real_confirmed || 0}</b></span>
                                                 <span style={{ color: '#8a5a00' }}>bridge: <b>{loCoverageSources.summary?.bridge_supported || 0}</b></span>
-                                                <span style={{ color: '#c62828' }}>{localText('\u0441\u043b\u0430\u0431\u044b\u0435', '\u04d9\u043b\u0441\u0456\u0437', 'weak')}: <b>{loCoverageSources.summary?.weak || 0}</b></span>
+                                                <span style={{ color: '#c62828' }}>{localText('слабые', 'әлсіз', 'weak')}: <b>{loCoverageSources.summary?.weak || 0}</b></span>
+                                            </div>
+                                            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #dfeaf6' }}>
+                                                <div style={{ fontWeight: 700, marginBottom: 6, color: '#17233b' }}>
+                                                    {localText('\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f \u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0445 \u043f\u043e\u043a\u0440\u044b\u0432\u0430\u044e\u0442', '\u041e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u043b\u0435\u0440\u0456 \u0436\u04d9\u043d\u0435 \u043e\u043b\u0430\u0440\u0434\u044b \u049b\u0430\u043c\u0442\u0438\u0442\u044b\u043d \u043f\u04d9\u043d\u0434\u0435\u0440', 'Learning outcomes and covering courses')}
+                                                </div>
+                                                <div style={{ fontSize: 12, color: '#566', marginBottom: 8 }}>
+                                                    {localText('\u041f\u043e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0433\u0430\u043b\u043e\u0447\u043a\u0443 \u043d\u0430\u043f\u0440\u043e\u0442\u0438\u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430 \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f, \u0447\u0442\u043e\u0431\u044b \u0443\u0432\u0438\u0434\u0435\u0442\u044c \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u043f\u043b\u0430\u043d\u0430, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044e\u0442 \u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0438\u0436\u0435\u043d\u0438\u0435.', '\u041e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u0441\u0456\u043d\u0456\u04a3 \u049b\u0430\u0441\u044b\u043d\u0430 \u0431\u0435\u043b\u0433\u0456 \u049b\u043e\u0439\u0441\u0430\u04a3\u044b\u0437, \u043e\u043d\u044b \u0440\u0430\u0441\u0442\u0430\u0439\u0442\u044b\u043d \u0436\u043e\u0441\u043f\u0430\u0440 \u043f\u04d9\u043d\u0434\u0435\u0440\u0456 \u043a\u04e9\u0440\u0441\u0435\u0442\u0456\u043b\u0435\u0434\u0456.', 'Tick a learning outcome to see the plan courses that support it.')}
+                                                </div>
+                                                <div style={{ display: 'grid', gap: 7 }}>
+                                                    {(loCoverageSources.items || []).map(row => {
+                                                        const loKey = `${activeVariant}:${row.lo_code}`
+                                                        const checked = Boolean(expandedLoCourses[loKey])
+                                                        const real = row.real_sources || []
+                                                        const bridges = row.bridge_sources || []
+                                                        return <div key={`lo-course-map-${row.lo_code}`} style={{ padding: '8px 10px', borderRadius: 8, background: checked ? '#f8fbff' : '#fbfcfe', border: '1px solid #e4edf7' }}>
+                                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked}
+                                                                    onChange={() => setExpandedLoCourses(current => ({ ...current, [loKey]: !current[loKey] }))}
+                                                                    style={{ marginTop: 3 }}
+                                                                />
+                                                                <span>
+                                                                    <strong>{row.lo_code}</strong> ? {Math.round((row.coverage || 0) * 100)}% ? {row.status === 'real_confirmed' ? localText('\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u043c\u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430\u043c\u0438', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440\u043c\u0435\u043d \u0440\u0430\u0441\u0442\u0430\u043b\u0493\u0430\u043d', 'confirmed by real courses') : row.status === 'bridge_supported' ? localText('\u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0430\u043d\u043e bridge-\u043c\u043e\u0434\u0443\u043b\u0435\u043c', 'bridge-\u043c\u043e\u0434\u0443\u043b\u044c\u043c\u0435\u043d \u049b\u043e\u043b\u0434\u0430\u0443 \u0442\u0430\u043f\u049b\u0430\u043d', 'supported by a bridge module') : localText('\u043d\u0443\u0436\u043d\u043e \u0443\u0441\u0438\u043b\u0438\u0442\u044c', '\u043a\u04af\u0448\u0435\u0439\u0442\u0443 \u049b\u0430\u0436\u0435\u0442', 'needs strengthening')}
+                                                                    <span style={{ display: 'block', marginTop: 2, color: '#667085', fontSize: 12 }}>{row.lo_text}</span>
+                                                                </span>
+                                                            </label>
+                                                            {checked && <div style={{ marginTop: 8, paddingLeft: 25, display: 'grid', gap: 5, fontSize: 12 }}>
+                                                                {real.length > 0 && real.map(src => (
+                                                                    <div key={`lo-real-${row.lo_code}-${src.course_id}`} style={{ color: '#1b5e20' }}>
+                                                                        ? {src.title} ? {src.credits} {t('credits')} ? AI {Math.round((src.score || 0) * 100)}% ? EPVO {Math.round((src.expert_score || 0) * 100)}%
+                                                                    </div>
+                                                                ))}
+                                                                {bridges.length > 0 && bridges.map(src => (
+                                                                    <div key={`lo-bridge-${row.lo_code}-${src.bridge_id || src.title}`} style={{ color: '#8a5a00' }}>
+                                                                        ? bridge: {src.title} ? {src.credits} {t('credits')} ? {t('semester')} {src.semester}
+                                                                    </div>
+                                                                ))}
+                                                                {real.length === 0 && bridges.length === 0 && <div style={{ color: '#b71c1c' }}>
+                                                                    {localText('\u0412 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u043f\u043b\u0430\u043d\u0435 \u043d\u0435\u0442 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0443\u0432\u0435\u0440\u0435\u043d\u043d\u043e \u043f\u043e\u043a\u0440\u044b\u0432\u0430\u044e\u0442 \u044d\u0442\u043e\u0442 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442.', '\u0410\u0493\u044b\u043c\u0434\u0430\u0493\u044b \u0436\u043e\u0441\u043f\u0430\u0440\u0434\u0430 \u0431\u04b1\u043b \u043d\u04d9\u0442\u0438\u0436\u0435\u043d\u0456 \u0441\u0435\u043d\u0456\u043c\u0434\u0456 \u049b\u0430\u043c\u0442\u0438\u0442\u044b\u043d \u043f\u04d9\u043d\u0434\u0435\u0440 \u0436\u043e\u049b.', 'No courses in the current plan confidently cover this outcome.')}
+                                                                </div>}
+                                                            </div>}
+                                                        </div>
+                                                    })}
+                                                </div>
                                             </div>
                                             <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                                                 {(loCoverageSources.items || []).map(row => (
@@ -1128,24 +1186,24 @@ export default function PlanBuilder() {
                                                                 background: row.status === 'real_confirmed' ? '#e8f5e9' : row.status === 'bridge_supported' ? '#fff8e1' : '#ffebee',
                                                                 color: row.status === 'real_confirmed' ? '#1b5e20' : row.status === 'bridge_supported' ? '#8a5a00' : '#b71c1c'
                                                             }}>
-                                                                {row.status === 'real_confirmed' ? localText('\u0440\u0435\u0430\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d', 'real course') : row.status === 'bridge_supported' ? 'bridge' : localText('\u0441\u043b\u0430\u0431\u043e\u0435 \u043f\u043e\u043a\u0440\u044b\u0442\u0438\u0435', '\u04d9\u043b\u0441\u0456\u0437 \u049b\u0430\u043c\u0442\u0443', 'weak')}
+                                                                {row.status === 'real_confirmed' ? localText('реальная дисциплина', 'нақты пән', 'real course') : row.status === 'bridge_supported' ? 'bridge' : localText('слабое покрытие', 'әлсіз қамту', 'weak')}
                                                             </span>
                                                         </summary>
                                                         <div style={{ marginTop: 6, fontSize: 12, color: '#455' }}>{row.lo_text}</div>
                                                         <div style={{ marginTop: 5, padding: '6px 8px', borderRadius: 6, background: row.coverage_kind === 'bridge_target_assumption' ? '#fff8e1' : '#f5f8fb', fontSize: 11, color: '#5d6470' }}>
                                                             {row.coverage_explanation || (row.status === 'bridge_supported'
-                                                                ? localText('75% \u2014 \u0441\u043b\u0443\u0436\u0435\u0431\u043d\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430 \u043f\u0440\u043e\u0435\u043a\u0442\u043d\u043e\u0433\u043e bridge, \u0430 \u043d\u0435 \u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430 \u0440\u0435\u0430\u043b\u044c\u043d\u043e\u0439 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u0415\u041f\u0412\u041e.', '75% \u2014 \u0436\u043e\u0431\u0430\u043b\u044b\u049b bridge \u049b\u044b\u0437\u043c\u0435\u0442\u0442\u0456\u043a \u0431\u0430\u0493\u0430\u0441\u044b, \u043d\u0430\u049b\u0442\u044b \u0415\u041f\u0412\u041e \u043f\u04d9\u043d\u0456\u043d\u0456\u04a3 \u0441\u0430\u0440\u0430\u043f\u0442\u0430\u043c\u0430\u043b\u044b\u049b \u0431\u0430\u0493\u0430\u0441\u044b \u0435\u043c\u0435\u0441.', '75% is a planning assumption for a proposed bridge, not an expert EPVO course score.')
+                                                                ? localText('75% — служебная оценка проектного bridge, а не экспертная оценка реальной дисциплины ЕПВО.', '75% — жобалық bridge қызметтік бағасы, нақты ЕПВО пәнінің сараптамалық бағасы емес.', '75% is a planning assumption for a proposed bridge, not an expert EPVO course score.')
                                                                 : '')}
                                                         </div>
                                                         <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 12 }}>
                                                             {(row.real_sources || []).slice(0, 3).map(src => (
-                                                                <div key={`real-${row.lo_code}-${src.course_id}`}>\u2713 {src.title} \u00b7 {src.credits} {t('credits')} \u00b7 AI {Math.round((src.score || 0) * 100)}% \u00b7 EPVO {Math.round((src.expert_score || 0) * 100)}%</div>
+                                                                <div key={`real-${row.lo_code}-${src.course_id}`}>✓ {src.title} · {src.credits} {t('credits')} · AI {Math.round((src.score || 0) * 100)}% · EPVO {Math.round((src.expert_score || 0) * 100)}%</div>
                                                             ))}
                                                             {(row.bridge_sources || []).slice(0, 3).map(src => (
                                                                 <div key={`bridge-${row.lo_code}-${src.bridge_id}`} style={{ color: '#8a5a00' }}>
-                                                                    \u21b3 bridge \u0432 \u043f\u043b\u0430\u043d\u0435: {src.title} \u00b7 {src.credits} {t('credits')} \u00b7 {t('semester')} {src.semester}
+                                                                    ↳ bridge в плане: {src.title} · {src.credits} {t('credits')} · {t('semester')} {src.semester}
                                                                     <button className="btn btn-secondary" style={{ marginLeft: 7, padding: '3px 7px', fontSize: 10 }} onClick={() => document.querySelector(`[data-plan-semester="${src.semester}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                                                                        {localText('\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0432 \u043f\u043b\u0430\u043d\u0435', '\u0416\u043e\u0441\u043f\u0430\u0440\u0434\u0430 \u043a\u04e9\u0440\u0441\u0435\u0442\u0443', 'Show in plan')}
+                                                                        {localText('Показать в плане', 'Жоспарда көрсету', 'Show in plan')}
                                                                     </button>
                                                                 </div>
                                                             ))}
@@ -1159,7 +1217,7 @@ export default function PlanBuilder() {
                                 {currentPlan.suspicious_courses?.length > 0 && (
                                     <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082' }}>
                                         <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <strong>{localText('РЎРѕРјРЅРёС‚РµР»СЊРЅС‹Рµ РґРёСЃС†РёРїР»РёРЅС‹', 'РљТЇРјУ™РЅРґС– РїУ™РЅРґРµСЂ', 'Suspicious courses')}: {currentPlan.suspicious_courses.length}</strong>
+                                            <strong>{localText('Сомнительные дисциплины', 'Күмәнді пәндер', 'Suspicious courses')}: {currentPlan.suspicious_courses.length}</strong>
                                             <button
                                                 className="btn btn-secondary"
                                                 style={{ padding: '5px 9px', fontSize: 11, borderColor: '#c17b00' }}
@@ -1167,28 +1225,28 @@ export default function PlanBuilder() {
                                                 onClick={loadAllVisibleCourseReplacements}
                                             >
                                                 {loadingCourseReplacement === 'all'
-                                                    ? localText('РС‰РµРј Р·Р°РјРµРЅС‹вЂ¦', 'РђСѓС‹СЃС‚С‹СЂСѓР»Р°СЂ С–Р·РґРµР»СѓРґРµвЂ¦', 'Searching replacementsвЂ¦')
-                                                    : localText('РџРѕРґРѕР±СЂР°С‚СЊ Р·Р°РјРµРЅС‹ РґР»СЏ РІСЃРµС… РІРёРґРёРјС‹С…', 'РљУ©СЂС–РЅРµС‚С–РЅРґРµСЂРґС–ТЈ Р±У™СЂС–РЅРµ Р°СѓС‹СЃС‚С‹СЂСѓ С‚Р°Р±Сѓ', 'Find replacements for all visible')}
+                                                    ? localText('Ищем замены…', 'Ауыстырулар ізделуде…', 'Searching replacements…')
+                                                    : localText('Подобрать замены для всех видимых', 'Көрінетіндердің бәріне ауыстыру табу', 'Find replacements for all visible')}
                                             </button>
                                         </div>
                                         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
                                             {currentPlan.suspicious_courses.slice(0, 6).map((row, idx) => (
                                                 <div key={`${row.course_id}-${idx}`} style={{ fontSize: 12, color: '#6d4c41' }}>
-                                                    <strong>{row.title}</strong> В· {t('semester')} {row.semester} В· {Math.round((row.max_score || 0) * 100)}%
+                                                    <strong>{row.title}</strong> · {t('semester')} {row.semester} · {Math.round((row.max_score || 0) * 100)}%
                                                     <span style={{ marginLeft: 6 }}>
                                                         {row.reasons?.map(reason => localText(
-                                                            reason === 'wrong_education_level' ? 'РЅРµ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ СѓСЂРѕРІРЅСЋ РѕР±СЂР°Р·РѕРІР°РЅРёСЏ' : reason === 'not_core_for_program' ? 'РЅРµ СЏРґСЂРѕ РїСЂРѕРіСЂР°РјРјС‹' : reason === 'weak_lo_evidence' ? 'СЃР»Р°Р±РѕРµ LO-РґРѕРєР°Р·Р°С‚РµР»СЊСЃС‚РІРѕ' : 'СЃР»РёС€РєРѕРј СЂР°РЅРѕ',
-                                                            reason === 'wrong_education_level' ? 'Р±С–Р»С–Рј РґРµТЈРіРµР№С–РЅРµ СЃУ™Р№РєРµСЃ РµРјРµСЃ' : reason === 'not_core_for_program' ? 'Р±Р°Т“РґР°СЂР»Р°РјР° У©Р·РµРіС– РµРјРµСЃ' : reason === 'weak_lo_evidence' ? 'LO РґУ™Р»РµР»С– У™Р»СЃС–Р·' : 'С‚С‹Рј РµСЂС‚Рµ',
+                                                            reason === 'wrong_education_level' ? 'не соответствует уровню образования' : reason === 'not_core_for_program' ? 'не ядро программы' : reason === 'weak_lo_evidence' ? 'слабое LO-доказательство' : 'слишком рано',
+                                                            reason === 'wrong_education_level' ? 'білім деңгейіне сәйкес емес' : reason === 'not_core_for_program' ? 'бағдарлама өзегі емес' : reason === 'weak_lo_evidence' ? 'LO дәлелі әлсіз' : 'тым ерте',
                                                             reason === 'wrong_education_level' ? 'wrong degree level' : reason === 'not_core_for_program' ? 'not programme core' : reason === 'weak_lo_evidence' ? 'weak LO evidence' : 'too early',
                                                         )).join('; ')}
                                                     </span>
                                                     {row.top_lo_code && <div style={{ marginTop: 4, color: '#5d6470' }} title={row.top_lo_text || row.top_lo_code}>
-                                                        {localText('Р›СѓС‡С€Р°СЏ СЃРІСЏР·СЊ', 'Р•ТЈ Р¶Р°Т›СЃС‹ Р±Р°Р№Р»Р°РЅС‹СЃ', 'Best link')}: {row.top_lo_code} В· {Math.round((row.max_score || 0) * 100)}%
+                                                        {localText('Лучшая связь', 'Ең жақсы байланыс', 'Best link')}: {row.top_lo_code} · {Math.round((row.max_score || 0) * 100)}%
                                                     </div>}
                                                     {row.reason_details?.length > 0 && (
                                                         <div style={{ marginTop: 4, color: '#6d4c41', lineHeight: 1.35 }}>
                                                             {row.reason_details.map((reason, reasonIndex) => (
-                                                                <div key={reasonIndex}>вЂў {reason}</div>
+                                                                <div key={reasonIndex}>• {reason}</div>
                                                             ))}
                                                         </div>
                                                     )}
@@ -1204,15 +1262,15 @@ export default function PlanBuilder() {
                                                             disabled={matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'saving'}
                                                             onClick={() => handleMatchFeedback(row.course_id, row.top_lo_id, 'confirmed')}
                                                         >
-                                                            {matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'confirmed' ? 'вњ“ ' : ''}
-                                                            {localText('РџРѕРґС‚РІРµСЂРґРёС‚СЊ СЃРІСЏР·СЊ', 'Р‘Р°Р№Р»Р°РЅС‹СЃС‚С‹ СЂР°СЃС‚Р°Сѓ', 'Confirm link')}
+                                                            {matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'confirmed' ? '✓ ' : ''}
+                                                            {localText('Подтвердить связь', 'Байланысты растау', 'Confirm link')}
                                                         </button>}
                                                         <button
                                                             className="btn btn-secondary"
                                                             style={{ padding: '5px 8px', fontSize: 11, borderColor: '#2e7d32', color: '#2e7d32' }}
                                                             onClick={() => confirmSuspiciousCourse(row.course_id, row.title)}
                                                         >
-                                                            {localText('РћСЃС‚Р°РІРёС‚СЊ РІ РїР»Р°РЅРµ', 'Р–РѕСЃРїР°СЂРґР° Т›Р°Р»РґС‹СЂСѓ', 'Keep in plan')}
+                                                            {localText('Оставить в плане', 'Жоспарда қалдыру', 'Keep in plan')}
                                                         </button>
                                                         <button
                                                             className="btn btn-secondary"
@@ -1220,8 +1278,8 @@ export default function PlanBuilder() {
                                                             onClick={() => toggleCourseExclusion(row.course_id, row.title)}
                                                         >
                                                             {excludedCourses[row.course_id]
-                                                                ? localText('вњ“ Р—Р°РјРµРЅРёС‚СЊ РїСЂРё РїРµСЂРµРіРµРЅРµСЂР°С†РёРё', 'вњ“ ТљР°Р№С‚Р° Т›Т±СЂСѓРґР° Р°СѓС‹СЃС‚С‹СЂСѓ', 'вњ“ Replace on regeneration')
-                                                                : localText('РћС‚РјРµС‚РёС‚СЊ РЅР° Р·Р°РјРµРЅСѓ', 'РђСѓС‹СЃС‚С‹СЂСѓТ“Р° Р±РµР»РіС–Р»РµСѓ', 'Mark for replacement')}
+                                                                ? localText('✓ Заменить при перегенерации', '✓ Қайта құруда ауыстыру', '✓ Replace on regeneration')
+                                                                : localText('Отметить на замену', 'Ауыстыруға белгілеу', 'Mark for replacement')}
                                                         </button>
                                                         <button
                                                             className="btn btn-primary"
@@ -1230,37 +1288,37 @@ export default function PlanBuilder() {
                                                             onClick={() => loadCourseReplacements(row.course_id)}
                                                         >
                                                             {loadingCourseReplacement === row.course_id
-                                                                ? localText('РџРѕРёСЃРєвЂ¦', 'Р†Р·РґРµСѓвЂ¦', 'SearchingвЂ¦')
-                                                                : localText('РџРѕРґРѕР±СЂР°С‚СЊ 3 Р·Р°РјРµРЅС‹', '3 Р°СѓС‹СЃС‚С‹СЂСѓРґС‹ С‚Р°ТЈРґР°Сѓ', 'Find 3 replacements')}
+                                                                ? localText('Поиск…', 'Іздеу…', 'Searching…')
+                                                                : localText('Подобрать 3 замены', '3 ауыстыруды таңдау', 'Find 3 replacements')}
                                                         </button>
                                                     </div>
                                                     {courseReplacementPreviews[row.course_id] && <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
                                                         {courseReplacementPreviews[row.course_id].elapsed_seconds !== undefined && (
                                                             <div style={{ color: '#6d4c41', fontSize: 12 }}>
-                                                                {localText(`РџРѕРґР±РѕСЂ Р·Р°РјРµРЅ РІС‹РїРѕР»РЅРµРЅ Р·Р° ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`, `РђСѓС‹СЃС‚С‹СЂСѓРґС‹ С‚Р°ТЈРґР°Сѓ ${courseReplacementPreviews[row.course_id].elapsed_seconds}s С–С€С–РЅРґРµ РѕСЂС‹РЅРґР°Р»РґС‹.`, `Replacement preview completed in ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`)}
+                                                                {localText(`Подбор замен выполнен за ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`, `Ауыстыруды таңдау ${courseReplacementPreviews[row.course_id].elapsed_seconds}s ішінде орындалды.`, `Replacement preview completed in ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`)}
                                                             </div>
                                                         )}
                                                         {(courseReplacementPreviews[row.course_id].candidates || []).length ? (courseReplacementPreviews[row.course_id].candidates || []).map(candidate => (
                                                             <div key={candidate.course_id} style={{ padding: 8, borderRadius: 7, background: '#fff', border: '1px solid #ead49e' }}>
-                                                                <strong>{localize(candidate.title_translations || candidate.title)}</strong> В· {candidate.credits} {t('credits')}
-                                                                <div style={{ color: '#667', marginTop: 3 }}>AI {Math.round((candidate.model_score || 0) * 100)}% В· Р•РџР’Рћ {Math.round((candidate.expert_score || 0) * 100)}% В· LO {candidate.covered_lo_count}</div>
+                                                                <strong>{localize(candidate.title_translations || candidate.title)}</strong> · {candidate.credits} {t('credits')}
+                                                                <div style={{ color: '#667', marginTop: 3 }}>AI {Math.round((candidate.model_score || 0) * 100)}% · ЕПВО {Math.round((candidate.expert_score || 0) * 100)}% · LO {candidate.covered_lo_count}</div>
                                                                 {candidate.covered_los?.length > 0 && <div style={{ color: '#46566a', marginTop: 3 }}>
-                                                                    {localText('РџСЂРѕС„РµСЃСЃРёРѕРЅР°Р»СЊРЅС‹Рµ LO', 'РљУ™СЃС–Р±Рё РћРќ', 'Professional LOs')}: {candidate.covered_los.join(', ')}
-                                                                    {candidate.recommended_semester ? ` В· ${localText('СЂРµРєРѕРјРµРЅРґСѓРµРјС‹Р№ СЃРµРјРµСЃС‚СЂ', 'Т±СЃС‹РЅС‹Р»Р°С‚С‹РЅ СЃРµРјРµСЃС‚СЂ', 'recommended semester')} ${candidate.recommended_semester}` : ''}
+                                                                    {localText('Профессиональные LO', 'Кәсіби ОН', 'Professional LOs')}: {candidate.covered_los.join(', ')}
+                                                                    {candidate.recommended_semester ? ` · ${localText('рекомендуемый семестр', 'ұсынылатын семестр', 'recommended semester')} ${candidate.recommended_semester}` : ''}
                                                                 </div>}
-                                                                {candidate.selection_reason && <div style={{ color: '#39704c', marginTop: 3 }}>{candidate.selection_reason}</div>}
+                                                                {candidate.selection_reason && <div style={{ color: '#39704c', marginTop: 3 }}>{localize(candidate.selection_reason_translations || candidate.selection_reason)}</div>}
                                                                 {candidate.description && <div style={{ color: '#667', marginTop: 3 }}>{candidate.description}</div>}
                                                                 <button className="btn btn-primary" style={{ marginTop: 6, padding: '5px 8px', fontSize: 11 }} disabled={Boolean(applyingCourseReplacement)} onClick={() => applyCourseReplacement(row.course_id, candidate.course_id)}>
-                                                                    {applyingCourseReplacement === `${row.course_id}:${candidate.course_id}` ? localText('Р—Р°РјРµРЅР°вЂ¦', 'РђСѓС‹СЃС‚С‹СЂСѓвЂ¦', 'ReplacingвЂ¦') : localText('РџРѕРґС‚РІРµСЂРґРёС‚СЊ Р·Р°РјРµРЅСѓ', 'РђСѓС‹СЃС‚С‹СЂСѓРґС‹ СЂР°СЃС‚Р°Сѓ', 'Confirm replacement')}
+                                                                    {applyingCourseReplacement === `${row.course_id}:${candidate.course_id}` ? localText('Замена…', 'Ауыстыру…', 'Replacing…') : localText('Подтвердить замену', 'Ауыстыруды растау', 'Confirm replacement')}
                                                                 </button>
                                                             </div>
-                                                        )) : <div style={{ color: '#8a5a00' }}>{courseReplacementPreviews[row.course_id].no_candidate_reason || localText('РџРѕРґС…РѕРґСЏС‰РµР№ СЂР°РІРЅРѕС†РµРЅРЅРѕР№ Р·Р°РјРµРЅС‹ РїРѕРєР° РЅРµС‚.', 'РЎУ™Р№РєРµСЃ Р±Р°Р»Р°РјР° У™Р»С– Р¶РѕТ›.', 'No equivalent replacement found yet.')}</div>}
+                                                        )) : <div style={{ color: '#8a5a00' }}>{courseReplacementPreviews[row.course_id].no_candidate_reason || localText('Подходящей равноценной замены пока нет.', 'Сәйкес балама әлі жоқ.', 'No equivalent replacement found yet.')}</div>}
                                                     </div>}
                                                 </div>
                                             ))}
                                         </div>
                                         <div style={{ marginTop: 6, fontSize: 12, color: '#795548' }}>
-                                            {localText('РЎРёСЃС‚РµРјР° РЅРµ Р±Р»РѕРєРёСЂСѓРµС‚ РїСЂРѕСЃРјРѕС‚СЂ, РЅРѕ С‚Р°РєРёРµ РґРёСЃС†РёРїР»РёРЅС‹ РЅСѓР¶РЅРѕ Р·Р°РјРµРЅРёС‚СЊ РёР»Рё РїРѕРґС‚РІРµСЂРґРёС‚СЊ СЌРєСЃРїРµСЂС‚РѕРј.', 'Р–ТЇР№Рµ Т›Р°СЂР°СѓРґС‹ Р±Т±Т“Р°С‚С‚Р°РјР°Р№РґС‹, Р±С–СЂР°Т› РјТ±РЅРґР°Р№ РїУ™РЅРґРµСЂРґС– Р°СѓС‹СЃС‚С‹СЂСѓ РЅРµРјРµСЃРµ СЃР°СЂР°РїС€С‹РјРµРЅ СЂР°СЃС‚Р°Сѓ РєРµСЂРµРє.', 'The system does not block viewing, but these courses should be replaced or expert-confirmed.')}
+                                            {localText('Система не блокирует просмотр, но такие дисциплины нужно заменить или подтвердить экспертом.', 'Жүйе қарауды бұғаттамайды, бірақ мұндай пәндерді ауыстыру немесе сарапшымен растау керек.', 'The system does not block viewing, but these courses should be replaced or expert-confirmed.')}
                                         </div>
                                     </div>
                                 )}
@@ -1269,14 +1327,14 @@ export default function PlanBuilder() {
                         {currentPlan?.metrics?.verification?.goso_compliance?.applicable && (() => {
                             const goso = currentPlan.metrics.verification.goso_compliance
                             return <CompactSection title={localText('\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0413\u041e\u0421\u041e \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0438 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d', '\u049a\u0430\u0437\u0430\u049b\u0441\u0442\u0430\u043d \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0441\u044b\u043d\u044b\u04a3 \u041c\u0416\u041c\u0411\u0421 \u0441\u04d9\u0439\u043a\u0435\u0441\u0442\u0456\u0433\u0456', 'Kazakhstan state-standard compliance')} accent={goso.compliant ? '#2e7d32' : '#c62828'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{localText('РЎРѕРѕС‚РІРµС‚СЃС‚РІРёРµ Р“РћРЎРћ Р РµСЃРїСѓР±Р»РёРєРё РљР°Р·Р°С…СЃС‚Р°РЅ', 'ТљР°Р·Р°Т›СЃС‚Р°РЅ Р РµСЃРїСѓР±Р»РёРєР°СЃС‹РЅС‹ТЈ РњР–РњР‘РЎ СЃУ™Р№РєРµСЃС‚С–РіС–', 'Kazakhstan state-standard compliance')}</h3>
+                                <h3 style={{ marginTop: 0 }}>{localText('Соответствие ГОСО Республики Казахстан', 'Қазақстан Республикасының МЖМБС сәйкестігі', 'Kazakhstan state-standard compliance')}</h3>
                                 <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                                    <span>{localText('РЎС‚Р°С‚СѓСЃ', 'РљТЇР№С–', 'Status')}: <strong>{goso.compliant ? localText('СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚', 'СЃУ™Р№РєРµСЃ', 'compliant') : localText('РµСЃС‚СЊ РЅР°СЂСѓС€РµРЅРёСЏ', 'Р±Т±Р·СѓС€С‹Р»С‹Т›С‚Р°СЂ Р±Р°СЂ', 'violations found')}</strong></span>
-                                    <span>{localText('РћР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РєСЂРµРґРёС‚С‹', 'РњС–РЅРґРµС‚С‚С– РєСЂРµРґРёС‚С‚РµСЂ', 'Mandatory credits')}: <strong>{goso.mandatory_credits}</strong></span>
-                                    <span>{localText('РЈСЂРѕРІРµРЅСЊ', 'Р”РµТЈРіРµР№', 'Level')}: <strong>{goso.education_level}</strong></span>
+                                    <span>{localText('Статус', 'Күйі', 'Status')}: <strong>{goso.compliant ? localText('соответствует', 'сәйкес', 'compliant') : localText('есть нарушения', 'бұзушылықтар бар', 'violations found')}</strong></span>
+                                    <span>{localText('Обязательные кредиты', 'Міндетті кредиттер', 'Mandatory credits')}: <strong>{goso.mandatory_credits}</strong></span>
+                                    <span>{localText('Уровень', 'Деңгей', 'Level')}: <strong>{goso.education_level}</strong></span>
                                 </div>
                                 {(goso.violations || []).map((item, index) => <div key={index} style={{ marginTop: 8, color: '#9b1c1c', fontSize: 13 }}>
-                                    вљ пёЏ {item.title || item.reason}: {item.actual !== undefined ? `${item.actual} / ${item.required}` : ''}
+                                    ⚠️ {item.title || item.reason}: {item.actual !== undefined ? `${item.actual} / ${item.required}` : ''}
                                 </div>)}
                                 <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>{goso.source}</div>
                             </CompactSection>
@@ -1284,35 +1342,36 @@ export default function PlanBuilder() {
                         {currentPlan?.metrics?.verification?.pedagogical_audit && (() => {
                             const audit = currentPlan.metrics.verification.pedagogical_audit
                             return <CompactSection title={localText('\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043b\u0430\u043d\u0430', '\u0416\u043e\u0441\u043f\u0430\u0440 \u0441\u0430\u043f\u0430\u0441\u044b\u043d \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0442\u044b \u0442\u0435\u043a\u0441\u0435\u0440\u0443', 'Automatic curriculum quality audit')} accent={audit.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{localText('РђРІС‚РѕРјР°С‚РёС‡РµСЃРєР°СЏ РїСЂРѕРІРµСЂРєР° РєР°С‡РµСЃС‚РІР° РїР»Р°РЅР°', 'Р–РѕСЃРїР°СЂ СЃР°РїР°СЃС‹РЅ Р°РІС‚РѕРјР°С‚С‚С‹ С‚РµРєСЃРµСЂСѓ', 'Automatic curriculum quality audit')}</h3>
+                                <h3 style={{ marginTop: 0 }}>{localText('Автоматическая проверка качества плана', 'Жоспар сапасын автоматты тексеру', 'Automatic curriculum quality audit')}</h3>
                                 <div style={{ fontSize: 13, color: '#566', marginBottom: 10 }}>{audit.engine}</div>
                                 <strong style={{ color: audit.passed ? '#1b5e20' : '#9a5b00' }}>
                                     {audit.passed
-                                        ? localText('РџР»Р°РЅ РїСЂРѕС€С‘Р» РїСЂРѕРІРµСЂРєСѓ СЃРІСЏР·РµР№ СЃ Р Рћ Рё РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚Рё СЃРµРјРµСЃС‚СЂРѕРІ.', 'Р–РѕСЃРїР°СЂ РћРќ Р±Р°Р№Р»Р°РЅС‹СЃС‚Р°СЂС‹ РјРµРЅ СЃРµРјРµСЃС‚СЂ СЂРµС‚С‚С–Р»С–РіС– С‚РµРєСЃРµСЂС–СЃС–РЅРµРЅ У©С‚С‚С–.', 'The plan passed LO alignment and semester sequencing checks.')
-                                        : localText('РџР»Р°РЅ С‚СЂРµР±СѓРµС‚ РёСЃРїСЂР°РІР»РµРЅРёР№ РґРѕ СЌРєСЃРїРµСЂС‚РЅРѕРіРѕ СѓС‚РІРµСЂР¶РґРµРЅРёСЏ.', 'Р–РѕСЃРїР°СЂ СЃР°СЂР°РїС€С‹Р»С‹Т› Р±РµРєС–С‚СѓРіРµ РґРµР№С–РЅ С‚ТЇР·РµС‚СѓРґС– Т›Р°Р¶РµС‚ РµС‚РµРґС–.', 'The plan needs corrections before expert approval.')}
+                                        ? localText('План прошёл проверку связей с РО и последовательности семестров.', 'Жоспар ОН байланыстары мен семестр реттілігі тексерісінен өтті.', 'The plan passed LO alignment and semester sequencing checks.')
+                                        : localText('План требует исправлений до экспертного утверждения.', 'Жоспар сарапшылық бекітуге дейін түзетуді қажет етеді.', 'The plan needs corrections before expert approval.')}
                                 </strong>
                                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: 13 }}>
-                                    <span>{localText('РЎС‚СЂСѓРєС‚СѓСЂРЅС‹Рµ РїСЂРµСЂРµРєРІРёР·РёС‚С‹', 'ТљТ±СЂС‹Р»С‹РјРґС‹Т› РїСЂРµСЂРµРєРІРёР·РёС‚С‚РµСЂ', 'Structural prerequisites')}: <b>{audit.structural_foundations?.length || 0}</b></span>
-                                    <span>{localText('Р Рћ Р±РµР· СЂРµР°Р»СЊРЅРѕР№ РґРёСЃС†РёРїР»РёРЅС‹', 'РќР°Т›С‚С‹ РїУ™РЅСЃС–Р· РћРќ', 'LOs without a real course')}: <b>{audit.lo_without_real_course?.length || 0}</b></span>
-                                    <span>{localText('РЎР»Р°Р±С‹Рµ РґРёСЃС†РёРїР»РёРЅС‹', 'УР»СЃС–Р· РїУ™РЅРґРµСЂ', 'Weak courses')}: <b>{audit.weak_courses?.length || 0}</b></span>
-                                    <span>{localText('РќРµСѓРјРµСЃС‚РЅС‹Р№ СЃРµРјРµСЃС‚СЂ', 'РћСЂС‹РЅСЃС‹Р· СЃРµРјРµСЃС‚СЂ', 'Semester misplacements')}: <b>{audit.semester_misplacements?.length || 0}</b></span>
+                                    <span>{localText('Структурные пререквизиты', 'Құрылымдық пререквизиттер', 'Structural prerequisites')}: <b>{audit.structural_foundations?.length || 0}</b></span>
+                                    <span>{localText('РО без реальной дисциплины', 'Нақты пәнсіз ОН', 'LOs without a real course')}: <b>{audit.lo_without_real_course?.length || 0}</b></span>
+                                    <span>{localText('Слабые дисциплины', 'Әлсіз пәндер', 'Weak courses')}: <b>{audit.weak_courses?.length || 0}</b></span>
+                                    <span>{localText('Неуместный семестр', 'Орынсыз семестр', 'Semester misplacements')}: <b>{audit.semester_misplacements?.length || 0}</b></span>
                                 </div>
                                 {(audit.lo_without_real_course || []).slice(0, 5).map(row => <div key={row.lo_code} style={{ marginTop: 7, fontSize: 12, color: '#7a4f00' }}>
-                                    вљ  {row.lo_code}: {row.lo_text} В· {localText('Р»СѓС‡С€Р°СЏ СЂРµР°Р»СЊРЅР°СЏ СЃРІСЏР·СЊ', 'РµТЈ Р¶Р°Т›СЃС‹ РЅР°Т›С‚С‹ Р±Р°Р№Р»Р°РЅС‹СЃ', 'best real link')} {Math.round((row.max_real_course_score || 0) * 100)}%
+                                    ⚠ {row.lo_code}: {row.lo_text} · {localText('лучшая реальная связь', 'ең жақсы нақты байланыс', 'best real link')} {Math.round((row.max_real_course_score || 0) * 100)}%
                                 </div>)}
                                 {(audit.weak_courses || []).slice(0, 5).map(row => <div key={row.course_id} style={{ marginTop: 7, fontSize: 12, color: '#7a4f00' }}>
-                                    вљ  {row.title} В· {t('semester')} {row.semester} В· AI {Math.round((row.model_score || 0) * 100)}% В· EPVO {Math.round((row.epvo_expert_score || 0) * 100)}%
+                                    ⚠ {row.title} · {t('semester')} {row.semester} · AI {Math.round((row.model_score || 0) * 100)}% · EPVO {Math.round((row.epvo_expert_score || 0) * 100)}%
                                 </div>)}
                                 {(audit.structural_foundations || []).slice(0, 5).map(row => <div key={`foundation-${row.course_id}`} style={{ marginTop: 7, fontSize: 12, color: '#315b7a' }}>
-                                    в†і {row.title} В· {localText('РЅРµ Р·Р°РєСЂС‹РІР°РµС‚ LO РЅР°РїСЂСЏРјСѓСЋ, РЅРѕ СЏРІР»СЏРµС‚СЃСЏ РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹Рј РїСЂРµСЂРµРєРІРёР·РёС‚РѕРј', 'LO-РЅС‹ С‚С–РєРµР»РµР№ Р¶Р°РїРїР°Р№РґС‹, Р±С–СЂР°Т› СЂР°СЃС‚Р°Р»Т“Р°РЅ РїСЂРµСЂРµРєРІРёР·РёС‚', 'indirect LO support as a confirmed prerequisite')}
+                                    ↳ {row.title} · {localText('не закрывает LO напрямую, но является подтверждённым пререквизитом', 'LO-ны тікелей жаппайды, бірақ расталған пререквизит', 'indirect LO support as a confirmed prerequisite')}
                                 </div>)}
                                 {(audit.semester_misplacements || []).slice(0, 5).map(row => <div key={`semester-${row.course_id}`} style={{ marginTop: 7, fontSize: 12, color: '#7a4f00' }}>
-                                    вљ  {row.title}: {t('semester')} {row.semester} в†’ {localText('СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ', 'Т±СЃС‹РЅС‹Р»Р°РґС‹', 'recommended')} {row.recommended_semester}
+                                    ⚠ {row.title}: {t('semester')} {row.semester} → {localText('рекомендуется', 'ұсынылады', 'recommended')} {row.recommended_semester}
                                 </div>)}
                             </CompactSection>
                         })()}
                         {currentPlan?.metrics?.optimizer && (
                             <CompactSection title={t('optimizer')} accent={'#3949ab'} defaultOpen={false}>
+                                <h3 style={{ marginTop: 0 }}>{t('optimizer')}</h3>
                                 <strong>{currentPlan.metrics.optimizer.name}</strong>
                                 {currentPlan.metrics.optimizer.selection_method === 'nsga2' && (
                                     <span style={{ marginLeft: '12px', color: '#555' }}>
@@ -1327,6 +1386,7 @@ export default function PlanBuilder() {
                             <CompactSection title={t('international_quality')} subtitle={'OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences'} accent={currentPlan.metrics.international_quality.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '12px' }}>
                                     <div>
+                                        <h3 style={{ margin: 0 }}>{t('international_quality')}</h3>
                                         <p style={{ margin: '6px 0 0', color: '#666', fontSize: '14px' }}>
                                             OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences
                                         </p>
@@ -1347,12 +1407,12 @@ export default function PlanBuilder() {
                                 }}>
                                     <strong>
                                         {currentPlan.metrics.international_quality.passed
-                                            ? localText('РџР»Р°РЅ СѓР¶Рµ РїСЂРѕС€С‘Р» РјРµР¶РґСѓРЅР°СЂРѕРґРЅС‹Р№ С‡РµРє-Р»РёСЃС‚.', 'Р–РѕСЃРїР°СЂ С…Р°Р»С‹Т›Р°СЂР°Р»С‹Т› С‡РµРє-Р»РёСЃС‚РµРЅ У©С‚С‚С–.', 'The plan already passed the international checklist.')
-                                            : localText('РџР»Р°РЅ С‚СЂРµР±СѓРµС‚ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРѕРіРѕ РёСЃРїСЂР°РІР»РµРЅРёСЏ.', 'Р–РѕСЃРїР°СЂ Р°РІС‚РѕРјР°С‚С‚С‹ С‚ТЇР·РµС‚СѓРґС– Т›Р°Р¶РµС‚ РµС‚РµРґС–.', 'The plan needs automatic repair.')}
+                                            ? localText('План уже прошёл международный чек-лист.', 'Жоспар халықаралық чек-листен өтті.', 'The plan already passed the international checklist.')
+                                            : localText('План требует автоматического исправления.', 'Жоспар автоматты түзетуді қажет етеді.', 'The plan needs automatic repair.')}
                                     </strong>{' '}
                                     {localText(
-                                        'РЎРёСЃС‚РµРјР° РїСЂРѕРІРµСЂСЏРµС‚ РєСЂРµРґРёС‚С‹, РЅР°РіСЂСѓР·РєСѓ РїРѕ СЃРµРјРµСЃС‚СЂР°Рј, РїСЂРµСЂРµРєРІРёР·РёС‚С‹, РїРѕРєСЂС‹С‚РёРµ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РѕР±СѓС‡РµРЅРёСЏ, РїСЂРµРґРјРµС‚РЅСѓСЋ СЂРµР»РµРІР°РЅС‚РЅРѕСЃС‚СЊ Рё Р·Р°С‰РёС‚Сѓ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… Р“РћРЎРћ-РєРѕРјРїРѕРЅРµРЅС‚РѕРІ. РљРЅРѕРїРєР° РЅРёР¶Рµ РёСЃРєР»СЋС‡Р°РµС‚ С‚РѕР»СЊРєРѕ Р·Р°РјРµРЅСЏРµРјС‹Рµ СЃР»Р°Р±С‹Рµ РґРёСЃС†РёРїР»РёРЅС‹, Р·Р°С‰РёС‰Р°РµС‚ Р“РћРЎРћ Рё Р·Р°РїСѓСЃРєР°РµС‚ РїРµСЂРµСЃР±РѕСЂРєСѓ A/B/C, РµСЃР»Рё СЌС‚Рѕ РґРµР№СЃС‚РІРёС‚РµР»СЊРЅРѕ РЅСѓР¶РЅРѕ.',
-                                        'Р–ТЇР№Рµ РєСЂРµРґРёС‚С‚РµСЂРґС–, СЃРµРјРµСЃС‚СЂ Р¶ТЇРєС‚РµРјРµСЃС–РЅ, РїСЂРµСЂРµРєРІРёР·РёС‚С‚РµСЂРґС–, РѕТ›Сѓ РЅУ™С‚РёР¶РµР»РµСЂС–РЅ Т›Р°РјС‚СѓРґС‹, РїУ™РЅРґС–Рє СЃУ™Р№РєРµСЃС‚С–РєС‚С– Р¶У™РЅРµ РјС–РЅРґРµС‚С‚С– РњР–РњР‘РЎ РєРѕРјРїРѕРЅРµРЅС‚С‚РµСЂС–РЅ Т›РѕСЂТ“Р°СѓРґС‹ С‚РµРєСЃРµСЂРµРґС–. РўУ©РјРµРЅРґРµРіС– Р±Р°С‚С‹СЂРјР° С‚РµРє Р°СѓС‹СЃС‚С‹СЂСѓТ“Р° Р±РѕР»Р°С‚С‹РЅ У™Р»СЃС–Р· РїУ™РЅРґРµСЂРґС– Р°Р»С‹Рї С‚Р°СЃС‚Р°Р№РґС‹, РњР–РњР‘РЎ-С‚С‹ Т›РѕСЂТ“Р°Р№РґС‹ Р¶У™РЅРµ Т›Р°Р¶РµС‚ Р±РѕР»СЃР° A/B/C Т›Р°Р№С‚Р° Т›Т±СЂР°РґС‹.',
+                                        'Система проверяет кредиты, нагрузку по семестрам, пререквизиты, покрытие результатов обучения, предметную релевантность и защиту обязательных ГОСО-компонентов. Кнопка ниже исключает только заменяемые слабые дисциплины, защищает ГОСО и запускает пересборку A/B/C, если это действительно нужно.',
+                                        'Жүйе кредиттерді, семестр жүктемесін, пререквизиттерді, оқу нәтижелерін қамтуды, пәндік сәйкестікті және міндетті МЖМБС компоненттерін қорғауды тексереді. Төмендегі батырма тек ауыстыруға болатын әлсіз пәндерді алып тастайды, МЖМБС-ты қорғайды және қажет болса A/B/C қайта құрады.',
                                         'The system checks credits, semester load, prerequisites, LO coverage, domain relevance, and protected regulatory components. The button excludes only replaceable weak courses, protects RK mandatory courses, and rebuilds A/B/C only when needed.'
                                     )}
                                 </div>
@@ -1363,7 +1423,7 @@ export default function PlanBuilder() {
                                         disabled={applyingQuality || building}
                                         style={{ marginBottom: '14px' }}
                                     >
-                                        {applyingQuality ? t('applying_quality_improvements') : `вњЁ ${t('apply_all_quality_improvements')}`}
+                                        {applyingQuality ? t('applying_quality_improvements') : `✨ ${t('apply_all_quality_improvements')}`}
                                     </button>
                                 )}
                                 {qualityNotice && (
@@ -1390,21 +1450,21 @@ export default function PlanBuilder() {
                                             return (
                                                 <>
                                                     <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                                                        {localText('Р§С‚Рѕ РїСЂРѕРІРµСЂСЏРµС‚ СЃРёСЃС‚РµРјР°', 'Р–ТЇР№Рµ РЅРµРЅС– С‚РµРєСЃРµСЂРµРґС–', 'What the system checks')}
+                                                        {localText('Что проверяет система', 'Жүйе нені тексереді', 'What the system checks')}
                                                     </div>
                                                     <div>
-                                                        {localText('Р РµР»РµРІР°РЅС‚РЅС‹Рµ РґРёСЃС†РёРїР»РёРЅС‹', 'РЎУ™Р№РєРµСЃ РїУ™РЅРґРµСЂ', 'Relevant courses')}: {rel.relevant_courses}/{rel.total_courses}.
-                                                        {' '}{localText('РР· РЅРёС… Р·Р°С‰РёС‰РµРЅС‹ РєР°Рє Р“РћРЎРћ Р Рљ', 'РћРЅС‹ТЈ С–С€С–РЅРґРµ ТљР  РњР–РњР‘РЎ СЂРµС‚С–РЅРґРµ Т›РѕСЂТ“Р°Р»Т“Р°РЅ', 'Protected as RK regulatory')}: {rel.regulatory_protected_courses}.
-                                                        {' '}{localText('РњРѕР¶РЅРѕ Р·Р°РјРµРЅРёС‚СЊ Р±РµР· СЂРёСЃРєР°', 'ТљР°СѓС–РїСЃС–Р· Р°СѓС‹СЃС‚С‹СЂСѓТ“Р° Р±РѕР»Р°РґС‹', 'Safely replaceable')}: {rel.replaceable_unsupported_courses}.
+                                                        {localText('Релевантные дисциплины', 'Сәйкес пәндер', 'Relevant courses')}: {rel.relevant_courses}/{rel.total_courses}.
+                                                        {' '}{localText('Из них защищены как ГОСО РК', 'Оның ішінде ҚР МЖМБС ретінде қорғалған', 'Protected as RK regulatory')}: {rel.regulatory_protected_courses}.
+                                                        {' '}{localText('Можно заменить без риска', 'Қауіпсіз ауыстыруға болады', 'Safely replaceable')}: {rel.replaceable_unsupported_courses}.
                                                     </div>
                                                     {rel.regulatory_examples?.length > 0 && (
                                                         <div style={{ marginTop: 6, color: '#475467' }}>
-                                                            {localText('Р“РћРЎРћ РЅРµ СѓРґР°Р»СЏРµС‚СЃСЏ', 'РњР–РњР‘РЎ Р¶РѕР№С‹Р»РјР°Р№РґС‹', 'Regulatory courses are not removed')}: {rel.regulatory_examples.slice(0, 3).map(row => row.title).join('; ')}
+                                                            {localText('ГОСО не удаляется', 'МЖМБС жойылмайды', 'Regulatory courses are not removed')}: {rel.regulatory_examples.slice(0, 3).map(row => row.title).join('; ')}
                                                         </div>
                                                     )}
                                                     {rel.unsupported_examples?.length > 0 && (
                                                         <div style={{ marginTop: 6, color: '#8a4b00' }}>
-                                                            {localText('РљР°РЅРґРёРґР°С‚С‹ РЅР° Р·Р°РјРµРЅСѓ', 'РђСѓС‹СЃС‚С‹СЂСѓТ“Р° ТЇРјС–С‚РєРµСЂР»РµСЂ', 'Replacement candidates')}: {rel.unsupported_examples.slice(0, 3).map(row => row.title).join('; ')}
+                                                            {localText('Кандидаты на замену', 'Ауыстыруға үміткерлер', 'Replacement candidates')}: {rel.unsupported_examples.slice(0, 3).map(row => row.title).join('; ')}
                                                         </div>
                                                     )}
                                                 </>
@@ -1421,7 +1481,7 @@ export default function PlanBuilder() {
                                             padding: '10px'
                                         }}>
                                             <div style={{ fontWeight: 'bold', color: check.passed ? '#2e7d32' : '#e67e22', marginBottom: '4px' }}>
-                                                {check.passed ? 'вњ…' : 'вљ пёЏ'} {t(check.name)}
+                                                {check.passed ? '✅' : '⚠️'} {t(check.name)}
                                             </div>
                                             <div style={{ color: '#555', fontSize: '13px', marginBottom: '6px' }}>{localizeQualityEvidence(check.evidence)}</div>
                                             {!check.passed && (
@@ -1460,19 +1520,19 @@ export default function PlanBuilder() {
                                                             </div>
                                                             {showCourseDescriptions && localizedCourseField(c.description_translations, c.description) && (
                                                                 <div style={{ fontSize: '11px', color: '#777', marginTop: 3, lineHeight: 1.35 }}>
-                                                                    {localizedCourseField(c.description_translations, c.description).slice(0, 220)}{localizedCourseField(c.description_translations, c.description).length > 220 ? '\u2026' : ''}
+                                                                    {localizedCourseField(c.description_translations, c.description).slice(0, 220)}{localizedCourseField(c.description_translations, c.description).length > 220 ? '…' : ''}
                                                                 </div>
                                                             )}
                                                             <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
-                                                                {c.academic_cycle && <>{localText('\u0426\u0438\u043a\u043b', '\u0426\u0438\u043a\u043b', 'Cycle')}: <b>{c.academic_cycle}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('\u0440\u0430\u0441\u0447\u0451\u0442 \u0441\u0438\u0441\u0442\u0435\u043c\u044b', '\u0436\u04af\u0439\u0435 \u0435\u0441\u0435\u0431\u0456', 'system estimate')})` : ''}{' \u00b7 '}</>}
-                                                                {localText('\u041a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442', '\u041a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442', 'Component')}: {c.academic_component || componentLabel(c.cycle_component || c.type)}
-                                                                {' \u00b7 '}{localText('\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a', '\u0414\u0435\u0440\u0435\u043a\u043a\u04e9\u0437', 'Source')}: {
-                                                                    c.course_source === 'rk_mandatory' ? localText('\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430 \u0420\u041a', '\u049a\u0420 \u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u043f\u04d9\u043d\u0456', 'RK mandatory course')
-                                                                    : c.course_source === 'ai_confirmed' ? localText('\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u0430\u044f \u0437\u0430\u043c\u0435\u043d\u0430 \u0418\u0418', '\u0416\u0418 \u0440\u0430\u0441\u0442\u0430\u043b\u0493\u0430\u043d \u0430\u0443\u044b\u0441\u0442\u044b\u0440\u0443', 'AI-confirmed replacement')
-                                                                    : c.course_source === 'bridge' ? localText('bridge-\u043c\u043e\u0434\u0443\u043b\u044c', 'bridge-\u043c\u043e\u0434\u0443\u043b\u044c', 'bridge module')
-                                                                    : localText('\u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u0439 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d', '\u043f\u04d9\u043d\u0434\u0435\u0440 \u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u0439\u0456', 'course repository')
+                                                                {c.academic_cycle && <>{localText('Цикл', 'Цикл', 'Cycle')}: <b>{c.academic_cycle}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('расчёт системы', 'жүйе есебі', 'system estimate')})` : ''}{' · '}</>}
+                                                                {localText('Компонент', 'Компонент', 'Component')}: {c.academic_component || componentLabel(c.cycle_component || c.type)}
+                                                                {' · '}{localText('Источник', 'Дереккөз', 'Source')}: {
+                                                                    c.course_source === 'rk_mandatory' ? localText('обязательная дисциплина РК', 'ҚР міндетті пәні', 'RK mandatory course')
+                                                                    : c.course_source === 'ai_confirmed' ? localText('подтверждённая замена ИИ', 'ЖИ расталған ауыстыру', 'AI-confirmed replacement')
+                                                                    : c.course_source === 'bridge' ? localText('bridge-модуль', 'bridge-модуль', 'bridge module')
+                                                                    : localText('репозиторий дисциплин', 'пәндер репозиторийі', 'course repository')
                                                                 }
-                                                                {c.course_code ? ` \u00b7 ${localText('\u041a\u043e\u0434', '\u041a\u043e\u0434', 'Code')}: ${c.course_code}` : ''}
+                                                                {c.course_code ? ` · ${localText('Код', 'Код', 'Code')}: ${c.course_code}` : ''}
                                                             </div>
                                                             {c.course_id && !c.protected_by_goso && (
                                                                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 11, color: excludedCourses[c.course_id] ? '#b71c1c' : '#5d6470', cursor: 'pointer' }}>
@@ -1482,39 +1542,39 @@ export default function PlanBuilder() {
                                                                         onChange={() => toggleCourseExclusion(c.course_id, c.title)}
                                                                     />
                                                                     {excludedCourses[c.course_id]
-                                                                        ? localText('\u0411\u0443\u0434\u0435\u0442 \u0443\u0431\u0440\u0430\u043d\u0430 \u043f\u0440\u0438 \u043f\u0435\u0440\u0435\u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438', '\u049a\u0430\u0439\u0442\u0430 \u049b\u04b1\u0440\u0443 \u043a\u0435\u0437\u0456\u043d\u0434\u0435 \u0430\u043b\u044b\u043d\u0430\u0434\u044b', 'Will be removed on regeneration')
-                                                                        : localText('\u0417\u0430\u043c\u0435\u043d\u0438\u0442\u044c/\u0443\u0431\u0440\u0430\u0442\u044c \u043f\u0440\u0438 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0439 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438', '\u041a\u0435\u043b\u0435\u0441\u0456 \u049b\u04b1\u0440\u0443\u0434\u0430 \u0430\u0443\u044b\u0441\u0442\u044b\u0440\u0443/\u0430\u043b\u044b\u043f \u0442\u0430\u0441\u0442\u0430\u0443', 'Replace/remove on next generation')}
+                                                                        ? localText('Будет убрана при перегенерации', 'Қайта құру кезінде алынады', 'Will be removed on regeneration')
+                                                                        : localText('Заменить/убрать при следующей генерации', 'Келесі құруда ауыстыру/алып тастау', 'Replace/remove on next generation')}
                                                                 </label>
                                                             )}
                                                             {c.protected_by_goso && (
                                                                 <div style={{ marginTop: 5, fontSize: 11, color: '#1b5e20', fontWeight: 600 }}>
-                                                                    \U0001f6e1 {localText('\u041e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430 \u0413\u041e\u0421\u041e \u0420\u041a \u2014 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u0430 \u043e\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f \u0438 \u0437\u0430\u043c\u0435\u043d\u044b', '\u049a\u0420 \u041c\u0416\u041c\u0411\u0421 \u043c\u0456\u043d\u0434\u0435\u0442\u0442\u0456 \u043f\u04d9\u043d\u0456 \u2014 \u0436\u043e\u044e\u0434\u0430\u043d \u0436\u04d9\u043d\u0435 \u0430\u0443\u044b\u0441\u0442\u044b\u0440\u0443\u0434\u0430\u043d \u049b\u043e\u0440\u0493\u0430\u043b\u0493\u0430\u043d', 'RK mandatory course ? protected from removal and replacement')}
+                                                                    🛡 {localText('Обязательная дисциплина ГОСО РК — защищена от удаления и замены', 'ҚР МЖМБС міндетті пәні — жоюдан және ауыстырудан қорғалған', 'RK mandatory course — protected from removal and replacement')}
                                                                 </div>
                                                             )}
                                                             {c.why_selected && (
                                                                 <details style={{ marginTop: 6, fontSize: 11, color: '#586174' }}>
                                                                     <summary style={{ cursor: 'pointer', color: '#366092', fontWeight: 600 }}>
-                                                                        {localText('\u041f\u043e\u0447\u0435\u043c\u0443 \u0432\u044b\u0431\u0440\u0430\u043d\u0430?', '\u041d\u0435\u0433\u0435 \u0442\u0430\u04a3\u0434\u0430\u043b\u0434\u044b?', 'Why selected?')}
+                                                                        {localText('Почему выбрана?', 'Неге таңдалды?', 'Why selected?')}
                                                                     </summary>
                                                                     <div style={{ marginTop: 5, lineHeight: 1.45 }}>
-                                                                        <div>{c.why_selected.selection_reason}</div>
-                                                                        <div>{c.why_selected.semester_reason}</div>
+                                                                        <div>{localize(c.why_selected.selection_reason_translations || c.why_selected.selection_reason)}</div>
+                                                                        <div>{localize(c.why_selected.semester_reason_translations || c.why_selected.semester_reason)}</div>
                                                                         <div style={{ marginTop: 5, padding: '6px 8px', background: '#f5f7fb', borderRadius: 6 }}>
                                                                             {localText(
-                                                                                'РџСЂРѕС†РµРЅС‚С‹ РѕС‚РЅРѕСЃСЏС‚СЃСЏ Рє СЃРІСЏР·Рё РѕРґРЅРѕР№ РґРёСЃС†РёРїР»РёРЅС‹ СЃ РѕРґРЅРёРј LO. РР вЂ” РїСЂРѕРіРЅРѕР· РјРѕРґРµР»Рё РїРѕ С‚РµРєСЃС‚Р°Рј. Р•РџР’Рћ вЂ” РїРѕРґРґРµСЂР¶РєР° СЌС‚РѕР№ Р¶Рµ СЃРІСЏР·Рё РІ СЌРєСЃРїРµСЂС‚РЅС‹С… РґР°РЅРЅС‹С… Р•РџР’Рћ. РћРЅРё РЅРµ СЃРєР»Р°РґС‹РІР°СЋС‚СЃСЏ; РёС‚РѕРі Р±РµСЂС‘С‚СЃСЏ РїРѕ РЅР°РёР±РѕР»РµРµ РЅР°РґС‘Р¶РЅРѕРјСѓ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЋ.',
-                                                                                'РџР°Р№С‹Р·РґР°СЂ Р±С–СЂ РїУ™РЅ РјРµРЅ Р±С–СЂ LO Р±Р°Р№Р»Р°РЅС‹СЃС‹РЅР° Р¶Р°С‚Р°РґС‹. Р–Р вЂ” РјУ™С‚С–РЅРґРµСЂ Р±РѕР№С‹РЅС€Р° РјРѕРґРµР»СЊ Р±РѕР»Р¶Р°РјС‹. Р–РћРћР‘Р‘ вЂ” СЃРѕР» Р±Р°Р№Р»Р°РЅС‹СЃС‚С‹ТЈ СЃР°СЂР°РїС‚Р°РјР°Р»С‹Т› РґРµСЂРµРєС‚РµСЂРґРµРіС– Т›РѕР»РґР°СѓС‹. РћР»Р°СЂ Т›РѕСЃС‹Р»РјР°Р№РґС‹.',
+                                                                                'Проценты относятся к связи одной дисциплины с одним LO. ИИ — прогноз модели по текстам. ЕПВО — поддержка этой же связи в экспертных данных ЕПВО. Они не складываются; итог берётся по наиболее надёжному подтверждению.',
+                                                                                'Пайыздар бір пән мен бір LO байланысына жатады. ЖИ — мәтіндер бойынша модель болжамы. ЖООББ — сол байланыстың сараптамалық деректердегі қолдауы. Олар қосылмайды.',
                                                                                 'Percentages describe one course-to-LO link. AI is the text-model estimate; EPVO is expert support for the same link. They are not added.'
                                                                             )}
                                                                         </div>
                                                                         {c.why_selected.top_lo_matches?.length > 0 && (
                                                                             <div style={{ marginTop: 4 }}>
                                                                         <div style={{ fontWeight: 600, marginBottom: 3 }}>
-                                                                            {localText('РЎРІСЏР·Рё СЃ СЂРµР·СѓР»СЊС‚Р°С‚Р°РјРё РѕР±СѓС‡РµРЅРёСЏ:', 'РћТ›Сѓ РЅУ™С‚РёР¶РµР»РµСЂС–РјРµРЅ Р±Р°Р№Р»Р°РЅС‹СЃ:', 'Learning-outcome links:')}
+                                                                            {localText('Связи с результатами обучения:', 'Оқу нәтижелерімен байланыс:', 'Learning-outcome links:')}
                                                                         </div>
                                                                         <div style={{ marginBottom: 5, color: '#607d8b', fontSize: 11 }}>
                                                                             {localText(
-                                                                                'РљР°Рє С‡РёС‚Р°С‚СЊ: вЂњРёС‚РѕРівЂќ вЂ” РЅР°СЃРєРѕР»СЊРєРѕ РґРёСЃС†РёРїР»РёРЅР° СЂРµР°Р»СЊРЅРѕ Р·Р°РєСЂС‹РІР°РµС‚ СЌС‚РѕС‚ LO РІ РїР»Р°РЅРµ; вЂњРРвЂќ вЂ” РїСЂРѕРіРЅРѕР· РјРѕРґРµР»Рё РїРѕ С‚РµРєСЃС‚Р°Рј; вЂњР•РџР’РћвЂќ вЂ” РїРѕС…РѕР¶Р°СЏ СЌРєСЃРїРµСЂС‚РЅР°СЏ РѕС†РµРЅРєР° РёР· Р±Р°Р·С‹ Р•РџР’Рћ. Р­С‚Рѕ С‚СЂРё СЂР°Р·РЅС‹С… РїСЂРёР·РЅР°РєР° РѕРґРЅРѕР№ СЃРІСЏР·Рё, РѕРЅРё РЅРµ СЃСѓРјРјРёСЂСѓСЋС‚СЃСЏ.',
-                                                                                'РћТ›Сѓ С‚У™СЂС‚С–Р±С–: вЂњТ›РѕСЂС‹С‚С‹РЅРґС‹вЂќ вЂ” РїУ™РЅ РѕСЃС‹ LO-РЅС‹ Р¶РѕСЃРїР°СЂРґР° Т›Р°РЅС€Р°Р»С‹Т›С‚С‹ Р¶Р°Р±Р°РґС‹; вЂњР–РвЂќ вЂ” РјУ™С‚С–РЅРґРµСЂ Р±РѕР№С‹РЅС€Р° РјРѕРґРµР»СЊ Р±РѕР»Р¶Р°РјС‹; вЂњР•РџР’РћвЂќ вЂ” Р•РџР’Рћ Р±Р°Р·Р°СЃС‹РЅРґР°Т“С‹ Т±Т›СЃР°СЃ СЃР°СЂР°РїС‚Р°РјР°Р»С‹Т› Р±Р°Т“Р°. Р‘Т±Р»Р°СЂ Р±С–СЂ Р±Р°Р№Р»Р°РЅС‹СЃС‚С‹ТЈ ТЇС€ Р±У©Р»РµРє Р±РµР»РіС–СЃС–, Т›РѕСЃС‹Р»РјР°Р№РґС‹.',
+                                                                                'Как читать: “итог” — насколько дисциплина реально закрывает этот LO в плане; “ИИ” — прогноз модели по текстам; “ЕПВО” — похожая экспертная оценка из базы ЕПВО. Это три разных признака одной связи, они не суммируются.',
+                                                                                'Оқу тәртібі: “қорытынды” — пән осы LO-ны жоспарда қаншалықты жабады; “ЖИ” — мәтіндер бойынша модель болжамы; “ЕПВО” — ЕПВО базасындағы ұқсас сараптамалық баға. Бұлар бір байланыстың үш бөлек белгісі, қосылмайды.',
                                                                                 'How to read: effective is the final plan link strength; AI is the text-model prediction; EPVO is similar expert evidence from EPVO. These are separate signals for one link, not a sum.'
                                                                             )}
                                                                         </div>
@@ -1527,15 +1587,15 @@ export default function PlanBuilder() {
                                                                                             background: '#eef4ff',
                                                                                             color: '#244b78'
                                                                                         }}>
-                                                                                            {lo.lo_code} В· {localText('РёС‚РѕРі', 'Т›РѕСЂС‹С‚С‹РЅРґС‹', 'effective')}: {Math.round((lo.effective_score ?? lo.score ?? 0) * 100)}%
+                                                                                            {lo.lo_code} · {localText('итог', 'қорытынды', 'effective')}: {Math.round((lo.effective_score ?? lo.score ?? 0) * 100)}%
                                                                                             {lo.ai_score != null && (
                                                                                                 <small style={{ marginLeft: 5, color: '#455a64' }}>
-                                                                                                    {localText('РР', 'Р–Р', 'AI')} {Math.round((lo.ai_score || 0) * 100)}%
+                                                                                                    {localText('ИИ', 'ЖИ', 'AI')} {Math.round((lo.ai_score || 0) * 100)}%
                                                                                                 </small>
                                                                                             )}
                                                                                             {lo.expert_score != null && (
                                                                                                 <small style={{ marginLeft: 5, color: '#6a4f00' }}>
-                                                                                                    {localText('Р•РџР’Рћ', 'Р•РџР’Рћ', 'EPVO')} {Math.round((lo.expert_score || 0) * 100)}%
+                                                                                                    {localText('ЕПВО', 'ЕПВО', 'EPVO')} {Math.round((lo.expert_score || 0) * 100)}%
                                                                                                 </small>
                                                                                             )}
                                                                                             {lo.source === 'bridge_target' && (
@@ -1545,18 +1605,18 @@ export default function PlanBuilder() {
                                                                                             )}
                                                                                             {lo.weak_evidence && (
                                                                                                 <small style={{ marginLeft: 5, color: '#b26a00' }}>
-                                                                                                    {localText('СЃР»Р°Р±Р°СЏ СЃРІСЏР·СЊ', 'У™Р»СЃС–Р· Р±Р°Р№Р»Р°РЅС‹СЃ', 'weak link')}
+                                                                                                    {localText('слабая связь', 'әлсіз байланыс', 'weak link')}
                                                                                                 </small>
                                                                                             )}
                                                                                             {(matchFeedbackState[`${c.course_id}:${lo.lo_id}`] || lo.expert_feedback?.verdict) && (
-                                                                                                <small style={{ marginLeft: 5, color: '#1b5e20' }}>вњ“ {matchFeedbackState[`${c.course_id}:${lo.lo_id}`] || lo.expert_feedback?.verdict}</small>
+                                                                                                <small style={{ marginLeft: 5, color: '#1b5e20' }}>✓ {matchFeedbackState[`${c.course_id}:${lo.lo_id}`] || lo.expert_feedback?.verdict}</small>
                                                                                             )}
                                                                                         </span>
                                                                                         <div style={{ marginTop: 2, maxWidth: 340, color: '#607d8b', fontSize: 11 }}>
                                                                                             {localText(
-                                                                                                'РС‚РѕРі вЂ” РёС‚РѕРіРѕРІР°СЏ СЃРёР»Р° СЃРІСЏР·Рё СЌС‚РѕР№ РґРёСЃС†РёРїР»РёРЅС‹ СЃ СЌС‚РёРј LO. РР вЂ” РїСЂРѕРіРЅРѕР· РјРѕРґРµР»Рё РїРѕ С‚РµРєСЃС‚Р°Рј. Р•РџР’Рћ вЂ” РІРѕСЃРїСЂРѕРёР·РІРµРґС‘РЅРЅР°СЏ СЌРєСЃРїРµСЂС‚РЅР°СЏ РѕС†РµРЅРєР° РёР· Р±Р°Р·С‹. РћРЅРё РЅРµ СЃРєР»Р°РґС‹РІР°СЋС‚СЃСЏ.',
-                                                                                                'ТљРѕСЂС‹С‚С‹РЅРґС‹ вЂ” РѕСЃС‹ РїУ™РЅРЅС–ТЈ РѕСЃС‹ РћРќ-РјРµРЅ Р±Р°Р№Р»Р°РЅС‹СЃ РєТЇС€С–. Р–Р вЂ” РјУ™С‚С–РЅРґРµСЂ Р±РѕР№С‹РЅС€Р° РјРѕРґРµР»СЊ Р±РѕР»Р¶Р°РјС‹. Р•РџР’Рћ вЂ” Р±Р°Р·Р°РґР°Т“С‹ СЃР°СЂР°РїС‚Р°РјР°Р»С‹Т› Р±Р°Т“Р°РЅС‹ Т›Р°Р»РїС‹РЅР° РєРµР»С‚С–СЂСѓ. РћР»Р°СЂ Т›РѕСЃС‹Р»РјР°Р№РґС‹.',
-                                                                                                'Effective is the final strength for this courseв†’LO link. AI is the text model prediction. EPVO is reconstructed expert evidence. They are not added together.'
+                                                                                                'Итог — итоговая сила связи этой дисциплины с этим LO. ИИ — прогноз модели по текстам. ЕПВО — воспроизведённая экспертная оценка из базы. Они не складываются.',
+                                                                                                'Қорытынды — осы пәннің осы ОН-мен байланыс күші. ЖИ — мәтіндер бойынша модель болжамы. ЕПВО — базадағы сараптамалық бағаны қалпына келтіру. Олар қосылмайды.',
+                                                                                                'Effective is the final strength for this course→LO link. AI is the text model prediction. EPVO is reconstructed expert evidence. They are not added together.'
                                                                                             )}
                                                                                         </div>
                                                                                         <div style={{ marginTop: 2, maxWidth: 310, color: '#4f5d6b' }}>
@@ -1601,36 +1661,36 @@ export default function PlanBuilder() {
                                                                         {(c.plan_requisites?.prerequisites?.length > 0 || c.plan_requisites?.postrequisites?.length > 0) && (
                                                                             <div style={{ marginTop: 8, padding: '7px 9px', background: '#f8fbff', border: '1px solid #dbe8f6', borderRadius: 8 }}>
                                                                                 <div style={{ fontWeight: 700, color: '#244b78', marginBottom: 4 }}>
-                                                                                    {localText('РџСЂРµ- Рё РїРѕСЃС‚СЂРµРєРІРёР·РёС‚С‹ РІ СЌС‚РѕРј РїР»Р°РЅРµ', 'РћСЃС‹ Р¶РѕСЃРїР°СЂРґР°Т“С‹ РїСЂРµ- Р¶У™РЅРµ РїРѕСЃС‚СЂРµРєРІРёР·РёС‚С‚РµСЂ', 'Pre- and post-requisites in this plan')}
+                                                                                    {localText('Пре- и постреквизиты в этом плане', 'Осы жоспардағы пре- және постреквизиттер', 'Pre- and post-requisites in this plan')}
                                                                                 </div>
                                                                                 <div style={{ color: '#607d8b', marginBottom: 5 }}>
                                                                                     {localText(
-                                                                                        'РџРѕРєР°Р·С‹РІР°СЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РґРёСЃС†РёРїР»РёРЅС‹, РєРѕС‚РѕСЂС‹Рµ СЂРµР°Р»СЊРЅРѕ РµСЃС‚СЊ РІ С‚РµРєСѓС‰РµРј РІР°СЂРёР°РЅС‚Рµ РїР»Р°РЅР°.',
-                                                                                        'РўРµРє Р°Т“С‹РјРґР°Т“С‹ Р¶РѕСЃРїР°СЂ РЅТ±СЃТ›Р°СЃС‹РЅРґР° Р±Р°СЂ РїУ™РЅРґРµСЂ РєУ©СЂСЃРµС‚С–Р»РµРґС–.',
+                                                                                        'Показываются только дисциплины, которые реально есть в текущем варианте плана.',
+                                                                                        'Тек ағымдағы жоспар нұсқасында бар пәндер көрсетіледі.',
                                                                                         'Only courses that are actually present in the current plan variant are shown.'
                                                                                     )}
                                                                                 </div>
                                                                                 <div style={{ display: 'grid', gap: 5 }}>
                                                                                     <div>
-                                                                                        <b>{localText('Р”Рѕ СЌС‚РѕР№ РґРёСЃС†РёРїР»РёРЅС‹:', 'РћСЃС‹ РїУ™РЅРіРµ РґРµР№С–РЅ:', 'Before this course:')}</b>{' '}
+                                                                                        <b>{localText('До этой дисциплины:', 'Осы пәнге дейін:', 'Before this course:')}</b>{' '}
                                                                                         {c.plan_requisites?.prerequisites?.length > 0
                                                                                             ? c.plan_requisites.prerequisites.map(item => (
-                                                                                                <span key={`pre-${item.course_id}`} title={`${localText('РЎРµРјРµСЃС‚СЂ', 'РЎРµРјРµСЃС‚СЂ', 'Semester')} ${item.semester} В· ${item.credits} ${localText('РєСЂРµРґРёС‚РѕРІ', 'РєСЂРµРґРёС‚', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eef4ff', color: '#244b78' }}>
-                                                                                                    {localText('РЎРµРј.', 'РЎРµРј.', 'Sem.')} {item.semester}: {item.title}
+                                                                                                <span key={`pre-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eef4ff', color: '#244b78' }}>
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {item.title}
                                                                                                 </span>
                                                                                             ))
-                                                                                            : <span style={{ color: '#8a96a3' }}>{localText('РІ РїР»Р°РЅРµ РЅРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… РїСЂРµРґС€РµСЃС‚РІСѓСЋС‰РёС… РґРёСЃС†РёРїР»РёРЅ', 'Р¶РѕСЃРїР°СЂРґР° РјС–РЅРґРµС‚С‚С– Р°Р»РґС‹ТЈТ“С‹ РїУ™РЅРґРµСЂ Р¶РѕТ›', 'no required earlier courses in the plan')}</span>
+                                                                                            : <span style={{ color: '#8a96a3' }}>{localText('в плане нет обязательных предшествующих дисциплин', 'жоспарда міндетті алдыңғы пәндер жоқ', 'no required earlier courses in the plan')}</span>
                                                                                         }
                                                                                     </div>
                                                                                     <div>
-                                                                                        <b>{localText('РџРѕСЃР»Рµ РЅРµС‘ РѕРїРёСЂР°СЋС‚СЃСЏ:', 'РћРґР°РЅ РєРµР№С–РЅ СЃТЇР№РµРЅРµС‚С–РЅ РїУ™РЅРґРµСЂ:', 'Courses that depend on it:')}</b>{' '}
+                                                                                        <b>{localText('После неё опираются:', 'Одан кейін сүйенетін пәндер:', 'Courses that depend on it:')}</b>{' '}
                                                                                         {c.plan_requisites?.postrequisites?.length > 0
                                                                                             ? c.plan_requisites.postrequisites.map(item => (
-                                                                                                <span key={`post-${item.course_id}`} title={`${localText('РЎРµРјРµСЃС‚СЂ', 'РЎРµРјРµСЃС‚СЂ', 'Semester')} ${item.semester} В· ${item.credits} ${localText('РєСЂРµРґРёС‚РѕРІ', 'РєСЂРµРґРёС‚', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eefaf3', color: '#1b5e20' }}>
-                                                                                                    {localText('РЎРµРј.', 'РЎРµРј.', 'Sem.')} {item.semester}: {item.title}
+                                                                                                <span key={`post-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eefaf3', color: '#1b5e20' }}>
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {item.title}
                                                                                                 </span>
                                                                                             ))
-                                                                                            : <span style={{ color: '#8a96a3' }}>{localText('РІ С‚РµРєСѓС‰РµРј РїР»Р°РЅРµ РЅРµС‚ РґРёСЃС†РёРїР»РёРЅ, РєРѕС‚РѕСЂС‹Рµ СЏРІРЅРѕ С‚СЂРµР±СѓСЋС‚ РµС‘ РєР°Рє РїСЂРµСЂРµРєРІРёР·РёС‚', 'Р°Т“С‹РјРґР°Т“С‹ Р¶РѕСЃРїР°СЂРґР° РѕРЅС‹ РїСЂРµСЂРµРєРІРёР·РёС‚ СЂРµС‚С–РЅРґРµ С‚Р°Р»Р°Рї РµС‚РµС‚С–РЅ РїУ™РЅРґРµСЂ Р¶РѕТ›', 'no later courses explicitly require it in this plan')}</span>
+                                                                                            : <span style={{ color: '#8a96a3' }}>{localText('в текущем плане нет дисциплин, которые явно требуют её как пререквизит', 'ағымдағы жоспарда оны пререквизит ретінде талап ететін пәндер жоқ', 'no later courses explicitly require it in this plan')}</span>
                                                                                         }
                                                                                     </div>
                                                                                 </div>
@@ -1653,7 +1713,7 @@ export default function PlanBuilder() {
                                                         key={lo.code}
                                                         tabIndex="0"
                                                         title={`${lo.text}\n${t('evidence_courses')}: ${lo.courses.join(', ')}${lo.score == null ? '' : `\n${t('connection_strength')}: ${Math.round(lo.score * 100)}%`}`}
-                                                    >{lo.code}<span className="semester-lo-tooltip"><strong>{lo.code} В· {t(lo.kind === 'course' ? 'course_outcome' : 'programme_outcome')}</strong>{lo.text}<small>{t('evidence_courses')}: {lo.courses.join(', ')}</small>{lo.score != null && <small>{t('connection_strength')}: {Math.round(lo.score * 100)}%</small>}</span></span>)}
+                                                    >{lo.code}<span className="semester-lo-tooltip"><strong>{lo.code} · {t(lo.kind === 'course' ? 'course_outcome' : 'programme_outcome')}</strong>{lo.text}<small>{t('evidence_courses')}: {lo.courses.join(', ')}</small>{lo.score != null && <small>{t('connection_strength')}: {Math.round(lo.score * 100)}%</small>}</span></span>)}
                                                 </div> : <div className="semester-lo-empty">{t('no_semester_lo_evidence')}</div>}
                                             </div>
                                         </div>
@@ -1667,4 +1727,3 @@ export default function PlanBuilder() {
         </div>
     )
 }
-
