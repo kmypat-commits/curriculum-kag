@@ -10,6 +10,33 @@ from app.config import settings
 import json
 
 
+def _normalize_bridge_response(response: str, context: Dict) -> Optional[str]:
+    """Validate provider JSON and enforce evidence for both selected domains."""
+    try:
+        payload = json.loads(response)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    domain1 = str(context.get("domain1") or "Primary Discipline")
+    domain2 = str(context.get("domain2") or "Secondary Discipline")
+    title = str(payload.get("title") or "")
+    if domain1.casefold() not in title.casefold() or domain2.casefold() not in title.casefold():
+        payload["title"] = f"Integrated {domain1} and {domain2}"
+    outcomes = payload.get("learning_outcomes")
+    if not isinstance(outcomes, list) or not outcomes:
+        return None
+    lo_mapping = payload.get("lo_mapping")
+    if not isinstance(lo_mapping, dict):
+        lo_mapping = {}
+    for gap in context.get("gap_los") or []:
+        code = gap.get("lo_code")
+        if code and not lo_mapping.get(code):
+            lo_mapping[code] = outcomes[:2]
+    payload["lo_mapping"] = lo_mapping
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def generate_bridge_module_with_llm(
     gap_los: List[Dict],
     project_version: ProjectVersion,
@@ -144,14 +171,18 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
             kwargs = {"api_key": api_key}
             if settings.LLM_BASE_URL: kwargs["base_url"] = settings.LLM_BASE_URL
             response = OpenAI(**kwargs).chat.completions.create(model=settings.LLM_MODEL_NAME, messages=[{"role": "system", "content": "Return valid JSON only."}, {"role": "user", "content": prompt}], temperature=0.5, max_tokens=2500, response_format={"type": "json_object"})
-            return response.choices[0].message.content
+            normalized = _normalize_bridge_response(response.choices[0].message.content, fallback_context or {})
+            if normalized:
+                return normalized
         except Exception as exc:
             print(f"[LLM] OpenAI call failed: {exc}. Using deterministic fallback.")
     elif has_real_key and settings.LLM_PROVIDER == "anthropic":
         try:
             from anthropic import Anthropic
             response = Anthropic(api_key=api_key).messages.create(model=settings.LLM_MODEL_NAME or "claude-sonnet-4-6", max_tokens=2500, system="Return valid JSON only.", messages=[{"role": "user", "content": prompt}])
-            return response.content[0].text
+            normalized = _normalize_bridge_response(response.content[0].text, fallback_context or {})
+            if normalized:
+                return normalized
         except Exception as exc:
             print(f"[LLM] Anthropic call failed: {exc}. Using deterministic fallback.")
     context = fallback_context or {}

@@ -2,12 +2,12 @@
 
 Цель: перейти с локального SQLite/auto режима на PostgreSQL как основной рабочий режим без потери rollback-возможности.
 
-## Текущий безопасный режим
+## Текущий рабочий режим
 
-Сейчас рекомендованный запуск:
+PostgreSQL является основным рабочим режимом:
 
 ```powershell
-.\start.ps1 -Database postgres-shadow
+.\start.ps1 -Database postgres
 ```
 
 SQLite остаётся резервной точкой:
@@ -59,9 +59,31 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\stop.ps1
 .\start.ps1 -Database sqlite
 ```
 
-## Что ещё нужно до окончательного production
+## Проверяемая резервная копия PostgreSQL
 
-1. Создать свежий restore-point перед окончательным переключением.
-2. Проверить 3–5 программ разных уровней: бакалавриат, магистратура, докторантура.
-3. Зафиксировать, где хранится PostgreSQL backup.
-4. После cutover не удалять SQLite backup до завершения ручной проверки.
+Создание custom-format дампа, manifest с SHA-256 и контрольными количествами строк:
+
+```powershell
+.\backup-postgres.ps1
+```
+
+Проверка выполняется настоящим восстановлением в отдельную временную БД. Основная БД не изменяется:
+
+```powershell
+.\verify-postgres-restore.ps1 -Manifest .\backups\postgres\<имя>.manifest.json
+```
+
+После успешной сверки manifest получает `restore_verified=true`, а временная БД удаляется.
+Каталог `backups/` не включается в Git и должен храниться на резервном диске.
+
+## Единая приёмочная проверка
+
+После запуска приложения:
+
+```powershell
+.\acceptance-test.ps1 -RequireVerifiedBackup
+```
+
+Проверяются backend-тесты и кодировка исходников, подключение PostgreSQL,
+контрольные программы всех уровней и варианты A/B/C, полнота RU/KK/EN,
+отсутствие повреждённых описаний и production-сборка frontend.
