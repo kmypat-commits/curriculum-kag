@@ -46,6 +46,32 @@ def main() -> int:
                 "FROM course_localizations GROUP BY language"
             )).mappings()
         }
+        by_status = {
+            str(row.status): int(row.count)
+            for row in connection.execute(text(
+                "SELECT status, count(*) AS count "
+                "FROM course_localizations GROUP BY status"
+            )).mappings()
+        }
+        corrupt_values = int(connection.execute(
+            text(
+                "SELECT count(*) FROM course_localizations "
+                "WHERE title LIKE :marker OR description LIKE :marker"
+            ),
+            {"marker": "%\ufffd%"},
+        ).scalar() or 0)
+        corrupt_samples = [
+            dict(row)
+            for row in connection.execute(
+                text(
+                    "SELECT course_id, language, title, description "
+                    "FROM course_localizations "
+                    "WHERE title LIKE :marker OR description LIKE :marker "
+                    "ORDER BY course_id, language LIMIT 30"
+                ),
+                {"marker": "%\ufffd%"},
+            ).mappings()
+        ]
         for language in ("ru", "kk", "en"):
             condition = (
                 "FROM courses c LEFT JOIN course_localizations l "
@@ -70,8 +96,15 @@ def main() -> int:
         "database_dialect": engine.dialect.name,
         "total_courses": total_courses,
         "localized_by_language": by_language,
+        "localized_by_status": by_status,
         "missing_by_language": missing,
-        "complete": total_courses > 0 and all(value == 0 for value in missing.values()),
+        "corrupt_values": corrupt_values,
+        "corrupt_samples": corrupt_samples,
+        "complete": (
+            total_courses > 0
+            and all(value == 0 for value in missing.values())
+            and corrupt_values == 0
+        ),
         "samples": samples,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +117,9 @@ def main() -> int:
         "database": report["database_dialect"],
         "courses": total_courses,
         "localized": by_language,
+        "statuses": by_status,
         "missing": missing,
+        "corrupt_values": corrupt_values,
         "output": str(args.output),
     }, ensure_ascii=False))
     return 0 if report["complete"] else 1
