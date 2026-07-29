@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, Float, ForeignKey, Table, DateTime, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, JSON, Float, ForeignKey, Table, DateTime, UniqueConstraint, event
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -69,3 +69,33 @@ class CourseLocalization(Base):
     course = relationship("Course", backref="localizations")
 
     __table_args__ = (UniqueConstraint("course_id", "language"),)
+
+
+@event.listens_for(Session, "before_flush")
+def ensure_new_course_localizations(session, _flush_context, _instances):
+    """Every newly created discipline starts with explicit RU/KK/EN drafts.
+
+    EPVO or expert translations can upgrade these rows to ``verified`` in the
+    same transaction. This invariant prevents future repository imports,
+    bridge promotion, and manual creation from producing untranslated courses.
+    """
+    new_courses = [row for row in session.new if isinstance(row, Course)]
+    if not new_courses:
+        return
+    pending = {
+        (id(row.course), row.language)
+        for row in session.new
+        if isinstance(row, CourseLocalization) and row.course is not None
+    }
+    for course in new_courses:
+        for language in ("ru", "kk", "en"):
+            if (id(course), language) in pending:
+                continue
+            session.add(CourseLocalization(
+                course=course,
+                language=language,
+                title=course.title,
+                description=course.description,
+                source="automatic_course_draft",
+                status="draft",
+            ))

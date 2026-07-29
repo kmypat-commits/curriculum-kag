@@ -11,7 +11,7 @@ from app.kag.indexing import index_all_courses
 from app.models.embedding import Embedding
 from app.config import settings
 from app.kag.epvo_two_stage import epvo_two_stage_ranker
-from app.services.content_localization import course_translations
+from app.services.content_localization import course_localization_map, course_translations
 import numpy as np
 import math
 
@@ -139,11 +139,15 @@ def _extract_keywords(text: str, top_n: int = 10) -> List[str]:
     return sorted(unique, key=len, reverse=True)[:top_n]
 
 
-def _course_match_text(course: Course) -> str:
+def _course_match_text(course: Course, localization: Dict | None = None) -> str:
     parts: List[str] = [course.title]
     if course.description:
         parts.append(course.description)
-    translated_description = course_translations(course.id, "description")
+    translated_description = (
+        (localization or {}).get("description_translations")
+        if localization is not None
+        else course_translations(course.id, "description")
+    )
     if translated_description:
         parts.extend(value for value in translated_description.values() if value)
     if course.topics:
@@ -157,6 +161,7 @@ def calculate_match_score(
     course: Course,
     lo: LearningOutcome,
     db: Session,
+    localization: Dict | None = None,
 ) -> Dict:
     """
     Compute M(course, LO) — the KAG match score with evidence trail.
@@ -171,7 +176,7 @@ def calculate_match_score(
     Returns ``{"score": float, "evidence": dict}``.
     """
     # Build course text
-    course_text = _course_match_text(course)
+    course_text = _course_match_text(course, localization)
 
     # 1. Semantic similarity
     semantic_score = calculate_semantic_similarity(course_text, lo.lo_text)
@@ -282,6 +287,7 @@ def _lightweight_candidate_courses(
     lo: LearningOutcome,
     courses: List[Course],
     limit: int,
+    localizations: Dict[int, Dict] | None = None,
 ) -> List[Dict]:
     """Cheap candidate retrieval for large EPVO catalogues.
 
@@ -293,7 +299,14 @@ def _lightweight_candidate_courses(
     lo_keywords = set(_extract_keywords(lo.lo_text, top_n=16))
 
     def rank(course: Course):
-        translated_description = " ".join((course_translations(course.id, "description") or {}).values())
+        localization = (localizations or {}).get(course.id)
+        translated_description = " ".join(
+            (
+                (localization or {}).get("description_translations")
+                if localization is not None
+                else course_translations(course.id, "description")
+            or {}).values()
+        )
         text = " ".join(filter(None, [course.title, course.description or "", translated_description, course.domain or ""])).lower()
         hits = sum(1 for keyword in lo_keywords if keyword in text)
         exact_title = any(keyword in (course.title or "").lower() for keyword in lo_keywords)
@@ -395,6 +408,11 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
         course for course in all_courses
         if course.id in scoped_course_ids or _domain_matches(course, domain_filter)
     ]
+    localizations = course_localization_map(
+        db,
+        [course.id for course in project_courses],
+        include_descriptions=True,
+    )
     # A narrow project scope can contain fewer than 3k courses even when the
     # repository itself is huge. Reindexing the entire repository in that case
     # makes every new programme appear frozen before LO1.
@@ -456,6 +474,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 lo,
                 project_courses,
                 limit=max(settings.TOP_K_RETRIEVAL, 80),
+                localizations=localizations,
             )
             # Guarantee representation of every selected EPVO scope. Without
             # stratification, a large primary catalogue can occupy all lexical
@@ -463,7 +482,9 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             by_course_id = {int(row["course_id"]): row for row in top_courses}
             per_scope_limit = max(30, settings.TOP_K_RETRIEVAL // max(1, len(scoped_course_sets)))
             for scoped_courses in scoped_course_sets:
-                for row in _lightweight_candidate_courses(lo, scoped_courses, limit=per_scope_limit):
+                for row in _lightweight_candidate_courses(
+                    lo, scoped_courses, limit=per_scope_limit, localizations=localizations
+                ):
                     by_course_id.setdefault(int(row["course_id"]), row)
             top_courses = list(by_course_id.values())
         else:
@@ -478,13 +499,15 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             course = course_by_id.get(int(course_data["course_id"]))
             if not course:
                 continue
-            match_result = calculate_match_score(course, lo, db)
+            match_result = calculate_match_score(
+                course, lo, db, localizations.get(course.id)
+            )
             pending_matches.append((course, match_result))
 
         reranked = epvo_two_stage_ranker.rerank(lo.lo_text, [
             {
                 "course_id": course.id,
-                "text": _course_match_text(course),
+                "text": _course_match_text(course, localizations.get(course.id)),
                 "classifier_score": float(result["score"] or 0),
                 "classifier_similarity": float((result["evidence"] or {}).get("semantic_score") or 0),
                 "expert_score": float((result["evidence"] or {}).get("epvo_expert_score") or 0),

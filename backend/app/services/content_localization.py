@@ -29,10 +29,10 @@ def course_translation_status(course_id):
 
 
 def course_localization_payload(db, course_id):
-    """Return title/description translations from SQLite, falling back to legacy JSON."""
-    titles = dict(course_translations(course_id, "title"))
-    descriptions = dict(course_translations(course_id, "description"))
-    status = course_translation_status(course_id)
+    """Return database translations, using legacy JSON only for missing rows."""
+    titles = {}
+    descriptions = {}
+    status = None
     try:
         from app.models.course import CourseLocalization
 
@@ -48,6 +48,14 @@ def course_localization_payload(db, course_id):
                 status = row.status
     except Exception:
         pass
+    if len(titles) < 3:
+        legacy_titles = course_translations(course_id, "title")
+        legacy_descriptions = course_translations(course_id, "description")
+        for language, value in legacy_titles.items():
+            titles.setdefault(language, value)
+        for language, value in legacy_descriptions.items():
+            descriptions.setdefault(language, value)
+        status = status or course_translation_status(course_id)
     return {
         "title_translations": titles,
         "description_translations": descriptions,
@@ -58,9 +66,9 @@ def course_localization_payload(db, course_id):
 def course_localization_map(db, course_ids, include_descriptions=True):
     """Batch variant of course_localization_payload for response builders."""
     result = {int(course_id): {
-        "title_translations": dict(course_translations(course_id, "title")),
-        "description_translations": dict(course_translations(course_id, "description")) if include_descriptions else {},
-        "translation_status": course_translation_status(course_id),
+        "title_translations": {},
+        "description_translations": {},
+        "translation_status": None,
     } for course_id in set(course_ids or []) if course_id}
     if not result:
         return result
@@ -84,13 +92,67 @@ def course_localization_map(db, course_ids, include_descriptions=True):
                 payload["translation_status"] = row.status
     except Exception:
         pass
+    missing_ids = [
+        course_id for course_id, payload in result.items()
+        if len(payload["title_translations"]) < 3
+    ]
+    for course_id in missing_ids:
+        payload = result[course_id]
+        for language, value in course_translations(course_id, "title").items():
+            payload["title_translations"].setdefault(language, value)
+        if include_descriptions:
+            for language, value in course_translations(course_id, "description").items():
+                payload["description_translations"].setdefault(language, value)
+        payload["translation_status"] = (
+            payload["translation_status"] or course_translation_status(course_id)
+        )
     return result
 
 
-def register_course_translations(records):
-    """Atomically add verified translations for approved EPVO courses."""
+def register_course_translations(records, db=None):
+    """Store translations in the database; keep JSON only as a legacy fallback."""
     if not records:
-        return
+        return 0
+    if db is not None:
+        from app.models.course import CourseLocalization
+
+        stored = 0
+        verified_statuses = {
+            "approved", "verified", "verified_epvo",
+            "verified_epvo_fuzzy", "machine_reviewed",
+        }
+        for course_id, payload in records.items():
+            if not isinstance(payload, dict):
+                continue
+            titles = payload.get("title") if isinstance(payload.get("title"), dict) else payload
+            descriptions = payload.get("description") if isinstance(payload.get("description"), dict) else {}
+            status = "verified" if payload.get("review_status") in verified_statuses else "draft"
+            source = payload.get("source") or "epvo_normalized_repository"
+            for language in ("ru", "kk", "en"):
+                title = str((titles or {}).get(language) or "").strip()
+                if not title:
+                    continue
+                row = db.query(CourseLocalization).filter(
+                    CourseLocalization.course_id == int(course_id),
+                    CourseLocalization.language == language,
+                ).first()
+                if row is None:
+                    row = CourseLocalization(
+                        course_id=int(course_id),
+                        language=language,
+                        title=title,
+                    )
+                    db.add(row)
+                row.title = title
+                description = str((descriptions or {}).get(language) or "").strip()
+                if description:
+                    row.description = description
+                row.source = source
+                row.status = status
+                stored += 1
+        db.flush()
+        return stored
+
     current = dict(_course_translations())
     for course_id, payload in records.items():
         if not isinstance(payload, dict):
@@ -108,3 +170,4 @@ def register_course_translations(records):
     temporary.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(TRANSLATIONS_FILE)
     _course_translations.cache_clear()
+    return len(records)

@@ -13,7 +13,6 @@ from app.config import settings
 from app.services.content_localization import (
     course_localization_map,
     course_localization_payload,
-    register_course_translations,
 )
 from app.services.epvo_repository import _assign_epvo_prerequisites
 import pandas as pd
@@ -401,7 +400,6 @@ async def reindex_epvo_scope(
 
     _assign_epvo_prerequisites(list({course.id: course for course in approved_courses}.values()))
     db.commit()
-    register_course_translations(translations)
     return {"scope": scope_label, "normalized": len(rows), "created": created, "linked": linked, "available": len(approved_courses)}
 
 

@@ -1453,13 +1453,10 @@ def build_plan(
         new_active_snapshot = _plan_snapshot(new_active_plan, db)
         change_report = _build_change_report(old_active_snapshot, new_active_snapshot)
 
-        db.commit()
         if epvo_translations:
-            try:
-                from app.services.content_localization import register_course_translations
-                register_course_translations(epvo_translations)
-            except OSError:
-                pass
+            from app.services.content_localization import register_course_translations
+            register_course_translations(epvo_translations, db)
+        db.commit()
         timings["saving"] = round(time.perf_counter() - stage_started, 2)
         _plan_build_status[project_version_id] = {
             "state": "complete",

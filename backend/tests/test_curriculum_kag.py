@@ -2,13 +2,6 @@
 from unittest.mock import MagicMock
 
 from check_text_encoding import looks_like_mojibake
-
-
-def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
-    assert looks_like_mojibake("РџР»Р°РЅ СѓС‡РµР±РЅРѕР№ РїСЂРѕРіСЂР°РјРјС‹")
-    assert looks_like_mojibake("ÐÐ»Ð°Ð½ ÑÑÐµÐ±Ð½Ð¾Ð¹ Ð¿ÑÐ¾Ð³ÑÐ°Ð¼Ð¼Ñ")
-    assert not looks_like_mojibake("План образовательной программы")
-    assert not looks_like_mojibake("Білім беру бағдарламасының жоспары")
 from app.kag.bridge_generator import call_llm, parse_llm_response
 from app.planner.scheduler import (
     _rebalance_semester_load,
@@ -17,6 +10,30 @@ from app.planner.scheduler import (
     schedule_courses,
 )
 from app.planner.verifier import verify_curriculum_plan
+from app.services.content_localization import register_course_translations
+
+
+def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
+    assert looks_like_mojibake("РџР»Р°РЅ СѓС‡РµР±РЅРѕР№ РїСЂРѕРіСЂР°РјРјС‹")
+    assert looks_like_mojibake("ÐÐ»Ð°Ð½ ÑÑÐµÐ±Ð½Ð¾Ð¹ Ð¿ÑÐ¾Ð³ÑÐ°Ð¼Ð¼Ñ")
+    assert not looks_like_mojibake("План образовательной программы")
+    assert not looks_like_mojibake("Білім беру бағдарламасының жоспары")
+
+
+def test_verified_translations_are_stored_in_database_without_json_write():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    stored = register_course_translations({
+        42: {
+            "title": {"ru": "Анализ данных", "kk": "Деректерді талдау", "en": "Data Analysis"},
+            "description": {"ru": "Описание", "kk": "Сипаттама", "en": "Description"},
+            "review_status": "verified_epvo",
+            "source": "epvo_normalized_repository",
+        }
+    }, db)
+    assert stored == 3
+    assert db.add.call_count == 3
+    assert db.flush.call_count == 1
 
 
 def test_two_semester_credit_tolerance_and_prerequisites():
