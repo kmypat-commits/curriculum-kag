@@ -17,7 +17,12 @@ from app.models.project import LearningOutcome, ProjectVersion
 from app.models.epvo import EpvoDirection, EpvoDisciplineLoLink, EpvoDisciplineNormalized, EpvoGroup
 from app.services.epvo_repository import epvo_row_matches_education_level, epvo_row_relevance_score
 from app.planner.international_quality import evaluate_international_quality
-from app.planner.verifier import TOTAL_CREDIT_TOLERANCE, verify_curriculum_plan
+from app.planner.verifier import (
+    TOTAL_CREDIT_TOLERANCE,
+    _ict_competency_audit,
+    _ict_competency_requirements,
+    verify_curriculum_plan,
+)
 from app.planner.goso import merge_goso_items
 
 
@@ -261,6 +266,38 @@ def _complexity_min_semester(item: Dict, num_semesters: int) -> int:
     return 1
 
 
+def _item_minimum_appropriate_semester(item: Dict, num_semesters: int) -> int:
+    """Lower semester bound that also respects a credible source recommendation."""
+    recommended = int(item.get("recommended_semester") or 0)
+    semantic_upper = _foundation_max_semester(item.get("title"), num_semesters)
+    if item.get("prerequisites") and recommended:
+        semantic_upper = max(
+            semantic_upper, min(num_semesters, recommended + 2)
+        )
+    recommended_lower = max(1, recommended - 1) if recommended else 1
+    title_key = _title_key(item.get("title"))
+    explicit_foundation = title_key.startswith(
+        ("основы ", "введение ", "fundamentals", "introduction")
+    )
+    clinical_foundation = any(
+        marker in title_key
+        for marker in (
+            "хирург", "surgery", "кардио", "гастро", "онколог",
+            "уролог", "невролог", "терапи", "педиатр", "клиническ",
+        )
+    )
+    if explicit_foundation and not clinical_foundation:
+        recommended_lower = 1
+    if recommended_lower > semantic_upper:
+        recommended_lower = 1
+    return max(
+        1,
+        _late_stage_min_semester(item.get("title"), num_semesters),
+        _complexity_min_semester(item, num_semesters),
+        recommended_lower,
+    )
+
+
 def _foundation_max_semester(title: str | None, num_semesters: int) -> int:
     key = _title_key(title)
     if any(marker in key for marker in (
@@ -449,6 +486,25 @@ def _education_level_course_allowed(course: Course, education_level: str | None)
     return True
 
 
+def _credible_professional_lo_by_course(
+    project_version: ProjectVersion,
+    course_ids: set[int],
+    db: Session,
+) -> Dict[int, set[str]]:
+    """Return programme-specific LO evidence accepted by the final gate."""
+    lo_codes = {lo.id: str(lo.lo_code or "") for lo in project_version.learning_outcomes}
+    credible_professional: Dict[int, set[str]] = {}
+    for match in db.query(MatchScore).filter(
+        MatchScore.project_version_id == project_version.id,
+        MatchScore.course_id.in_(course_ids or [-1]),
+    ).all():
+        expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+        code = lo_codes.get(match.lo_id, "")
+        if code and not code.startswith("LO-GOSO-") and max(float(match.score or 0.0), expert) >= 0.4:
+            credible_professional.setdefault(int(match.course_id), set()).add(code)
+    return credible_professional
+
+
 def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersion, db: Session) -> Dict:
     """Verify that every persisted real course has auditable admission evidence."""
     constraints = project_version.project.constraints_json or {}
@@ -462,16 +518,7 @@ def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersio
     ]
     course_ids = {int(item["course_id"]) for _, item in real_items}
     courses = {course.id: course for course in db.query(Course).filter(Course.id.in_(course_ids or [-1])).all()}
-    lo_codes = {lo.id: str(lo.lo_code or "") for lo in project_version.learning_outcomes}
-    credible_professional: Dict[int, set[str]] = {}
-    for match in db.query(MatchScore).filter(
-        MatchScore.project_version_id == project_version.id,
-        MatchScore.course_id.in_(course_ids or [-1]),
-    ).all():
-        expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-        code = lo_codes.get(match.lo_id, "")
-        if code and not code.startswith("LO-GOSO-") and max(float(match.score or 0.0), expert) >= 0.4:
-            credible_professional.setdefault(int(match.course_id), set()).add(code)
+    credible_professional = _credible_professional_lo_by_course(project_version, course_ids, db)
 
     scope_pairs = [(
         str(constraints.get("group_code") or ""), str(constraints.get("direction_code") or ""),
@@ -523,13 +570,8 @@ def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersio
         ):
             reason = "outside_project_domain"
         else:
-            minimum_semester = max(
-                _late_stage_min_semester(course.title, total_semesters),
-                _complexity_min_semester({
-                    "title": course.title,
-                    "domain": item.get("domain") or course.domain,
-                    "type": item.get("type") or course.cycle_component,
-                }, total_semesters),
+            minimum_semester = _minimum_appropriate_semester(
+                item, course, total_semesters
             )
             if semester < minimum_semester:
                 reason = "too_early_for_complexity"
@@ -539,6 +581,161 @@ def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersio
                 "semester": semester, "reason": reason,
             })
     return {"checked_real_courses": len(real_items), "passed": not violations, "violations": violations}
+
+
+def _minimum_appropriate_semester(
+    item: Dict,
+    course: Course,
+    num_semesters: int,
+) -> int:
+    """Use one lower-bound rule in scheduling, repairs, verification and admission."""
+    merged = {
+        **item,
+        "title": course.title,
+        "domain": item.get("domain") or course.domain,
+        "type": item.get("type") or course.cycle_component,
+        "recommended_semester": (
+            item.get("recommended_semester") or course.recommended_semester
+        ),
+    }
+    return _item_minimum_appropriate_semester(merged, num_semesters)
+
+
+def _repair_missing_ict_competencies(
+    items: List[Dict],
+    project_version: ProjectVersion,
+    db: Session,
+) -> List[Dict]:
+    """Swap in credible local foundations when scoped EPVO cards omit an ICT block."""
+    constraints = project_version.project.constraints_json or {}
+    requirements = _ict_competency_requirements(constraints)
+    if not requirements:
+        return items
+    normalized = [dict(item) for item in items]
+    selected_ids = {
+        int(item["course_id"]) for item in normalized if item.get("course_id") is not None
+    }
+    selected_courses = {
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_(selected_ids or [-1])).all()
+    }
+    audit = _ict_competency_audit(list(selected_courses.values()), constraints)
+    if audit["passed"]:
+        return normalized
+
+    professional_lo_ids = {
+        lo.id for lo in project_version.learning_outcomes
+        if not str(lo.lo_code or "").startswith("LO-GOSO-")
+    }
+    matches = db.query(MatchScore).filter(
+        MatchScore.project_version_id == project_version.id,
+        MatchScore.lo_id.in_(professional_lo_ids or {-1}),
+    ).all()
+    effective_by_course: Dict[int, Dict[int, float]] = {}
+    for match in matches:
+        expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+        score = max(float(match.score or 0.0), expert)
+        if score >= 0.4:
+            effective_by_course.setdefault(int(match.course_id), {})[int(match.lo_id)] = score
+    candidate_ids = set(effective_by_course) - selected_ids
+    candidates = db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
+    project_domains = _project_domain_terms(project_version, db)
+    candidates = [
+        course for course in candidates
+        if not str(course.course_id or "").startswith("EPVO-")
+        and _education_level_course_allowed(course, constraints.get("education_level"))
+        and _course_domain_matches(course, project_domains)
+    ]
+    protected_ids = {
+        int(prerequisite_id)
+        for item in normalized
+        for prerequisite_id in (item.get("prerequisites") or [])
+        if prerequisite_id in selected_ids
+    }
+
+    for missing_code in list(audit["missing"]):
+        alternatives = requirements[missing_code]
+        block_candidates = [
+            course for course in candidates
+            if any(
+                all(stem in str(course.title or "").casefold() for stem in stems)
+                for stems in alternatives
+            )
+        ]
+        block_candidates.sort(key=lambda course: (
+            -max(effective_by_course.get(course.id, {}).values(), default=0.0),
+            course.recommended_semester or 99,
+            course.id,
+        ))
+        repaired = False
+        for candidate in block_candidates:
+            candidate_scores = effective_by_course.get(candidate.id, {})
+            candidate_strong = {lo_id for lo_id, score in candidate_scores.items() if score >= 0.5}
+            replaceable = [
+                (index, item)
+                for index, item in enumerate(normalized)
+                if item.get("course_id") is not None
+                and not item.get("regulatory_required")
+                and int(item.get("course_id")) not in protected_ids
+                and int(item.get("credits") or 0) == int(candidate.credits or 5)
+            ]
+            replaceable.sort(key=lambda pair: (
+                float(pair[1].get("admission_score") or 0.0),
+                -int(pair[1].get("recommended_semester") or 0),
+            ))
+            for index, old_item in replaceable:
+                old_id = int(old_item["course_id"])
+                other_strong = {
+                    lo_id
+                    for course_id, scores in effective_by_course.items()
+                    if course_id in selected_ids and course_id != old_id
+                    for lo_id, score in scores.items()
+                    if score >= 0.5
+                }
+                old_strong = {
+                    lo_id for lo_id, score in effective_by_course.get(old_id, {}).items()
+                    if score >= 0.5
+                }
+                if not old_strong.issubset(other_strong | candidate_strong):
+                    continue
+                trial = [dict(item) for item in normalized]
+                trial[index] = {
+                    "course_id": candidate.id,
+                    "title": candidate.title,
+                    "domain": candidate.domain,
+                    "credits": int(candidate.credits or 5),
+                    "recommended_semester": candidate.recommended_semester,
+                    "prerequisites": [],
+                    "type": candidate.cycle_component or "mandatory",
+                    "selection_method": "ict_competency_repair",
+                    "admission_reason": "missing_ict_competency_and_lo",
+                    "admission_los": sorted(
+                        str(lo.lo_code)
+                        for lo in project_version.learning_outcomes
+                        if lo.id in candidate_scores
+                    ),
+                    "admission_score": round(max(candidate_scores.values()), 4),
+                }
+                trial_courses = [
+                    selected_courses.get(int(item["course_id"]))
+                    if int(item["course_id"]) != candidate.id else candidate
+                    for item in trial if item.get("course_id") is not None
+                ]
+                trial_courses = [course for course in trial_courses if course is not None]
+                trial_audit = _ict_competency_audit(trial_courses, constraints)
+                if len(trial_audit["missing"]) >= len(audit["missing"]):
+                    continue
+                normalized = trial
+                selected_ids.discard(old_id)
+                selected_ids.add(candidate.id)
+                selected_courses.pop(old_id, None)
+                selected_courses[candidate.id] = candidate
+                audit = trial_audit
+                repaired = True
+                break
+            if repaired:
+                break
+    return normalized
 
 
 def _limit_general_course_items(
@@ -593,11 +790,18 @@ def _bridge_item(module: BridgeModule) -> Dict:
     }
     if (module.course_id or "").startswith(("CORE_BRIDGE_", "SECONDARY_")):
         recommended = int(module.recommended_semester or 1)
-        item["latest_semester"] = recommended + 1
+        item["latest_semester"] = recommended + (
+            2 if (module.course_id or "").startswith("CORE_BRIDGE_") else 1
+        )
     return item
 
 
-def _force_bridge_item(items: List[Dict], module: BridgeModule | None, variant_type: str = "A") -> List[Dict]:
+def _force_bridge_item(
+    items: List[Dict],
+    module: BridgeModule | None,
+    variant_type: str = "A",
+    target_credits: int | None = None,
+) -> List[Dict]:
     if module is None or any(item.get("bridge_module_id") == module.id for item in items):
         return items
     normalized = [dict(item) for item in items]
@@ -607,15 +811,35 @@ def _force_bridge_item(items: List[Dict], module: BridgeModule | None, variant_t
         for prerequisite_id in (item.get("prerequisites") or [])
     }
     bridge = _bridge_item(module)
+    current_total = sum(int(item.get("credits") or 0) for item in normalized)
+    gap = (target_credits - current_total) if target_credits is not None else 0
+    if target_credits is not None and gap >= 3:
+        credits = min(int(module.credits or 5), gap)
+        if 0 < gap - credits < 3:
+            credits = gap - 3
+        if credits >= 3:
+            bridge["credits"] = credits
+            normalized.append(bridge)
+            return normalized
+    if (
+        target_credits is not None
+        and current_total + int(module.credits or 5) <= target_credits
+    ):
+        normalized.append(bridge)
+        return normalized
     same_credit = [
         (index, item) for index, item in enumerate(normalized)
         if item.get("course_id") is not None
+        and not item.get("regulatory_required")
+        and not item.get("competency_required")
         and item.get("course_id") not in protected_course_ids
         and int(item.get("credits") or 0) == int(module.credits or 5)
     ]
     replaceable = same_credit or [
         (index, item) for index, item in enumerate(normalized)
         if item.get("course_id") is not None
+        and not item.get("regulatory_required")
+        and not item.get("competency_required")
         and item.get("course_id") not in protected_course_ids
     ]
     if replaceable:
@@ -644,7 +868,10 @@ def _relocate_bounded_bridges(schedule: Dict[int, List[Dict]], num_semesters: in
             if not bridge or not (bridge.course_id or "").startswith(("CORE_BRIDGE_", "SECONDARY_")):
                 continue
             recommended = int(bridge.recommended_semester or item.get("recommended_semester") or 1)
-            latest = min(num_semesters, recommended + 1)
+            latest = min(
+                num_semesters,
+                recommended + (2 if (bridge.course_id or "").startswith("CORE_BRIDGE_") else 1),
+            )
             if recommended <= current_semester <= latest:
                 continue
             credits = int(item.get("credits") or 0)
@@ -704,10 +931,7 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     credits = int(item.get("credits") or 0)
                     if current_loads[target] + credits > upper:
                         continue
-                    if target < max(
-                        _late_stage_min_semester(item.get("title"), num_semesters),
-                        _complexity_min_semester(item, num_semesters),
-                    ):
+                    if target < _item_minimum_appropriate_semester(item, num_semesters):
                         continue
                     latest = int(item.get("latest_semester") or num_semesters)
                     if target > latest:
@@ -748,10 +972,7 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                         continue
                     if current_loads[target] + credits > upper:
                         continue
-                    if target < max(
-                        _late_stage_min_semester(item.get("title"), num_semesters),
-                        _complexity_min_semester(item, num_semesters),
-                    ):
+                    if target < _item_minimum_appropriate_semester(item, num_semesters):
                         continue
                     latest = int(item.get("latest_semester") or num_semesters)
                     if target > latest:
@@ -789,10 +1010,7 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
         def can_place(item: Dict, target: int, overrides: Dict[int, int]) -> bool:
             if item.get("regulatory_required"):
                 return False
-            if target < max(
-                _late_stage_min_semester(item.get("title"), num_semesters),
-                _complexity_min_semester(item, num_semesters),
-            ):
+            if target < _item_minimum_appropriate_semester(item, num_semesters):
                 return False
             if target > int(item.get("latest_semester") or num_semesters):
                 return False
@@ -891,9 +1109,8 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
                 if credits <= 0:
                     continue
                 latest = int(item.get("latest_semester") or num_semesters)
-                earliest = max(
-                    _late_stage_min_semester(item.get("title"), num_semesters),
-                    _complexity_min_semester(item, num_semesters),
+                earliest = _item_minimum_appropriate_semester(
+                    item, num_semesters
                 )
                 parent_semesters = [course_semesters.get(pid, 0) for pid in item.get("prerequisites") or []]
                 min_target = max([earliest, *(semester + 1 for semester in parent_semesters)])
@@ -931,10 +1148,7 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
             def can_place(candidate: Dict, target: int, overrides: Dict[int, int]) -> bool:
                 if candidate.get("regulatory_required"):
                     return False
-                if target < max(
-                    _late_stage_min_semester(candidate.get("title"), num_semesters),
-                    _complexity_min_semester(candidate, num_semesters),
-                ):
+                if target < _item_minimum_appropriate_semester(candidate, num_semesters):
                     return False
                 if target > int(candidate.get("latest_semester") or num_semesters):
                     return False
@@ -1278,9 +1492,25 @@ def _repair_final_domain_quotas(
         semester: [dict(item) for item in items]
         for semester, items in schedule.items()
     }
+    candidate_ids = {
+        int(item["course_id"])
+        for item in candidate_pool
+        if item.get("course_id") is not None
+    }
+    credible_candidates = _credible_professional_lo_by_course(
+        project_version, candidate_ids, db
+    )
+    candidate_courses = {
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
+    }
     candidates = [
         dict(item) for item in _unique_items_by_title(candidate_pool)
-        if item.get("course_id") is not None and domain_index(item) in (0, 1)
+        if (
+            item.get("course_id") is not None
+            and domain_index(item) in (0, 1)
+            and int(item["course_id"]) in credible_candidates
+        )
     ]
     candidates.sort(
         key=lambda item: (
@@ -1340,6 +1570,7 @@ def _repair_final_domain_quotas(
                 for semester, items in normalized.items()
                 for index, item in enumerate(items)
                 if not item.get("regulatory_required")
+                and not item.get("competency_required")
                 and int(item.get("credits") or 0) == candidate_credits
                 and item.get("course_id") not in protected_ids
                 and domain_index(item) != candidate_domain
@@ -1353,6 +1584,14 @@ def _repair_final_domain_quotas(
                 )
             )
             for semester, index, old_item in replaceable:
+                candidate_course = candidate_courses.get(candidate_id)
+                if (
+                    candidate_course
+                    and semester < _minimum_appropriate_semester(
+                        candidate, candidate_course, int(constraints.get("total_semesters", len(normalized)) or len(normalized))
+                    )
+                ):
+                    continue
                 trial = {
                     value: [dict(item) for item in items]
                     for value, items in normalized.items()
@@ -1392,6 +1631,7 @@ def _repair_final_domain_quotas(
                 for semester, items in normalized.items()
                 for index, item in enumerate(items)
                 if not item.get("regulatory_required")
+                and not item.get("competency_required")
                 and item.get("course_id") not in protected_ids
                 and domain_index(item) not in missing_domains
             ]
@@ -1426,7 +1666,21 @@ def _repair_final_domain_quotas(
                         replacement = dict(candidate)
                         replacement["selection_method"] = "final_domain_quota_group_repair"
                         target = target_semesters[min(index, len(target_semesters) - 1)]
+                        candidate_course = candidate_courses.get(int(candidate["course_id"]))
+                        if (
+                            candidate_course
+                            and target < _minimum_appropriate_semester(
+                                candidate,
+                                candidate_course,
+                                int(constraints.get("total_semesters", len(normalized)) or len(normalized)),
+                            )
+                        ):
+                            break
                         trial[target].append(replacement)
+                    else:
+                        candidate_course = None
+                    if candidate_course is not None:
+                        continue
                     trial = _repair_semester_appropriateness(
                         trial,
                         int(constraints.get("total_semesters", len(trial)) or len(trial)),
@@ -1444,6 +1698,126 @@ def _repair_final_domain_quotas(
                 if improved:
                     break
         if not improved:
+            break
+    return normalized
+
+
+def _repair_final_admission_misplacements(
+    schedule: Dict[int, List[Dict]],
+    candidate_pool: List[Dict],
+    project_version: ProjectVersion,
+    db: Session,
+) -> Dict[int, List[Dict]]:
+    """Replace an unplaceable late course with an equal-credit credible alternative."""
+    normalized = {
+        semester: [dict(item) for item in items]
+        for semester, items in schedule.items()
+    }
+    constraints = project_version.project.constraints_json or {}
+    num_semesters = int(constraints.get("total_semesters", len(normalized)) or len(normalized))
+    candidate_ids = {
+        int(item["course_id"]) for item in candidate_pool
+        if item.get("course_id") is not None
+    }
+    courses = {
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
+    }
+    credible = _credible_professional_lo_by_course(project_version, candidate_ids, db)
+
+    for _ in range(6):
+        admission = _audit_final_course_admission(normalized, project_version, db)
+        misplaced = next(
+            (
+                row for row in admission["violations"]
+                if row.get("reason") == "too_early_for_complexity"
+            ),
+            None,
+        )
+        if not misplaced:
+            break
+        semester = int(misplaced["semester"])
+        old_index = next(
+            (
+                index for index, item in enumerate(normalized[semester])
+                if item.get("course_id") == misplaced.get("course_id")
+            ),
+            None,
+        )
+        if old_index is None:
+            break
+        old_item = normalized[semester][old_index]
+        selected_ids = {
+            int(item["course_id"])
+            for items in normalized.values()
+            for item in items if item.get("course_id") is not None
+        }
+        selected_titles = {
+            _title_key(item.get("title"))
+            for items in normalized.values()
+            for item in items if item.get("title")
+        }
+        old_domain = str(old_item.get("domain") or "").casefold().strip()
+        alternatives = [
+            item for item in candidate_pool
+            if item.get("course_id") is not None
+            and int(item["course_id"]) not in selected_ids
+            and int(item["course_id"]) in credible
+            and _title_key(item.get("title")) not in selected_titles
+            and int(item.get("credits") or 0) == int(old_item.get("credits") or 0)
+            and (
+                not old_domain
+                or old_domain == str(item.get("domain") or "").casefold().strip()
+            )
+        ]
+        alternatives.sort(key=lambda item: (
+            -float(item.get("admission_score") or 0.0),
+            int(item.get("recommended_semester") or 99),
+            int(item.get("course_id") or 0),
+        ))
+        current_check = verify_curriculum_plan(normalized, project_version, db)
+        current_misplacements = len(
+            (current_check.get("pedagogical_audit") or {}).get("semester_misplacements") or []
+        )
+        repaired = False
+        for alternative in alternatives:
+            course = courses.get(int(alternative["course_id"]))
+            if not course or semester < _minimum_appropriate_semester(
+                alternative, course, num_semesters
+            ):
+                continue
+            prerequisites = {
+                int(value) for value in (alternative.get("prerequisites") or [])
+            }
+            earlier_ids = {
+                int(item["course_id"])
+                for value, items in normalized.items() if value < semester
+                for item in items if item.get("course_id") is not None
+            }
+            if not prerequisites.issubset(earlier_ids):
+                continue
+            trial = {
+                value: [dict(item) for item in items]
+                for value, items in normalized.items()
+            }
+            replacement = dict(alternative)
+            replacement["selection_method"] = "final_admission_backtrack"
+            trial[semester][old_index] = replacement
+            checked = verify_curriculum_plan(trial, project_version, db)
+            checked_misplacements = len(
+                (checked.get("pedagogical_audit") or {}).get("semester_misplacements") or []
+            )
+            if (
+                int(checked.get("hard_violation_count") or 0)
+                > int(current_check.get("hard_violation_count") or 0)
+                or checked_misplacements >= current_misplacements
+                or not _audit_final_course_admission(trial, project_version, db)["passed"]
+            ):
+                continue
+            normalized = trial
+            repaired = True
+            break
+        if not repaired:
             break
     return normalized
 
@@ -1471,7 +1845,12 @@ def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_cre
             module.credits = item["credits"]
 
     for item in sorted(
-        (item for items in schedule.values() for item in items if item.get("course_id") is not None and not item.get("regulatory_required")),
+        (
+            item for items in schedule.values() for item in items
+            if item.get("course_id") is not None
+            and not item.get("regulatory_required")
+            and not item.get("competency_required")
+        ),
         key=lambda row: (
             0 if "выбор" in str(row.get("type") or "").lower() or "elective" in str(row.get("type") or "").lower() else 1,
             -int(row.get("credits") or 0),
@@ -1507,6 +1886,7 @@ def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_cre
             for semester, items in schedule.items()
             for index, item in enumerate(items)
             if item.get("course_id") is not None
+            and not item.get("competency_required")
             and item.get("course_id") not in protected
             and int(item.get("credits") or 0) <= excess
         ]
@@ -2615,20 +2995,107 @@ def _fit_real_professional_block_after_goso(
         max(0, math.ceil(capacity * percentage / 100.0 - tolerance - 1e-9))
         for percentage in percentages
     )
+    locked_indexes: List[int] = []
+    competency_requirements = _ict_competency_requirements(constraints)
+    if competency_requirements:
+        candidate_courses = {
+            course.id: course
+            for course in db.query(Course).filter(Course.id.in_(candidate_ids or [-1])).all()
+        }
+        regulatory_ids = {
+            int(item["course_id"]) for item in regulatory
+            if item.get("course_id") is not None
+        }
+        regulatory_courses = [
+            course for course in db.query(Course).filter(
+                Course.id.in_(regulatory_ids or {-1})
+            ).all()
+        ]
+
+        def blocks_for_title(title: str | None) -> set[str]:
+            text = str(title or "").casefold()
+            return {
+                code for code, alternatives in competency_requirements.items()
+                if any(all(stem in text for stem in stems) for stems in alternatives)
+            }
+
+        covered_blocks = {
+            code
+            for course in regulatory_courses
+            for code in blocks_for_title(course.title)
+        }
+        missing_blocks = set(competency_requirements) - covered_blocks
+        locked_credits = 0
+        while missing_blocks:
+            options = []
+            for index, item in enumerate(candidates):
+                if index in locked_indexes:
+                    continue
+                course_id = int(item.get("course_id") or 0)
+                course = candidate_courses.get(course_id)
+                if not course or course_id not in evidence:
+                    continue
+                newly_covered = blocks_for_title(course.title) & missing_blocks
+                credits = int(item.get("credits") or 0)
+                if not newly_covered or locked_credits + credits > capacity:
+                    continue
+                options.append((
+                    len(newly_covered),
+                    float(evidence[course_id][1]),
+                    -credits,
+                    -course_id,
+                    index,
+                    newly_covered,
+                ))
+            if not options:
+                break
+            *_rank, index, newly_covered = max(options)
+            locked_indexes.append(index)
+            locked_credits += int(candidates[index].get("credits") or 0)
+            missing_blocks -= newly_covered
+
+    locked = [dict(candidates[index]) for index in locked_indexes]
+    for item in locked:
+        item["competency_required"] = True
+        item["selection_method"] = "ict_competency_exact_fit"
+    locked_ids = {int(item["course_id"]) for item in locked}
+    remaining_candidates = [
+        item for item in candidates if int(item.get("course_id") or 0) not in locked_ids
+    ]
+    locked_domain_credits = [0, 0]
+    for item in locked:
+        domain_index = domain_index_by_course.get(int(item["course_id"]))
+        if domain_index in (0, 1):
+            locked_domain_credits[domain_index] += int(item.get("credits") or 0)
+    remaining_minimum_domain_credits = tuple(
+        max(0, minimum_domain_credits[index] - locked_domain_credits[index])
+        for index in (0, 1)
+    )
     best_indexes = _select_exact_professional_subset(
-        candidates,
+        remaining_candidates,
         evidence,
-        capacity,
+        capacity - sum(int(item.get("credits") or 0) for item in locked),
         domain_index_by_course,
-        minimum_domain_credits,
+        remaining_minimum_domain_credits,
         variant_type,
     )
     if not best_indexes:
+        locked = []
+        remaining_candidates = candidates
+        best_indexes = _select_exact_professional_subset(
+            candidates,
+            evidence,
+            capacity,
+            domain_index_by_course,
+            minimum_domain_credits,
+            variant_type,
+        )
+    if not best_indexes:
         return items
-    selected = [candidates[index] for index in best_indexes]
+    selected = [remaining_candidates[index] for index in best_indexes]
     for item in selected:
         item["selection_method"] = "goso_professional_exact_fit"
-    return _unique_items_by_title([*regulatory, *selected])
+    return _unique_items_by_title([*regulatory, *locked, *selected])
 
 
 def build_curriculum_plan(
@@ -2685,6 +3152,13 @@ def build_curriculum_plan(
     selected_courses = _fit_real_professional_block_after_goso(
         selected_courses, project_version, db, variant_type
     )
+    selected_courses = _repair_missing_ict_competencies(
+        selected_courses, project_version, db
+    )
+    if not selector_has_complete_real_lo:
+        selected_courses = _ensure_foundation_capacity(
+            selected_courses, project_version, db
+        )
     confirmed_bridge_ids = {
         int(bridge_id)
         for bridge_id in (constraints.get("confirmed_bridge_replacements") or {})
@@ -2695,20 +3169,46 @@ def build_curriculum_plan(
         build_program_type in {"interdisciplinary", "joint"}
         and bool(str(project_version.project.domain2 or "").strip())
     )
-    if (
-        constraints.get("allow_new_courses", True)
-        and build_is_interdisciplinary
-        and not selector_has_complete_real_lo
-    ):
-        for bridge in [
+    meaningful_bridges: List[BridgeModule | None] = []
+    if constraints.get("allow_new_courses", True) and build_is_interdisciplinary:
+        bridge_ids = {
+            int(item["bridge_module_id"])
+            for item in selected_courses
+            if item.get("bridge_module_id") is not None
+        }
+        bridge_codes = {
+            module.id: str(module.course_id or "")
+            for module in db.query(BridgeModule).filter(
+                BridgeModule.id.in_(bridge_ids or {-1})
+            ).all()
+        }
+        selected_courses = [
+            item for item in selected_courses
+            if not str(bridge_codes.get(item.get("bridge_module_id"), "")).startswith(
+                ("AUTO_BRIDGE_", "AUTO_LOAD_SHIFT_", "AUTO_BALANCE_", "QUALITY_BRIDGE_")
+            )
+        ]
+        # The integration module is structural evidence that the two selected
+        # fields are taught together. It is required even when separate real
+        # courses already cover every LO; generic credit-gap bridges are not.
+        meaningful_bridges = [
             ensure_core_interdisciplinary_bridge(project_version, db),
             *ensure_secondary_domain_bridge_modules(project_version, db),
-        ]:
+        ]
+        target = int(constraints.get("total_credits", 240))
+        for index, bridge in enumerate(meaningful_bridges):
             if bridge is None or bridge.id in confirmed_bridge_ids:
                 continue
-            selected_courses = _force_bridge_item(selected_courses, bridge, variant_type)
-    if not selector_has_complete_real_lo:
-        selected_courses = _ensure_foundation_capacity(selected_courses, project_version, db)
+            if index > 0 and sum(
+                int(item.get("credits") or 0) for item in selected_courses
+            ) >= target:
+                break
+            selected_courses = _force_bridge_item(
+                selected_courses,
+                bridge,
+                variant_type,
+                target,
+            )
     selected_courses = _unique_items_by_title(selected_courses)
     selected_courses = _remap_equivalent_prerequisites(selected_courses, db)
     num_semesters = int(constraints.get("total_semesters", 8))
@@ -2881,6 +3381,40 @@ def build_curriculum_plan(
             remaining_gap -= increase
         selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
 
+    if meaningful_bridges:
+        late_bridge_ids = {
+            int(item["bridge_module_id"])
+            for item in selected_courses
+            if item.get("bridge_module_id") is not None
+        }
+        late_bridge_codes = {
+            module.id: str(module.course_id or "")
+            for module in db.query(BridgeModule).filter(
+                BridgeModule.id.in_(late_bridge_ids or {-1})
+            ).all()
+        }
+        selected_courses = [
+            item for item in selected_courses
+            if not str(late_bridge_codes.get(item.get("bridge_module_id"), "")).startswith(
+                ("AUTO_BRIDGE_", "AUTO_LOAD_SHIFT_", "AUTO_BALANCE_", "QUALITY_BRIDGE_")
+            )
+        ]
+        for bridge in meaningful_bridges:
+            if bridge is None or bridge.id in confirmed_bridge_ids:
+                continue
+            if (
+                bridge is not meaningful_bridges[0]
+                and sum(int(item.get("credits") or 0) for item in selected_courses)
+                >= target_credits
+            ):
+                break
+            selected_courses = _force_bridge_item(
+                selected_courses, bridge, variant_type, target_credits
+            )
+        selected_courses = _trim_to_target_credits(
+            selected_courses, target_credits, db
+        )
+
     if (
         variant_type == "C"
         and str(constraints.get("education_level") or "").lower()
@@ -2891,6 +3425,7 @@ def build_curriculum_plan(
             item for item in selected_courses
             if item.get("course_id") is not None
             and not item.get("regulatory_required")
+            and not item.get("competency_required")
             and int(item.get("credits") or 0) == 5
             and _foundation_max_semester(item.get("title"), num_semesters)
             >= preferred_semester
@@ -2988,6 +3523,10 @@ def build_curriculum_plan(
     schedule = _repair_underloaded_semesters_with_bridges(
         schedule, project_version, nominal_load, target_credits, maximum_credits, db
     )
+    # Flexible bridge credits can change by one during residual repair. Run
+    # the bounded whole-course/swap balancer once more so a valid 3↔4 credit
+    # exchange is not left as a 26-credit semester.
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
     # The residual-load repair is intentionally the last credit operation, but
     # it can change which semester has room for a foundation course.  Re-run
     # the semantic repair so the persisted plan, not only the provisional
@@ -3003,6 +3542,9 @@ def build_curriculum_plan(
     # subject to the same final appropriateness rule.
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
+    )
+    schedule = _repair_final_admission_misplacements(
+        schedule, domain_repair_candidates, project_version, db
     )
     prerequisite_graph = _infer_schedule_prerequisites(schedule)
 
@@ -3972,8 +4514,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                     "prerequisites": quality_bridge.prerequisites or [],
                     "type": "bridge",
                 }
-        for bridge in [core_bridge, *secondary_bridges]:
-            optimized = _force_bridge_item(optimized, bridge, variant_type)
+        for bridge in [core_bridge]:
+            optimized = _force_bridge_item(
+                optimized, bridge, variant_type, target
+            )
         optimized = _promote_epvo_priority_courses(optimized, courses, prereq_ids_by_course, is_project_domain, course_depth, num_semesters, priority_rank, target, maximum)
         optimized = _limit_general_course_items(
             optimized,
@@ -3982,7 +4526,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             target,
             max_general_percent,
         )
-        optimized = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(remove_weak_general_items(optimized))), target, db)
+        optimized = _trim_to_target_credits(
+            close_professional_lo_gaps(
+                top_up_with_credit_bridges(remove_weak_general_items(optimized))
+            ),
+            target,
+            db,
+        )
         optimized = _diversify_variant_items(optimized, version, db, variant_type)
         optimized = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(remove_weak_general_items(optimized))), target, db)
         # The optimized path used to return before the common evidence gate.
@@ -4574,9 +5124,14 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         target,
         max_general_percent,
     )
-    result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(top_up_with_real_epvo_courses(remove_weak_general_items(result)))), target, db)
-    for bridge in [core_bridge, *secondary_bridges]:
-        result = _force_bridge_item(result, bridge, variant_type)
+    result = top_up_with_real_epvo_courses(remove_weak_general_items(result))
+    for bridge in [core_bridge]:
+        result = _force_bridge_item(result, bridge, variant_type, target)
+    result = _trim_to_target_credits(
+        close_professional_lo_gaps(top_up_with_credit_bridges(result)),
+        target,
+        db,
+    )
     total = sum(int(item.get("credits") or 0) for item in result)
     if constraints.get("allow_new_courses", True):
         existing_bridge_count = sum(1 for item in result if item.get("bridge_module_id") is not None)
@@ -4871,7 +5426,10 @@ def ensure_core_interdisciplinary_bridge(project_version: ProjectVersion, db: Se
     domain2_key = _title_key(domain2)
     domain2_display = "медицина" if any(token in domain2_key for token in ("medicine", "medical", "медицин", "медицина", "health", "clinical", "клиник")) else domain2
     title = f"Интеграционный модуль: {domain1_display} и {domain2_display}"
-    target_los = [lo.lo_code for lo in project_version.learning_outcomes] or []
+    target_los = [
+        lo.lo_code for lo in project_version.learning_outcomes
+        if not str(lo.lo_code or "").startswith("LO-GOSO-")
+    ]
     module = db.query(BridgeModule).filter(
         BridgeModule.project_version_id == project_version.id,
         BridgeModule.course_id == code,
@@ -4957,7 +5515,10 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
             ],
         },
     ]
-    target_los = [lo.lo_code for lo in project_version.learning_outcomes] or []
+    target_los = [
+        lo.lo_code for lo in project_version.learning_outcomes
+        if not str(lo.lo_code or "").startswith("LO-GOSO-")
+    ]
     modules: List[BridgeModule] = []
     for index, template in enumerate(templates, start=1):
         code = f"{template['suffix']}_{project_version.id}"
@@ -5141,6 +5702,15 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
         )
         earliest = max(earliest, min(num_semesters, regulatory_semester))
         earliest = max(earliest, _complexity_min_semester(item, num_semesters))
+        recommended = item.get("variant_preferred_semester") or item.get("recommended_semester")
+        semantic_upper = _foundation_max_semester(item.get("title"), num_semesters)
+        if item.get("prerequisites") and recommended:
+            semantic_upper = max(
+                semantic_upper, min(num_semesters, int(recommended) + 2)
+            )
+        recommended_lower = max(1, int(recommended) - 1) if recommended else 1
+        if recommended_lower <= semantic_upper:
+            earliest = max(earliest, recommended_lower)
         cid = item.get("course_id")
         bridge_id = item.get("bridge_module_id")
         if bridge_id is not None:
@@ -5148,17 +5718,20 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
             if bridge and (bridge.course_id or "").startswith(("CORE_BRIDGE_", "SECONDARY_")):
                 recommended_bridge_semester = int(bridge.recommended_semester or item.get("recommended_semester") or 1)
                 item["recommended_semester"] = recommended_bridge_semester
-                item["latest_semester"] = min(num_semesters, recommended_bridge_semester + 1)
+                item["latest_semester"] = min(
+                    num_semesters,
+                    recommended_bridge_semester
+                    + (2 if (bridge.course_id or "").startswith("CORE_BRIDGE_") else 1),
+                )
         latest = max(earliest, min(
             int(item.get("latest_semester") or num_semesters),
-            _foundation_max_semester(item.get("title"), num_semesters),
+            semantic_upper,
             num_semesters - (tail_depth(cid) if cid is not None else 0),
         ))
         item["latest_semester"] = latest
         candidates = list(range(earliest, latest + 1))
         valid = [s for s in candidates if loads[s] + (item.get("credits") or 0) <= upper]
         pool = valid or candidates
-        recommended = item.get("variant_preferred_semester") or item.get("recommended_semester")
         target = min(
             pool,
             key=lambda semester: (
@@ -5179,9 +5752,8 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                     credits = item.get("credits") or 0
                     if item.get("regulatory_required") and target_semester != int(item.get("recommended_semester") or donor_semester):
                         continue
-                    if target_semester < max(
-                        _late_stage_min_semester(item.get("title"), num_semesters),
-                        _complexity_min_semester(item, num_semesters),
+                    if target_semester < _item_minimum_appropriate_semester(
+                        item, num_semesters
                     ):
                         continue
                     if loads[donor_semester] - credits < lower or loads[target_semester] + credits > upper: continue

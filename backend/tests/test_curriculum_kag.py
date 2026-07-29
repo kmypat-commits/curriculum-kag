@@ -5,8 +5,11 @@ from check_text_encoding import looks_like_mojibake
 from app.kag.bridge_generator import call_llm, parse_llm_response
 from app.planner.scheduler import (
     _complexity_min_semester,
+    _credible_professional_lo_by_course,
     _foundation_equivalent_title_key,
+    _force_bridge_item,
     _infer_schedule_prerequisites,
+    _item_minimum_appropriate_semester,
     _rebalance_semester_load,
     _repair_semester_appropriateness,
     _select_exact_professional_subset,
@@ -43,6 +46,21 @@ def test_research_methodology_title_variants_share_semantic_key():
         _foundation_equivalent_title_key(title)
         for title in variants
     } == {"semantic research methodology"}
+
+
+def test_foundation_source_semester_is_advisory_except_for_clinical_depth():
+    ai = {
+        "title": "Основы искусственного интеллекта",
+        "recommended_semester": 6,
+        "prerequisites": [1],
+    }
+    surgery = {
+        "title": "Основы хирургии",
+        "recommended_semester": 8,
+        "prerequisites": [1],
+    }
+    assert _item_minimum_appropriate_semester(ai, 8) == 1
+    assert _item_minimum_appropriate_semester(surgery, 8) >= 5
 
 
 def test_common_catalogue_aliases_are_semantically_deduplicated():
@@ -115,6 +133,65 @@ def test_ict_competency_audit_detects_missing_security_block():
     assert audit["missing"] == ["information_security"]
 
 
+def test_final_admission_evidence_excludes_weak_and_goso_only_matches():
+    version = SimpleNamespace(
+        id=7,
+        learning_outcomes=[
+            SimpleNamespace(id=1, lo_code="LO1"),
+            SimpleNamespace(id=2, lo_code="LO-GOSO-B1"),
+        ],
+    )
+    matches = [
+        SimpleNamespace(course_id=10, lo_id=1, score=0.61, evidence_json={}),
+        SimpleNamespace(course_id=11, lo_id=1, score=0.39, evidence_json={}),
+        SimpleNamespace(course_id=12, lo_id=2, score=0.95, evidence_json={}),
+    ]
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = matches
+    evidence = _credible_professional_lo_by_course(version, {10, 11, 12}, db)
+    assert evidence == {10: {"LO1"}}
+
+
+def test_meaningful_bridge_fills_credit_gap_before_replacing_real_course():
+    module = SimpleNamespace(
+        id=9,
+        course_id="CORE_BRIDGE_1",
+        title="Интеграционный модуль: IT и медицина",
+        credits=5,
+        recommended_semester=4,
+        prerequisites=[],
+    )
+    items = [{"course_id": 1, "title": "Базы данных", "credits": 5, "prerequisites": []}]
+    result = _force_bridge_item(items, module, target_credits=10)
+    assert len(result) == 2
+    assert sum(item["credits"] for item in result) == 10
+    assert result[-1]["bridge_module_id"] == 9
+
+
+def test_meaningful_bridge_never_replaces_regulatory_course():
+    module = SimpleNamespace(
+        id=9,
+        course_id="CORE_BRIDGE_1",
+        title="Интеграционный модуль",
+        credits=5,
+        recommended_semester=4,
+        prerequisites=[],
+    )
+    items = [
+        {
+            "course_id": 1,
+            "title": "Обязательная дисциплина ГОСО",
+            "credits": 5,
+            "regulatory_required": True,
+            "prerequisites": [],
+        },
+        {"course_id": 2, "title": "Профильная дисциплина", "credits": 5, "prerequisites": []},
+    ]
+    result = _force_bridge_item(items, module, variant_type="C", target_credits=10)
+    assert any(item.get("course_id") == 1 for item in result)
+    assert not any(item.get("course_id") == 2 for item in result)
+
+
 def test_verified_translations_are_stored_in_database_without_json_write():
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = None
@@ -152,6 +229,87 @@ def test_scheduler_never_places_duplicate_course_titles():
     schedule = schedule_courses(courses, 2, 30, MagicMock())
     titles = [item["title"].strip().casefold() for items in schedule.values() for item in items]
     assert titles.count("computer architecture") == 1
+
+
+def test_scheduler_reserves_late_window_for_advanced_clinical_course():
+    courses = [
+        {
+            "course_id": 1,
+            "title": "Внутренние болезни",
+            "credits": 10,
+            "recommended_semester": 8,
+            "prerequisites": [],
+        },
+        *[
+            {
+                "course_id": index,
+                "title": f"Базовая дисциплина {index}",
+                "credits": 5,
+                "recommended_semester": 1,
+                "prerequisites": [],
+            }
+            for index in range(2, 10)
+        ],
+    ]
+    schedule = schedule_courses(courses, 8, 30, MagicMock())
+    semester = next(
+        value for value, items in schedule.items()
+        if any(item.get("course_id") == 1 for item in items)
+    )
+    assert semester >= 7
+
+
+def test_load_rebalance_does_not_pull_late_course_into_early_semester():
+    late = {
+        "course_id": 1,
+        "title": "Внутренние болезни",
+        "credits": 10,
+        "recommended_semester": 8,
+        "prerequisites": [],
+    }
+    schedule = {
+        1: [{"course_id": 2, "title": "Foundation", "credits": 20, "prerequisites": []}],
+        7: [late, {"course_id": 3, "title": "Late support", "credits": 25, "prerequisites": []}],
+        8: [{"course_id": 4, "title": "Capstone", "credits": 30, "prerequisites": []}],
+    }
+    repaired = _rebalance_semester_load(schedule, 8, 30)
+    semester = next(
+        value for value, items in repaired.items()
+        if any(item.get("course_id") == 1 for item in items)
+    )
+    assert semester >= 7
+
+
+def test_load_rebalance_can_exchange_mid_program_bridge_by_one_credit():
+    bridge = {
+        "bridge_module_id": 9,
+        "title": "Интеграционный модуль: IT и медицина",
+        "credits": 3,
+        "recommended_semester": 4,
+        "latest_semester": 6,
+        "prerequisites": [],
+    }
+    schedule = {
+        4: [bridge, {"course_id": 1, "title": "Core", "credits": 23, "prerequisites": []}],
+        5: [{"course_id": 2, "title": "Stable load", "credits": 30, "prerequisites": []}],
+        6: [
+            {
+                "course_id": 3,
+                "title": "Искусственный интеллект: принципы и применение",
+                "credits": 4,
+                "recommended_semester": 3,
+                "prerequisites": [],
+            },
+            {"course_id": 4, "title": "Applied block", "credits": 28, "prerequisites": []},
+        ],
+    }
+    repaired = _rebalance_semester_load(schedule, 8, 30)
+    loads = {
+        semester: sum(int(item["credits"]) for item in items)
+        for semester, items in repaired.items()
+    }
+    assert loads[4] >= 27
+    assert loads[6] <= 33
 
 
 def test_scheduler_removes_foundation_aliases_and_component_placeholders():

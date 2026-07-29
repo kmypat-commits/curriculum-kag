@@ -83,6 +83,41 @@ def _semantic_max_semester(title: str | None, num_semesters: int) -> int:
     return num_semesters
 
 
+def _ict_competency_requirements(constraints: Dict) -> Dict:
+    """Return the explainable competency ontology for a known ICT scope."""
+    scope = " ".join(str(constraints.get(key) or "").upper() for key in (
+        "direction_code", "secondary_direction_code", "group_code", "secondary_group_code",
+    ))
+    if not any(code in scope for code in ("6B061", "7M061", "8D061", "B057", "M094", "D094")):
+        return {}
+    level = str(constraints.get("education_level") or "bachelor").lower()
+    if level in {"doctorate", "doctoral", "phd"}:
+        return {
+            "research_methodology": (("исслед",), ("методолог",), ("research",)),
+            "advanced_ai_and_data": (("искусствен", "интеллект"), ("больш", "данн"), ("data",)),
+            "experimental_validation": (("эксперимент",), ("валидац",), ("validation",)),
+            "systems_modelling": (("модел", "систем"), ("информацион", "ресурс")),
+            "research_leadership": (("управлен", "проект"), ("project management",)),
+        }
+    elif level in {"master", "masters", "magistracy"}:
+        return {
+            "research_methodology": (("исслед",), ("методолог",), ("research",)),
+            "ai_and_data": (("искусствен", "интеллект"), ("машин", "обуч"), ("анализ", "данн")),
+            "systems_architecture": (("проектирован", "информацион", "систем"), ("архитектур",)),
+            "information_security": (("безопас",), ("кибер",), ("security",)),
+            "project_and_communication": (("управлен", "проект"), ("научн", "коммуникац"), ("project management",)),
+        }
+    else:
+        return {
+            "programming_and_algorithms": (("программир",), ("алгоритм",)),
+            "data_and_databases": (("баз", "данн"), ("анализ", "данн"), ("database",)),
+            "systems_and_networks": (("операцион", "систем"), ("компьютер", "сет"), ("системн", "программ")),
+            "information_security": (("безопас",), ("кибер",), ("security",)),
+            "ai_and_analytics": (("искусствен", "интеллект"), ("машин", "обуч"), ("аналитик",)),
+            "project_and_research": (("проект",), ("научн", "исслед"), ("academic writing",)),
+        }
+
+
 def _ict_competency_audit(courses: List[Course], constraints: Dict) -> Dict:
     """Verify explainable core blocks for EPVO ICT programmes.
 
@@ -94,34 +129,10 @@ def _ict_competency_audit(courses: List[Course], constraints: Dict) -> Dict:
     scope = " ".join(str(constraints.get(key) or "").upper() for key in (
         "direction_code", "secondary_direction_code", "group_code", "secondary_group_code",
     ))
-    if not any(code in scope for code in ("6B061", "7M061", "8D061", "B057", "M094", "D094")):
+    requirements = _ict_competency_requirements(constraints)
+    if not requirements:
         return {"applicable": False, "passed": True, "covered": {}, "missing": []}
     level = str(constraints.get("education_level") or "bachelor").lower()
-    if level in {"doctorate", "doctoral", "phd"}:
-        requirements = {
-            "research_methodology": (("исслед",), ("методолог",), ("research",)),
-            "advanced_ai_and_data": (("искусствен", "интеллект"), ("больш", "данн"), ("data",)),
-            "experimental_validation": (("эксперимент",), ("валидац",), ("validation",)),
-            "systems_modelling": (("модел", "систем"), ("информацион", "ресурс")),
-            "research_leadership": (("управлен", "проект"), ("project management",)),
-        }
-    elif level in {"master", "masters", "magistracy"}:
-        requirements = {
-            "research_methodology": (("исслед",), ("методолог",), ("research",)),
-            "ai_and_data": (("искусствен", "интеллект"), ("машин", "обуч"), ("анализ", "данн")),
-            "systems_architecture": (("проектирован", "информацион", "систем"), ("архитектур",)),
-            "information_security": (("безопас",), ("кибер",), ("security",)),
-            "project_and_communication": (("управлен", "проект"), ("научн", "коммуникац"), ("project management",)),
-        }
-    else:
-        requirements = {
-            "programming_and_algorithms": (("программир",), ("алгоритм",)),
-            "data_and_databases": (("баз", "данн"), ("анализ", "данн"), ("database",)),
-            "systems_and_networks": (("операцион", "систем"), ("компьютер", "сет"), ("системн", "программ")),
-            "information_security": (("безопас",), ("кибер",), ("security",)),
-            "ai_and_analytics": (("искусствен", "интеллект"), ("машин", "обуч"), ("аналитик",)),
-            "project_and_research": (("проект",), ("научн", "исслед"), ("academic writing",)),
-        }
     titles = [str(course.title or "") for course in courses]
     normalized = [(title, title.casefold()) for title in titles]
     covered = {}
@@ -404,6 +415,19 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                     min(num_semesters, recommended + 2 if recommended else num_semesters),
                 )
             recommended_minimum = max(1, recommended - 1) if recommended else 1
+            title_key = str(course.title or "").casefold().strip()
+            explicit_foundation = title_key.startswith(
+                ("основы ", "введение ", "fundamentals", "introduction")
+            )
+            clinical_foundation = any(
+                marker in title_key
+                for marker in (
+                    "хирург", "surgery", "кардио", "гастро", "онколог",
+                    "уролог", "невролог", "терапи", "педиатр", "клиническ",
+                )
+            )
+            if explicit_foundation and not clinical_foundation:
+                recommended_minimum = 1
             if recommended_minimum > semantic_maximum:
                 recommended_minimum = 1
             effective_minimum = max(semantic_minimum, recommended_minimum)

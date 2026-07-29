@@ -1,6 +1,7 @@
 param(
     [switch]$RequireVerifiedBackup,
-    [switch]$IncludeFreshGeneration
+    [switch]$IncludeFreshGeneration,
+    [switch]$IncludeInterdisciplinaryGeneration
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,6 +65,15 @@ if ($IncludeFreshGeneration) {
             --output (Join-Path $runtime "fresh-doctorate-acceptance.json") `
             --variants A B C
     } "Fresh doctorate A/B/C generation"
+}
+if ($IncludeInterdisciplinaryGeneration) {
+    Invoke-Checked {
+        & $python (Join-Path $backend "scripts\audit_cross_level_generation.py") `
+            --level bachelor `
+            --profile ict-medicine `
+            --output (Join-Path $runtime "fresh-ict-medicine-acceptance.json") `
+            --variants A B C
+    } "Fresh interdisciplinary ICT + medicine A/B/C generation"
 }
 Invoke-Checked { & npm.cmd --prefix (Join-Path $root "frontend") run build } "Frontend production build"
 

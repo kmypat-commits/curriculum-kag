@@ -15,6 +15,7 @@ from app.database import SessionLocal
 from app.kag.scoring import compute_all_matches
 from app.models.project import LearningOutcome, Project, ProjectVersion
 from app.models.course import Course
+from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchScore
 from app.planner.goso import ensure_goso_learning_outcomes
 from app.planner.scheduler import build_curriculum_plan
@@ -37,36 +38,65 @@ BACHELOR_LOS = [
     "Работать в команде, управлять ИТ-проектами и представлять результаты профессиональной деятельности.",
 ]
 
+ICT_MEDICINE_LOS = [
+    "Разрабатывать программные компоненты, алгоритмы и архитектуру медицинских информационных систем с учётом клинических процессов и потребностей пациентов.",
+    "Применять анализ данных и искусственный интеллект для поддержки клинических и управленческих решений.",
+    "Интерпретировать базовые биомедицинские данные совместно с медицинскими специалистами.",
+    "Обеспечивать конфиденциальность, безопасность и этичное использование медицинских данных.",
+    "Интегрировать цифровые платформы, базы данных и медицинские информационные стандарты.",
+    "Проверять качество и безопасность цифровых медицинских решений в междисциплинарной команде.",
+]
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--level", choices=("bachelor", "master", "doctorate"), required=True)
+    parser.add_argument("--profile", choices=("standard", "ict-medicine"), default="standard")
     parser.add_argument("--output", required=True)
     parser.add_argument("--variants", nargs="+", choices=("A", "B", "C"), default=("A", "B", "C"))
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
-    if args.level == "bachelor":
+    if args.profile == "ict-medicine":
+        if args.level != "bachelor":
+            parser.error("ict-medicine profile currently requires --level bachelor")
         total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
+        secondary_direction, secondary_group, secondary_area = "6B101", "B086", "6B10"
+        domain1 = "Информационно-коммуникационные технологии"
+        domain2 = "Здравоохранение"
+        professional_los = ICT_MEDICINE_LOS
+        max_allowed_bridges = 1
+        min_prerequisite_edges = 6
+    elif args.level == "bachelor":
+        total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
+        secondary_direction = secondary_group = secondary_area = ""
+        domain1, domain2 = "Информационно-коммуникационные технологии", ""
         professional_los = BACHELOR_LOS
         max_allowed_bridges = 1
         min_prerequisite_edges = 5
     elif args.level == "doctorate":
         total_credits, semesters, direction, group, area = 180, 6, "8D061", "D094", "8D06"
+        secondary_direction = secondary_group = secondary_area = ""
+        domain1, domain2 = "Информационно-коммуникационные технологии", ""
         professional_los = PROFESSIONAL_LOS
         max_allowed_bridges = 0
         min_prerequisite_edges = 2
     else:
         total_credits, semesters, direction, group, area = 120, 4, "7M061", "M094", "7M06"
+        secondary_direction = secondary_group = secondary_area = ""
+        domain1, domain2 = "Информационно-коммуникационные технологии", ""
         professional_los = PROFESSIONAL_LOS
         max_allowed_bridges = 0
         min_prerequisite_edges = 3
     constraints = {
         "education_level": args.level,
         "jurisdiction": "KZ",
-        "program_type": "standard",
+        "program_type": "interdisciplinary" if args.profile == "ict-medicine" else "standard",
         "education_area": area,
         "direction_code": direction,
         "group_code": group,
+        "secondary_education_area": secondary_area,
+        "secondary_direction_code": secondary_direction,
+        "secondary_group_code": secondary_group,
         "instruction_language": "ru",
         "duration_years": semesters / 2,
         "total_semesters": semesters,
@@ -74,7 +104,7 @@ def main() -> None:
         "credit_tolerance": 0,
         "max_credits_per_semester": 30,
         "min_domain1_percent": 40,
-        "min_domain2_percent": 0,
+        "min_domain2_percent": 40 if args.profile == "ict-medicine" else 0,
         "allow_new_courses": True,
         "max_new_courses": 5,
         "master_track": "scientific_pedagogical",
@@ -86,9 +116,9 @@ def main() -> None:
     report = {"level": args.level, "status": "running"}
     try:
         project = Project(
-            title=f"AUTOTEST ГОСО {args.level}",
-            domain1="Информационно-коммуникационные технологии",
-            domain2="",
+            title=f"AUTOTEST ГОСО {args.level} {args.profile}",
+            domain1=domain1,
+            domain2=domain2,
             goal="Подготовка исследователей интеллектуальных информационных систем.",
             constraints_json=constraints,
         )
@@ -136,6 +166,34 @@ def main() -> None:
             verification = metrics.get("verification") or {}
             audit = verification.get("pedagogical_audit") or {}
             schedule = result.get("schedule") or {}
+            selected_bridge_ids = {
+                int(item.get("bridge_module_id"))
+                for items in schedule.values()
+                for item in items
+                if item.get("bridge_module_id") is not None
+            }
+            bridge_rows = {
+                bridge.id: bridge
+                for bridge in db.query(BridgeModule).filter(
+                    BridgeModule.id.in_(selected_bridge_ids or {-1})
+                ).all()
+            }
+            bridge_details = [
+                {
+                    "id": bridge_id,
+                    "code": bridge_rows[bridge_id].course_id,
+                    "title": bridge_rows[bridge_id].title,
+                    "credits": int(item.get("credits") or bridge_rows[bridge_id].credits or 0),
+                    "semester": int(semester),
+                    "target_los": bridge_rows[bridge_id].target_los or [],
+                    "mode": (bridge_rows[bridge_id].generation_params_json or {}).get("mode"),
+                }
+                for semester, items in schedule.items()
+                for item in items
+                if item.get("bridge_module_id") is not None
+                for bridge_id in [int(item.get("bridge_module_id"))]
+                if bridge_id in bridge_rows
+            ]
             variants[code] = {
                 "credits": sum(int(item.get("credits") or 0) for items in schedule.values() for item in items),
                 "semester_loads": verification.get("semester_loads"),
@@ -187,6 +245,8 @@ def main() -> None:
                 "semester_misplacements": audit.get("semester_misplacements") or [],
                 "wrong_level": len((metrics.get("course_admission") or {}).get("wrong_level_courses") or []),
                 "bridges": int(metrics.get("num_bridge_modules") or 0),
+                "bridge_details": bridge_details,
+                "domain_credits": verification.get("domain_credits") or {},
                 "international_score": (metrics.get("international_quality") or {}).get("score"),
                 "real_courses": [
                     item.get("title")
@@ -230,7 +290,39 @@ def main() -> None:
             for row in variants.values()
         }
         variants_are_distinct = len(fingerprints) == len(variants)
+        def bridge_contract(row: dict) -> bool:
+            if args.profile != "ict-medicine":
+                return row["bridges"] <= max_allowed_bridges
+            details = row.get("bridge_details") or []
+            meaningful = [
+                item for item in details
+                if (
+                    (
+                        str(item.get("code") or "").startswith("CORE_BRIDGE_")
+                        and item.get("mode") == "core_interdisciplinary_bridge"
+                    )
+                    or (
+                        str(item.get("code") or "").startswith("SECONDARY_")
+                        and item.get("mode") == "secondary_domain_foundation"
+                    )
+                )
+            ]
+            generic = [
+                item for item in details
+                if str(item.get("code") or "").startswith(
+                    ("AUTO_BRIDGE_", "QUALITY_BRIDGE_", "AUTO_BALANCE_", "AUTO_LOAD_SHIFT_")
+                )
+            ]
+            return (
+                1 <= len(details) <= 3
+                and len(meaningful) == len(details)
+                and any(str(item.get("code") or "").startswith("CORE_BRIDGE_") for item in meaningful)
+                and not generic
+                and all(bool(item.get("target_los")) for item in meaningful)
+                and all(2 <= int(item.get("semester") or 0) <= semesters - 1 for item in meaningful)
+            )
         report.update({
+            "profile": args.profile,
             "status": "complete",
             "elapsed_seconds": round(time.perf_counter() - started, 2),
             "scope": {"direction": direction, "group": group},
@@ -246,7 +338,7 @@ def main() -> None:
             "passed": variants_are_distinct and all(
                 row["credits"] == total_credits
                 and row["hard_violations"] == 0
-                and row["bridges"] <= max_allowed_bridges
+                and bridge_contract(row)
                 and int(row["prerequisite_graph"].get("edge_count") or 0) >= min_prerequisite_edges
                 and row["quality_passed"] is True
                 and (row["competency_blocks"].get("passed") is not False)
