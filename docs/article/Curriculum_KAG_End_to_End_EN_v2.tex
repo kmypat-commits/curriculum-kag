@@ -1,0 +1,1440 @@
+\documentclass[twoside,11pt]{article}
+
+% The file compiles with pdfLaTeX, XeLaTeX, or LuaLaTeX.
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage{cmap}
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+\else
+  \usepackage{fontspec}
+  \setmainfont{DejaVu Serif}
+  \setsansfont{DejaVu Sans}
+  \setmonofont{DejaVu Sans Mono}
+\fi
+\usepackage[english]{babel}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{threeparttable}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{url}
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{placeins}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{geometry}
+
+\geometry{a4paper,left=25mm,right=20mm,top=22mm,bottom=24mm}
+\setlength{\emergencystretch}{3em}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue,
+  pdftitle={From Future Professions to Educational Programs},
+  pdfauthor={Murat Kozhanov}}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.95}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.90}
+\setcounter{topnumber}{4}
+\setcounter{bottomnumber}{4}
+\setcounter{totalnumber}{6}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Ccal}{\mathcal{C}}
+\newcommand{\Ocal}{\mathcal{O}}
+\newcommand{\Pcal}{\mathcal{P}}
+\newcommand{\Dcal}{\mathcal{D}}
+\newcommand{\Ecal}{\mathcal{E}}
+\newcommand{\Gcal}{\mathcal{G}}
+\newcommand{\clip}{\operatorname{clip}}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+% A single command for all figures in the article.
+% If the PNG file is already available in figures/, it is displayed automatically.
+% Otherwise, LaTeX shows a clean placeholder with the exact required file name.
+\newcommand{\articlefigure}[4]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{figures/#1}{%
+      \includegraphics[
+        width=\linewidth,
+        height=0.82\textheight,
+        keepaspectratio
+      ]{figures/#1}%
+    }{%
+      \fbox{%
+        \begin{minipage}[c][5.6cm][c]{0.92\linewidth}
+          \centering
+          \textbf{FIGURE PLACEHOLDER}\\[7pt]
+          \textbf{File:} \path{figures/#1}\\[9pt]
+          \small\raggedright #2
+        \end{minipage}%
+      }%
+    }
+    \caption{#3}
+    \label{#4}
+  \end{figure}%
+}
+\newcommand{\systemname}{\textsc{Curriculum-KAG}}
+\newcommand{\epvomodel}{\texttt{epvo-sbert-\allowbreak finetuned-40k}}
+\floatname{algorithm}{Algorithm}
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+\algrenewcommand\algorithmicif{\textbf{if}}
+\algrenewcommand\algorithmicthen{\textbf{then}}
+\algrenewcommand\algorithmicelse{\textbf{else}}
+\algrenewcommand\algorithmicfor{\textbf{for}}
+\algrenewcommand\algorithmicforall{\textbf{for all}}
+\algrenewcommand\algorithmicwhile{\textbf{while}}
+\algrenewcommand\algorithmicdo{\textbf{do}}
+\algrenewcommand\algorithmicreturn{\textbf{return}}
+\newenvironment{plainbox}{\begin{quote}\small\noindent\textbf{Plain-language explanation.}\ }{\end{quote}}
+\newcommand{\systemdemolink}{\texttt{The URL will be added after deployment of the public demonstration version}}
+
+\begin{document}
+
+\begin{center}
+{\Large\bfseries From Future Professions to Educational Programs:\\[2pt]
+An Evidence-Constrained End-to-End Method for Interdisciplinary Curriculum Design\\
+Using Artificial Intelligence}\\[8pt]
+{\large\bf Murat Kozhanov}\\[3pt]
+Abylkas Saginov Karaganda Technical University, Karaganda, Kazakhstan\\
+Doctoral School of Applied Informatics and Applied Mathematics, Obuda University, Budapest, Hungary\\
+\texttt{m.kozhanov@ktu.edu.kz}\\[8pt]
+\end{center}
+
+\noindent\textbf{Abstract.}
+The emergence of new professions at the intersection of several domains requires the development of coherent interdisciplinary educational programs. This paper presents \systemname{}, an evidence-constrained end-to-end method based on Knowledge-Augmented Generation (KAG) that transforms a program goal, selected fields, and learning outcomes into several explainable and formally verifiable curriculum alternatives. Unlike purely generative curriculum-design tools, \systemname{} does not output an unchecked curriculum: it generates alternatives, repairs them against formal constraints, stores all evidence in PostgreSQL/pgvector, and exposes every course--LO decision for expert review. The method combines a fine-tuned Sentence-BERT (SBERT) model, a hybrid vector and lexical retrieval layer, a knowledge graph, academic constraints, SCES RK regulatory blocks, and nearly nine years of expert memory accumulated in the national Registry of Educational Programs. The \epvomodel{} model achieved ROC-AUC of 0.7666, PR-AUC of 0.7681, and F1 of 0.7188 on an independent test set. The operational repository contains 21\,525 approved courses with complete Russian, Kazakh, and English localization records; an automated integrity audit found no missing language rows and no corrupted text values. During development and regression control, the system was exercised on more than 100 programs across different fields. Fresh transactional tests confirmed distinct A/B/C curricula for bachelor's, master's, and doctoral levels with exact totals of 240, 120, and 180 credits, respectively, real sources of learning-outcome coverage, protected regulatory components, domain-quota repair, and no hard violations. The system also operationalizes principles of Outcome-Based Education (OBE), ABET-style continuous improvement, the CDIO (Conceive--Design--Implement--Operate) integrated curriculum, and the Tuning methodology.
+
+\medskip
+\noindent\textbf{Keywords:}
+artificial intelligence in education, future professions, interdisciplinary educational programs, Curriculum-KAG, knowledge-augmented generation, learning outcomes, knowledge graph, educational analytics, curriculum design, explainable AI.
+
+\section{Introduction}
+
+New professional roles increasingly emerge at the intersection of previously separate domains: information technology and medicine, law and digital forensics, agriculture and data analytics, public administration and artificial intelligence. Atlases of emerging professions and industry foresight studies document this shift, but they do not provide universities with a ready-made educational program. A profession description still needs to be converted into a program goal, learning outcomes, courses, prerequisites, a credit structure, and assessment procedures \cite{Atlas2026}.
+
+The challenge is especially visible in interdisciplinary curriculum design. Simply merging two curricula creates duplication and does not guarantee the formation of integrative competencies. For example, a program at the intersection of IT and medicine should include not only programming and clinical subjects, but also medical informatics, clinical data analytics, health-information security, digital diagnostics, and the ethics of artificial intelligence. At the same time, the curriculum must preserve the foundational knowledge of each domain, an admissible learning sequence, and national academic requirements.
+
+Existing AI approaches primarily support isolated activities: generating text, finding similar courses, recommending a course, or analysing a graph. They do not guarantee that the final curriculum has the exact credit total, excludes courses from an inappropriate education level, satisfies prerequisites, and provides evidence for achieving every learning outcome. The central problem of this paper is therefore expressed as
+\begin{equation}
+  \text{AI recommendations}\not\Rightarrow\text{a verifiable educational program}.
+  \label{eq:gap-main}
+\end{equation}
+
+To bridge this gap, we propose \systemname{}, an end-to-end method in which semantic retrieval, an expert corpus, a knowledge graph, optimization, and independent verification operate as a single system. A learning outcome (LO) is understood here as a measurable statement of what a learner should know, understand, and be able to do after completing a program or one of its components. The complete process is
+\begin{equation}
+\begin{aligned}
+  &\text{program concept}
+  \rightarrow \text{LOs}
+  \rightarrow \text{evidence}
+  \rightarrow \text{courses}\\
+  &\rightarrow \text{semester plan}
+  \rightarrow \text{verification}
+  \rightarrow \text{expert decision}.
+\end{aligned}
+  \label{eq:end-to-end-pipeline}
+\end{equation}
+
+Unlike Retrieval-Augmented Generation (RAG), which retrieves textual fragments, Knowledge-Augmented Generation (KAG) also uses structured relations and rules. This distinction is particularly important for educational programs: a course is linked to an education level, field, learning outcomes, semester, and prerequisites. Vector similarity is therefore treated as one source of evidence, not as permission to include a course in the curriculum.
+
+The empirical foundation is the Registry of Educational Programs, which is part of the Unified Higher Education Platform (EPVO) of the Republic of Kazakhstan. For nearly nine years, domain experts evaluated programs across different fields and education levels. This process created a rare national knowledge base containing real courses, learning outcomes, program structures, and expert course--LO links. A semantic model was trained on these data, while the expert decisions themselves are retained as a separate evidence layer.
+
+This study extends the previously proposed methodology for educational-program design \cite{Ibatov2017}, research on AI-assisted syllabus design \cite{Kozhanov2024Syllabus}, and the initial Curriculum-KAG architecture \cite{Kozhanov2026KAG}. The present paper moves from isolated retrieval and a demonstration case study to the complete, verifiable synthesis of programs of different types and education levels.
+
+\subsection*{Research question and hypotheses}
+
+The main research question is:
+
+\emph{How can artificial intelligence transform the concept of a new or interdisciplinary profession and selected fields of study into a complete, evidence-based, and formally verifiable educational program?}
+
+Four hypotheses are tested:
+\begin{itemize}
+  \item \textbf{H1, end-to-end feasibility:} combining evidence-based retrieval, a graph, and verification enables the generation of complete curricula without hard violations;
+  \item \textbf{H2, evidence preservation:} a unified admission contract preserves the relationship between every professional course and its LOs through to the final curriculum;
+  \item \textbf{H3, interdisciplinary synthesis:} domain quotas and integrative LOs enable programs at the intersection of fields to be constructed without mechanically merging course catalogues;
+  \item \textbf{H4, cross-level applicability:} one architecture is applicable to bachelor's, master's, and doctoral programs, as well as to conventional single-domain programs.
+\end{itemize}
+
+\subsection*{Scientific contributions}
+
+The main contributions are:
+\begin{enumerate}
+  \item a formal end-to-end model that transforms a profession and program concept into a verified curriculum;
+  \item a method for interdisciplinary synthesis with domain quotas, integrative LOs, and controlled bridge modules;
+  \item a longitudinal national expert corpus accumulated over nearly nine years and a course--LO model trained on real expert decisions;
+  \item a KAG architecture that integrates a semantic index, a graph, expert memory, and regulatory rules;
+  \item a formal admission contract, exact-fit credit selection, prerequisite closure, and transactional A/B/C verification;
+  \item a semantic context guard and graph-aware final repair that prevent superficially similar but professionally unrelated courses from entering the final plan;
+  \item a provenance-preserving multilingual PostgreSQL repository with automated completeness and text-integrity auditing;
+  \item an additional operational check of OBE, ABET-style continuous improvement, the CDIO integrated curriculum, and Tuning competences.
+\end{enumerate}
+
+\articlefigure
+  {fig01_future_profession_to_curriculum.png}
+  {Show a simple sequence: a new professional domain or a conventional program $\rightarrow$ selection of one or more fields $\rightarrow$ program goal and learning outcomes $\rightarrow$ expert memory of the Registry $\rightarrow$ KAG retrieval and the knowledge graph $\rightarrow$ alternatives A/B/C $\rightarrow$ national and international quality checks.}
+  {From a profession concept to a verifiable educational program. The Atlas of New Professions is shown only as a motivational source and is not part of the experimental data.}
+  {fig:future-to-curriculum}
+
+The main novelty is not a single neural model, but a controlled hybrid methodology: national expert memory from EPVO is transformed into reusable course--LO evidence; generation is constrained by LO coverage, credits, prerequisites, domains, education level, and SCES RK; bridge modules are explainable and replaceable; PostgreSQL/pgvector makes the evidence base reproducible and scalable; and every plan is verified by independent hard constraints before being presented as acceptable.
+
+\section{Related Work}
+
+\subsection{Future professions and interdisciplinarity}
+
+Technological change creates professional roles that cannot be described by a single traditional academic domain. The Atlas of New Professions and Competencies of the Republic of Kazakhstan systematizes emerging, transforming, and disappearing professions and is used in this study only as a motivational source demonstrating the need for timely renewal of educational offerings \cite{Atlas2026}. Atlas data are not included in the training set, metric calculation, or course evidence base.
+
+In this paper, an interdisciplinary program is not defined as the mechanical sum of two course catalogues, but as a program containing the core of each field, integrative learning outcomes, and components that require the joint application of knowledge from several domains. This approach continues earlier work by the authors on artificial intelligence for syllabus and curriculum design \cite{Kozhanov2024Syllabus}, digital competence platforms \cite{Jantassova2021}, and Curriculum-KAG \cite{Kozhanov2026KAG}.
+
+\subsection{Outcome-based design and continuous improvement}
+
+Outcome-Based Education (OBE) requires explicit links between expected outcomes, courses, and assessment. Constructive alignment connects intended outcomes, learning activities, and assessment \cite{Biggs1996}. In the ABET logic, student outcomes must be documented and assessed, and the resulting evidence must be systematically used to improve the program \cite{ABET2025}. CDIO Standard~3.0 calls for an integrated curriculum in which courses mutually reinforce disciplinary, personal, and interpersonal competencies \cite{CDIO2022}. The Tuning methodology uses learning outcomes and competences as reference points for comparing programs while preserving institutional flexibility \cite{Tuning2003}. These approaches justify a course--LO matrix, but they do not provide an algorithm for automatically synthesizing a complete curriculum.
+
+\subsection{Semantic representations and hybrid retrieval}
+
+BERT demonstrated the effectiveness of bidirectional transformer pretraining \cite{Devlin2019}. Sentence-BERT (SBERT) maps sentences into vectors that support efficient cosine-similarity retrieval \cite{Reimers2019}; multilingual distillation enables a shared multilingual sentence space \cite{Reimers2020}. The base model used in this study is built on MPNet, which combines masked and permuted language modelling \cite{Song2020}. This is important for educational data because titles, descriptions, and learning outcomes in EPVO are available in Russian, Kazakh, and English.
+
+Dense retrieval is effective for semantic similarity but may miss exact terminology. BM25, by contrast, exploits lexical matches effectively \cite{Robertson2009}. The system therefore uses a hybrid score. A similar combination of parametric and non-parametric memory underlies RAG \cite{Lewis2020}. Recent end-to-end RAG studies separately optimize retrieval and downstream utility \cite{Zamani2024}, while RankRAG demonstrates the need to measure ranking quality separately from final generation quality \cite{Yu2024RankRAG}. Work on evidentiality emphasizes that the relevance of retrieved context should be verified as an independent property rather than assumed automatically \cite{Asai2022}. KAG extends this logic with structured relations and domain rules \cite{Liang2024}. In education, KnowEdu demonstrates the value of integrating pedagogical and assessment data in a knowledge graph \cite{Chen2018KnowEdu}; however, the automatic synthesis of a complete curriculum with credits, prerequisites, and regulations remains a distinct problem.
+
+\subsection{Graphs and curriculum sequences}
+
+A knowledge graph represents entities and relations in a unified structure \cite{Hogan2021}. A curriculum can naturally be modelled as a directed graph in which vertices are courses and edges are prerequisites. Similar models are used in curricular analytics to study complexity, delaying courses, and blocking courses \cite{Heileman2018}.
+
+Graph Convolutional Networks aggregate features from graph neighbours \cite{Kipf2017}, while GraphSAGE learns an inductive aggregation function for unseen vertices \cite{Hamilton2017}. LSTM is designed to model long-range dependencies in sequences \cite{Hochreiter1997}. These architectures appear to be natural candidates for a course graph and semester sequence. However, model complexity alone does not guarantee improvement: identical splits, features, negative examples, and admission rules are required for a fair comparison. The authors previously explored the representation of curricula with GNN and LSTM models in a separate problem setting \cite{Kozhanov2025}; in the present study, these architectures are re-evaluated on a new frozen EPVO corpus and do not receive automatic preference over the text baseline.
+
+\subsection{Multi-objective optimization}
+
+Curriculum design is a multi-objective problem: LO coverage and interdisciplinarity must be maximized while duplication, quota violations, and prerequisite complexity are minimized. The Non-dominated Sorting Genetic Algorithm II (NSGA-II) constructs a Pareto set using non-dominated sorting and crowding distance \cite{Deb2002}. \systemname{} uses an NSGA-II-like evolutionary procedure augmented with repair functions and an independent verifier.
+
+\subsection{Reproducibility and the human in the loop}
+
+Datasheets for Datasets recommend documenting the provenance, composition, and limitations of a dataset \cite{Gebru2021}, while Model Cards document model purpose, evaluation, and boundaries of applicability \cite{Mitchell2019}. Interactive machine learning emphasizes that users should participate not only after training but also in creating feedback \cite{Amershi2014}. Accordingly, predictions in \systemname{} are explicitly labelled as ``AI predictions'', and an expert can confirm, weaken, reject, or correct a link.
+
+\section{Data from the Unified Higher Education Platform (EPVO)}
+
+\subsection{Source and content of program records}
+
+The source data were obtained from the public interface of the EPVO Registry of Educational Programs \cite{EPVORegistry}. For each accessible record, the original JSON structure was stored without modification. Depending on data completeness, a record could contain:
+\begin{itemize}
+  \item an identifier, status, program title, and program goal in Russian, Kazakh, and English;
+  \item education level, broad field of education, field of study, and educational-program group;
+  \item total credits and duration;
+  \item a list of learning outcomes in three languages;
+  \item courses, their titles, brief descriptions, credits, year, and semester;
+  \item declared links between courses and learning outcomes;
+  \item an expert relationship level interpreted as $0$, $0.5$, or $1$ for rejected, medium, and high relationships;
+  \item provenance fields and identifiers of the original objects.
+\end{itemize}
+
+Not every record contains every field; therefore, missing values were not replaced with invented information. The raw layer stores the original object and its SHA-256 checksum. This makes it possible to repeat normalization and verify that the source record was not silently modified.
+
+\subsection{Layered storage model}
+
+The data are separated into five operational layers:
+\begin{enumerate}
+  \item \textbf{raw EPVO}: immutable source programs, courses, LOs, and expert evaluations;
+  \item \textbf{normalized EPVO}: cleaned and deduplicated entities and reference lists of fields and groups;
+  \item \textbf{approved PostgreSQL course repository}: canonical courses admitted to the operational generator, with RU/KK/EN titles, descriptions, source programs, education level, field, group, and status;
+  \item \textbf{SBERT/EPVO-scored course--LO links}: model predictions, transferred expert evidence, lexical guards, and expert feedback stored as reproducible evidence;
+  \item \textbf{generation candidates}: a constrained context for a specific project, taking selected fields, groups, language, education level, SCES RK mode, domain quotas, and credit limits into account.
+\end{enumerate}
+
+The operational implementation uses PostgreSQL with pgvector as the persistent storage layer for normalized EPVO records, approved course repositories, course--LO predictions, expert feedback, prerequisite relations, generated A/B/C curriculum variants, verification reports, and project-version history. SQLite is retained only as a lightweight local fallback; reproducible experiments and curriculum generation are executed against the PostgreSQL backend. The production localization table contains exactly three rows per approved course, one for each supported language. A full database audit verified 21\,525 Russian, 21\,525 Kazakh, and 21\,525 English records, with zero missing values and zero mojibake or Unicode replacement characters. Of the 64\,575 values, 64\,381 retain verified source status and 194 are explicitly marked as drafts, preserving a clear boundary between sourced and editable content.
+
+
+\articlefigure
+  {fig02_epvo_data_pipeline.png}
+  {PROMPT FOR IMAGE GENERATION: Create a rigorous data-lineage diagram for a scientific paper, white background, landscape 16:9, using four horizontal layers: raw EPVO records, normalized EPVO entities, the approved PostgreSQL/pgvector repository, and project-scoped generation candidates. Show immutable source JSON and SHA-256 provenance entering normalization; deduplication by multilingual fingerprint; links to directions, educational-program groups, education levels, prerequisites, and expert course--LO evidence; and only approved records entering the generator. In the PostgreSQL layer, display an integrity card with the measured values: 21,525 approved courses, 21,525 RU rows, 21,525 KK rows, 21,525 EN rows, zero missing values, and zero corrupted values. Distinguish verified and draft localization status without implying that drafts are expert-verified. Use navy, teal, and green, thin vector lines, readable English labels, no decorative robots, no gradients, and no invented figures.}
+  {Data preparation and admission pipeline from the Unified Higher Education Platform to educational-program generation.}
+  {fig:data-pipeline}
+
+Course-title normalization converts text to lower case and removes redundant symbols and spaces. A course fingerprint is constructed from the three language-specific titles:
+\begin{equation}
+  f(c)=\operatorname{SHA256}\left(
+  n(t_c^{ru})\,\Vert\,n(t_c^{kk})\,\Vert\,n(t_c^{en})
+  \right),
+  \label{eq:fingerprint}
+\end{equation}
+where $n(\cdot)$ is the normalization function and $\Vert$ denotes concatenation. When fingerprints match, source programs, fields, groups, and source keys are merged. The original records remain in the raw layer.
+
+\subsection{Longitudinal expert corpus and data provenance}
+
+A distinctive feature of this study is the use of a longitudinal corpus created through real educational-program evaluation rather than a one-off laboratory annotation exercise. The data were accumulated by domain experts of the Registry of Educational Programs over nearly nine years. The corpus reflects decisions across different fields of study, education levels, and program types. Unlike synthetic labels, these evaluations emerged from the practical review and registration of educational programs.
+
+The first author was the lead developer of the Registry of Educational Programs, which is part of the Unified Higher Education Platform of the Republic of Kazakhstan, and participated in developing the methodology for educational-program design. The methodological foundation was previously presented in \textit{Designing Educational Programs: Methodological Guidelines} \cite{Ibatov2017}. The author's professional participation is treated as a source of domain expertise; however, all findings reported in this paper are evaluated through reproducible data processing, fixed splits, independent metrics, and formal invariants.
+
+The Registry is therefore used as national expert memory:
+\begin{equation}
+  \mathcal{M}_{exp}=\{(p,c,o,g,d,l,e)\},
+  \label{eq:expert-memory}
+\end{equation}
+where $p$ is a program, $c$ is a course, $o$ is a learning outcome, $g$ is an educational-program group, $d$ is a field of study, $l$ is an education level, and $e$ is an expert relationship score. This structure enables the model to learn not only from textual similarity but also from historically accumulated decisions of domain experts.
+
+\subsection{Dataset passport}
+
+\begin{table}[H]
+\centering
+\caption{Composition of the EPVO dataset}
+\label{tab:dataset}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X r}
+\toprule
+\textbf{Object} & \textbf{Count}\\
+\midrule
+Source programs & 12\,215\\
+Source course records & 408\,638\\
+Source learning outcomes & 124\,521\\
+Source expert evaluations / pairs & 935\,151\\
+Fields of study & 125\\
+Educational-program groups & 483\\
+Normalized courses & 191\,292\\
+Normalized expert links & 932\,483\\
+Pairs with a numerical expert label & 800\,793\\
+Pairs without a numerical label & 134\,358\\
+Approved operational courses & 21\,525\\
+Verified localized values (RU/KK/EN) & 64\,381\\
+Explicitly marked draft localized values & 194\\
+Missing or corrupted operational values & 0\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The file \path{course_lo_pairs.jsonl} has a size of 3\,742\,779\,112 bytes. Its SHA-256 checksum is
+\path{37a996be8ae9cc1f6c5ce5588612b1e0142e6238a1b856ad0d9afae45845d3a4}.
+The file \path{programs.jsonl} has a size of 23\,876\,141 bytes. Its SHA-256 checksum is
+\path{137c5fdcc2ed371789c9e4a4c274e3d5707d63d9d2dd724655d0f6e18b9eb6e4}.
+
+\subsection{Split without program-context leakage}
+
+The split was performed by program identifier rather than by individual pairs:
+\begin{equation}
+  b(p)=
+  \operatorname{int}\left(
+  \operatorname{SHA256}(42\Vert id_p)_{1:8},16
+  \right)\bmod 100.
+  \label{eq:split}
+\end{equation}
+If $b<70$, the program belongs to train; if $70\le b<85$, it belongs to validation; otherwise it belongs to test. The resulting partitions contain 654\,470, 138\,443, and 142\,238 pairs, respectively. All courses, LOs, and links from one program are assigned to only one partition. This procedure does not eliminate every possible duplicate course across different universities, but it prevents the most direct leakage of context from the same program record.
+
+\section{Problem Formulation}
+
+Let $\Ccal=\{c_1,\ldots,c_n\}$ be the set of candidate courses, $\Ocal=\{o_1,\ldots,o_m\}$ the learning outcomes, $S=\{1,\ldots,T\}$ the semesters, and $\Ecal_{pre}\subseteq\Ccal\times\Ccal$ the prerequisite relation. Each course has credits $cr_i$, a recommended semester $r_i$, a domain $d_i$, and a textual description. For each pair $(c_i,o_j)$, the relationship strength $w_{ij}\in[0,1]$ is calculated.
+
+The binary variable $x_i$ indicates whether a course is included in the curriculum, and $z_{is}$ assigns the course to a semester:
+\begin{equation}
+  x_i\in\{0,1\},\qquad z_{is}\in\{0,1\},\qquad
+  \sum_{s=1}^{T} z_{is}=x_i.
+  \label{eq:variables}
+\end{equation}
+
+For a program, the target credit volume $CR^\ast$, admissible semester loads $L_s^{min},L_s^{max}$, and minimum domain shares $q_d$ are specified. The main hard constraints are
+\begin{align}
+  \sum_i cr_i x_i &= CR^\ast, \label{eq:credits}\\
+  L_s^{min}\le \sum_i cr_i z_{is} &\le L_s^{max}, \quad s=1,\ldots,T, \label{eq:load}\\
+  z_{is}=1,\ (c_k,c_i)\in\Ecal_{pre}
+  &\Rightarrow \sum_{u<s}z_{ku}=1, \label{eq:prerequisite}\\
+  \frac{\sum_{i:d_i=d}cr_i x_i}{\sum_i cr_i x_i} &\ge q_d. \label{eq:quota}
+\end{align}
+
+Duplicate normalized titles, courses from unrelated fields, inadmissible component types, and early placement of practice are also prohibited. The task is to find several distinct feasible curricula that maximize quality.
+
+\begin{plainbox}
+The variable $x_i$ answers the question ``Should this course be included?'', while $z_{is}$ answers ``In which semester should it be placed?'' Equation~\eqref{eq:credits} requires an exact credit total; Eq.~\eqref{eq:load} prevents an excessively empty or overloaded semester; Eq.~\eqref{eq:prerequisite} places foundations before advanced material; and Eq.~\eqref{eq:quota} preserves the required domain share. A high AI score therefore indicates only semantic similarity and does not authorize violations of curriculum or regulatory rules.
+\end{plainbox}
+
+\section{The \systemname{} Method}
+
+\subsection{Why KAG is used}
+
+Retrieval-Augmented Generation finds relevant texts, but it does not guarantee that a retrieved course belongs to the required education level, has admissible prerequisites, or can be placed in a specific semester. \systemname{} uses Knowledge-Augmented Generation: vector retrieval is supplemented with a course graph, learning outcomes, fields, education levels, regulations, and expert links. The knowledge base is defined as
+\begin{equation}
+  \mathcal{K}_{curr}=\mathcal{V}_{sem}\cup\mathcal{G}_{curr}\cup\mathcal{M}_{exp}\cup\mathcal{R},
+  \label{eq:kag-knowledge-base}
+\end{equation}
+where $\mathcal{V}_{sem}$ is the semantic index, $\mathcal{G}_{curr}$ is the curriculum graph, $\mathcal{M}_{exp}$ is expert memory, and $\mathcal{R}$ contains regulatory and project rules.
+
+KAG simplifies the work of curriculum developers by moving the manual search for analogues, course--LO mapping, education-level checks, and prerequisite validation into a single controlled process. The generative component does not make the final decision: it proposes candidates, while the verifier and the expert determine whether the result is admissible.
+
+\subsection{Conventional and interdisciplinary modes}
+
+The architecture supports two modes. In the conventional mode, one field of study is selected and the system constructs a curriculum within one disciplinary core. In the interdisciplinary mode, two or more fields, minimum shares of disciplinary blocks, and integrative learning outcomes are specified. For fields $D_1$ and $D_2$, an interdisciplinary curriculum satisfies
+\begin{equation}
+  \Pi_{inter}\neq \Pi_{D_1}\cup\Pi_{D_2},
+  \qquad
+  \exists\,o\in\mathcal{O}_{int}: supports(D_1,o)\land supports(D_2,o),
+  \label{eq:interdisciplinary-not-union}
+\end{equation}
+which means that the program must contain not only courses from both fields but also outcomes and components that integrate them into a coherent professional trajectory. The principal applied case in this paper is the combination of information technology and medicine; the method is also evaluated on conventional programs and other education levels.
+
+\subsection{Program-parameter wizard and scoped repository}
+
+Before course retrieval, the user specifies:
+\begin{itemize}
+  \item the education level;
+  \item a conventional or interdisciplinary program type;
+  \item the broad field of education, field of study, and educational-program group;
+  \item for an interdisciplinary program, a second distinct field and group;
+  \item language of instruction, duration, number of semesters, and total credits;
+  \item minimum shares of the selected fields;
+  \item the program goal and learning outcomes.
+\end{itemize}
+
+Candidates are retrieved hierarchically:
+\begin{equation}
+  \text{same group}
+  \succ
+  \text{same field}
+  \succ
+  \text{nearby group}
+  \succ
+  \text{evidence-constrained bridge}.
+  \label{eq:scope}
+\end{equation}
+For a conventional program, one field is active. For an interdisciplinary program, two distinct fields and a user-defined proportion are active. A domain guard prevents the automatic expansion of the curriculum with random courses from irrelevant domains.
+
+The repository implements controlled promotion of data between layers:
+\begin{equation}
+  \mathrm{raw}_{EPVO}
+  \rightarrow
+  \mathrm{normalized}_{EPVO}
+  \rightarrow
+  \mathrm{approved}\ repository
+  \rightarrow
+  \mathrm{generation}\ candidates.
+  \label{eq:repository-layers}
+\end{equation}
+Indexing is performed for the selected field or educational-program group, and the link between a canonical course and its normalized record is stored explicitly. This prevents all 191\,292 records from being loaded directly into the active catalogue while preserving data provenance. A course record contains separate \path{title_ru/title_kk/title_en} and \path{description_ru/description_kk/description_en} fields with translation status. In a control audit, the master's field 7M083 contained 141 normalized records: 102 new canonical records were created and 39 were linked to existing records. For the doctoral field 8D051, 221 records were processed: 193 records were created and 28 were linked to existing ones.
+
+The target program volume $C^{target}$ and the technical tolerance $\delta_C$ are specified explicitly. An admissible result satisfies
+\begin{equation}
+  C^{target}\le \sum_i cr_i x_i \le C^{target}+\delta_C,
+  \qquad \delta_C=3\ \text{by default}.
+  \label{eq:credit-tolerance}
+\end{equation}
+The planner aims for the exact value $C^{target}$; the tolerance is used only for discrete credit balancing and is displayed to the user before generation.
+
+\subsection{Hybrid retrieval}
+
+The course text is constructed from its title, description, domain, and available metadata. A learning outcome is used as the query. The SBERT encoder $g_\theta$ generates normalized vectors:
+\begin{equation}
+  \mathbf{u}_i=g_\theta(c_i),\qquad
+  \mathbf{v}_j=g_\theta(o_j),\qquad
+  s_{ij}^{sem}=
+  \frac{\mathbf{u}_i^\top\mathbf{v}_j}
+       {\|\mathbf{u}_i\|_2\|\mathbf{v}_j\|_2}.
+  \label{eq:cosine}
+\end{equation}
+
+The lexical score is calculated using BM25 \cite{Robertson2009} and normalized by the maximum score among the candidates. The final retrieval score is
+\begin{equation}
+  r_{ij}=0.75\,s_{ij}^{sem}+0.25\,s_{ij}^{BM25}.
+  \label{eq:hybrid}
+\end{equation}
+The semantic component retrieves paraphrased matches, while BM25 supports exact professional terms, abbreviations, and technology names.
+
+\begin{plainbox}
+If an LO contains ``collect and preserve digital evidence'', retrieval should find a course called ``Digital Forensics'' even when the wording differs. SBERT captures semantic similarity, while BM25 captures exact terms such as Kafka, MRI, or criminal procedure code. Their combination reduces the risk of missing either a paraphrase or a narrow technical term.
+\end{plainbox}
+
+\subsection{Course--LO relationship scoring}
+
+In a resource-efficient mode, the system uses a hybrid heuristic:
+\begin{equation}
+  h_{ij}=\clip_{[0,1]}
+  \left(
+    s_{ij}^{sem}
+    +b_{ij}^{kw}
+    +b_{ij}^{dom}
+    +b_{ij}^{overlap}
+  \right),
+  \label{eq:heuristic}
+\end{equation}
+where $b^{kw}\le0.30$ is a keyword bonus, $b^{dom}\le0.15$ is a domain-match bonus, and $b^{overlap}\le0.20$ is normalized word overlap.
+
+When a local SBERT model is enabled, cosine similarity is transformed into calibrated confidence around the threshold selected on validation:
+\begin{equation}
+  p_{ij}^{AI}=
+  \sigmoid\left(
+    \frac{s_{ij}^{sem}-\tau_{AI}}{T_{AI}}
+  \right)
+  =
+  \frac{1}
+       {1+\exp\left[-(s_{ij}^{sem}-\tau_{AI})/T_{AI}\right]}.
+  \label{eq:calibration}
+\end{equation}
+This score is a prediction, not an expert verdict.
+
+For short professional course titles, SBERT may underestimate a relationship even when a term literally matches the LO. The system therefore uses bounded lexical support:
+\begin{equation}
+  b_{ij}^{lex}=\min\!\left(0.20,
+  0.70b_{ij}^{kw}+0.50b_{ij}^{overlap}+0.20b_{ij}^{dom}+b_{ij}^{title}\right),
+  \qquad
+  p_{ij}^{KAG}=\clip_{[0,1]}\left(p_{ij}^{AI}+b_{ij}^{lex}\right),
+  \label{eq:ai-lexical-support}
+\end{equation}
+where $b^{title}\le0.15$ is activated only when at least half of the content-bearing terms in the course title match the LO. The 0.20 cap prevents one lexical match from turning an irrelevant course into a strong relationship.
+
+\subsection{Transfer of the EPVO expert signal}
+
+An EPVO expert score refers to the original LO of a specific program. It cannot be transferred mechanically to a new LO merely because the course matches. A conservative textual bridge is therefore used. Let $K(o)$ denote the set of key terms in an outcome. Similarity between the new and source LOs is
+\begin{equation}
+  a(o_j,o_q^{src})=
+  \frac{|K(o_j)\cap K(o_q^{src})|}
+       {\max\left(1,\min(|K(o_j)|,|K(o_q^{src})|)\right)}.
+  \label{eq:expert-overlap}
+\end{equation}
+The expert signal is considered only when $a\ge0.12$:
+\begin{equation}
+  e_{ij}=
+  \ell_{iq}^{exp}\cdot
+  \min(1,1.5a),
+  \label{eq:expert-transfer}
+\end{equation}
+where $\ell^{exp}\in\{0,0.5,1\}$ is the original expert relationship level. The maximum admissible signal is selected from multiple source LOs.
+
+The final score is
+\begin{equation}
+  w_{ij}=
+  \max\left(
+    h_{ij}^{\ast},
+    \min(1,0.65h_{ij}^{\ast}+0.35e_{ij})
+  \right),
+  \label{eq:expert-blend}
+\end{equation}
+where $h_{ij}^{\ast}=p_{ij}^{KAG}$ when the model is active and $h_{ij}^{\ast}=h_{ij}$ in fallback mode. The formula allows strong real expert evidence to increase confidence without replacing semantic verification.
+
+\begin{plainbox}
+In the interface, AI-score is the model prediction for a new course--LO pair. EPVO-score is evidence transferred from previously reviewed programs and adjusted for similarity between LO formulations. These values are not two percentages of program coverage; they are two different sources of confidence in one relationship. Final admissibility remains subject to rules and expert review.
+\end{plainbox}
+
+\subsection{Expert feedback}
+
+After generation, the expert selects one of four verdicts: \texttt{confirmed}, \texttt{weak}, \texttt{incorrect}, or \texttt{corrected}. The updated score is
+\begin{equation}
+\tilde w_{ij}=
+\begin{cases}
+\max(w_{ij},0.75), & \texttt{confirmed},\\
+\min(w_{ij},0.45), & \texttt{weak},\\
+0.05, & \texttt{incorrect},\\
+w_{ij}^{corr}, & \texttt{corrected}.
+\end{cases}
+\label{eq:feedback}
+\end{equation}
+If the expert provides a numerical value, it takes priority. Rejected links are excluded from the ``Why was this selected?'' block and from confirmed semester outcomes.
+
+\subsection{Probabilistic coverage of learning outcomes}
+
+The maximum score of a single course does not represent the accumulation of several independent pieces of evidence. For an LO $o_j$, probabilistic aggregation is therefore used:
+\begin{equation}
+  C_j=1-\prod_{i:x_i=1}(1-\tilde w_{ij}).
+  \label{eq:prob-coverage}
+\end{equation}
+For example, two independent links with a strength of 0.6 yield $1-(1-0.6)^2=0.84$, not 1.2. However, the aggregated value must not conceal the absence of one strong real course. The system therefore separately stores $R_j=\max_i \tilde w_{ij}$ over real courses, the number of supporting pieces of evidence, and a bridge-support flag.
+
+\begin{plainbox}
+Learning-outcome coverage indicates how strongly the courses in a curriculum collectively support achievement of that outcome. For every individual course--LO relationship, the system displays the model prediction AI-score, the Registry expert evidence EPVO-score, and the final relationship strength $\tilde w_{ij}$. These values are not added mechanically: the final relationship is calculated using Eq.~\eqref{eq:expert-blend} and may be adjusted by confirmed expert feedback. Coverage of the complete LO is calculated over all admitted courses using $C_j$; real courses and temporary bridge modules are displayed separately.
+\end{plainbox}
+
+If several relevant courses support one competence, $C_j$ increases but remains in $[0,1]$. A threshold of 0.40 is used to display confirmed relationships; the quality threshold for a complete LO is configurable and is usually 0.60 in the international checklist. A bridge module is initiated if
+\begin{equation}
+  g_j=\max(0,\tau_C-C_j)>0.
+  \label{eq:gap}
+\end{equation}
+
+\subsection{Knowledge graph and prerequisites}
+
+The program graph is
+\begin{equation}
+  \Gcal=(V,E_{pre}\cup E_{LO}\cup E_{sim}),
+  \label{eq:graph}
+\end{equation}
+where $V$ contains courses and LOs, $E_{pre}$ represents prerequisites, $E_{LO}$ represents coverage links, and $E_{sim}$ represents semantic similarity between courses. For EPVO courses, conservative prerequisites are inferred within the selected field from typical semester sequences and disciplinary similarity; explicitly defined relations take priority. A foundational course may have an expert flag \texttt{prerequisite exempt}; in this case, incoming prerequisites are removed and the automatic algorithm does not create an artificial dependency. Before evaluating a solution, prerequisite closure is performed: inclusion of an advanced course adds the required foundational courses.
+
+\subsection{Multi-objective optimization}
+
+For the selected set $S_x=\{i:x_i=1\}$, the following objectives are optimized.
+
+\paragraph{Bounded mean coverage}
+\begin{equation}
+  f_{cov}(x)=\frac{1}{m}
+  \sum_{j=1}^{m}
+  \min\left(1,\sum_{i\in S_x}\tilde w_{ij}\right).
+  \label{eq:objective-coverage}
+\end{equation}
+
+\paragraph{Mean semantic redundancy}
+\begin{equation}
+  f_{red}(x)=
+  \frac{1}{|S_x|(|S_x|-1)}
+  \sum_{\substack{i,k\in S_x\\i\ne k}}
+  \cos(\mathbf{u}_i,\mathbf{u}_k).
+  \label{eq:redundancy}
+\end{equation}
+
+\paragraph{Domain entropy}
+\begin{equation}
+  f_{ent}(x)=
+  -\sum_{d\in\Dcal}p_d(x)\ln p_d(x),
+  \quad
+  p_d(x)=
+  \frac{\sum_{i:d_i=d}cr_i x_i}
+       {\sum_i cr_i x_i}.
+  \label{eq:entropy}
+\end{equation}
+
+\paragraph{Quota penalty}
+\begin{equation}
+  f_{quota}(x)=
+  \sum_{d\in\Dcal}\max(0,q_d-p_d(x)).
+  \label{eq:quota-penalty}
+\end{equation}
+
+\paragraph{Credit penalty and prerequisite load}
+\begin{align}
+  f_{credit}(x)&=
+  \begin{cases}
+  |CR^\ast-CR(x)|, & CR(x)<CR^\ast,\\
+  \max(0,CR(x)-CR^{max}), & CR(x)\ge CR^\ast,
+  \end{cases}\\
+  f_{pre}(x)&=\sum_{i\in S_x}|\operatorname{Prereq}(c_i)|.
+  \label{eq:other-penalties}
+\end{align}
+
+The optimization vector is
+\begin{equation}
+  F(x)=
+  \left(
+  f_{cov},
+  -f_{red},
+  -f_{quota},
+  f_{ent},
+  -f_{credit},
+  -f_{pre}
+  \right).
+  \label{eq:objective-vector}
+\end{equation}
+
+The population undergoes prerequisite repair, credit repair, non-dominated sorting, crossover, mutation, and selection by crowding distance \cite{Deb2002}. Three alternatives are selected from distinct feasible Pareto solutions:
+\begin{itemize}
+  \item \textbf{A}: priority to LO coverage, followed by low redundancy and quota compliance;
+  \item \textbf{B}: priority to exact credit feasibility, followed by coverage and low redundancy;
+  \item \textbf{C}: priority to low redundancy, quota compliance, and coverage.
+\end{itemize}
+After one solution is selected, it is removed from the candidate set, so A/B/C are not three references to the same genome.
+
+\articlefigure
+  {fig03_nsga2_pareto.png}
+  {Show a cloud of possible curricula and a Pareto front for three criteria: LO coverage should be maximized, course redundancy minimized, and the penalty for violating domain quotas minimized. Highlight three distinct points A, B, and C, followed by an independent hard verifier.}
+  {Selection of distinct A/B/C alternatives from the Pareto set followed by formal verification.}
+  {fig:pareto}
+
+\subsection{Semester scheduler and verifier}
+
+Selected courses are assigned to semesters according to their recommended semester, course type, prerequisites, and target workload. Internships and final assessment are restricted to later semesters. Final repair may move courses, replace or remove complete elective units, modify only designed bridge modules within an explicit range of 3--7 credits, and eliminate duplicate titles. The credit value of a real approved EPVO course is treated as atomic and is not automatically rewritten.
+
+\begin{plainbox}
+Repair is not a new model-training stage; it corrects an already assembled curriculum. For example, it may move an advanced course from the first semester to the third or replace an unnecessary elective. The system is not allowed to turn a real five-credit course into a three-credit course merely to simplify the arithmetic.
+\end{plainbox}
+
+The independent verifier recalculates:
+\begin{itemize}
+  \item the total number of credits;
+  \item the workload of every semester;
+  \item the absence of missing prerequisites or prerequisites placed too late;
+  \item minimum and mean LO coverage;
+  \item the number of strong pieces of evidence;
+  \item mean semantic redundancy.
+\end{itemize}
+A curriculum is feasible only when the number of hard violations is zero. Existing plans are removed or replaced only after all three new alternatives have been successfully generated, which makes generation transactional from the user's perspective.
+
+\subsection{Bridge modules and replacement with real courses}
+
+A bridge module is created only when a professional LO has insufficient coverage or when an explicit connection between two fields is required. The system first searches for a real course satisfying
+\begin{equation}
+  \text{same EPVO scope}
+  \land
+  \text{not duplicated}
+  \land
+  (e_{ij}\ge0.50\ \lor\ p_{ij}^{AI}\ge0.65).
+  \label{eq:bridge-replacement}
+\end{equation}
+A domain/content guard additionally checks the course content. For example, a medical bridge cannot be replaced by a general algorithms course merely because of weak textual overlap. Bridge modules are therefore not treated as ordinary courses: they are temporary, explicitly labelled design hypotheses. The generator first attempts to replace them with real EPVO disciplines from the selected education level, field, and group. If no evidence-based replacement exists, the bridge remains visible and requires expert confirmation.
+
+For interdisciplinary programs, a core integration bridge is inserted only when the real EPVO disciplines do not sufficiently prove the connection between the selected domains. If both domain quotas and professional learning outcomes are already covered by real courses, the artificial bridge is suppressed rather than forced into the curriculum.
+
+\subsection{International quality checklist}
+
+After satisfying national and project constraints, the curriculum undergoes an additional internal check of international program-design principles. The checklist operationalizes four complementary approaches:
+\begin{itemize}
+  \item \textbf{Outcome-Based Education}: every program LO must have measurable content and supporting courses;
+  \item \textbf{ABET-style continuous improvement}: verification results and expert corrections are stored and used in the next cycle;
+  \item \textbf{CDIO integrated curriculum}: courses form a coherent sequence and interdisciplinary components are not isolated additions;
+  \item \textbf{Tuning competences}: learning outcomes and competences are explicitly mapped to educational components.
+\end{itemize}
+
+Let $q_r(\Pi)\in\{0,1\}$ denote the result of an individual check. The aggregate internal indicator is
+\begin{equation}
+  Q_{int}(\Pi)=\frac{100}{R}\sum_{r=1}^{R}q_r(\Pi).
+  \label{eq:international-quality}
+\end{equation}
+It includes outcome mapping, progression, domain relevance, interdisciplinary integration, assessment alignment, and continuous improvement. This indicator does not constitute accreditation by ABET, CDIO, or any other organization; it represents an internal automated check of selected widely recognized quality principles \cite{ABET2025,CDIO2022,Tuning2003}.
+
+\subsection{Explainability}
+
+For each course, an explanation bundle is generated containing:
+\begin{itemize}
+  \item the strongest LOs and their complete texts;
+  \item semantic, heuristic, and AI scores;
+  \item the EPVO expert score and source program;
+  \item matched keywords and a description fragment;
+  \item the EPVO field and group;
+  \item prerequisites and the course's graph role;
+  \item the reason for semester placement;
+  \item the local expert verdict.
+\end{itemize}
+The system therefore answers not only ``What should be included?'' but also ``Why was it included?''
+
+\section{Formal Guarantees and Verified Invariants}
+
+The proposed method separates \emph{prediction of semantic relevance} from \emph{admissibility of course inclusion}. A high score does not override hard constraints related to education level, field, credits, and prerequisites. This is a central distinction from generating a curriculum through a single prompt to a language model.
+
+\subsection{Education-level control and auditable course admission}
+
+The operational system includes a hard education-level constraint using EPVO codes: $6B/B$ for bachelor's programs, $7M/M$ for master's programs, and $8D/D$ for doctoral programs. For course $c$ and project $p$, the level-admissibility indicator is
+\begin{equation}
+I_{level}(c,p)=\mathbb{I}\left[\exists d\in D_c:d\sim prefix(level_p)\;\lor\;
+\exists g\in G_c:g\sim groupPrefix(level_p)\right].
+\end{equation}
+The final admission rule for a professional course is
+\begin{equation}
+I_{admit}(c,p)=I_{scope}(c,p)I_{level}(c,p)
+\mathbb{I}\left[\max(s_{AI},s_{EPVO})\geq\tau\right],\qquad \tau=0.4.
+\label{eq:admission}
+\end{equation}
+Thus, textual similarity within a domain cannot transfer a master's course into a bachelor's program. A course without a direct link to at least one learning outcome is treated as a hard violation. For Kazakhstan-compliant programs, mandatory components of the State Compulsory Educational Standard of the Republic of Kazakhstan (SCES RK; Russian abbreviation GOSO RK) are not treated as suspicious or removable electives. They are inserted as protected regulatory curriculum elements, including required general-education components, internships, research work, and final attestation where applicable. Separate system-level learning outcomes are generated automatically, which makes regulatory courses explainable within the OBE matrix rather than formal exceptions. An expert may batch-confirm several bridge-module replacements; the decision is stored and reproduced during the next A/B/C generation. The analytics panel compares alternatives, deduplicates course--LO pairs, and displays the measured strengthening of each outcome. For every selected course, the interface explains the linked LO, AI-score, EPVO expert evidence, final relationship strength, field/group evidence, semester placement, prerequisite role, and whether the course is mandatory, elective, basic, profiling, or regulatory.
+
+\paragraph{Semantic professional-context guard.}
+Generic words such as ``artificial intelligence'', ``digital'', or ``information technology'' can produce a high semantic score even when the actual professional context is marketing, logistics, finance, industrial safety, or human-resource management. The final contract therefore includes a transparent contextual exclusion term
+\begin{equation}
+I_{ctx}(c,p)=
+1-\max_{h\in\mathcal{H}}
+\mathbb{I}[h\subseteq text(c)]
+\mathbb{I}[domain(h)\notin\mathcal{D}_p],
+\label{eq:context-guard}
+\end{equation}
+where juxtaposition denotes logical conjunction, $\mathcal{H}$ is an auditable dictionary of professional contexts, and $\mathcal{D}_p$ is the selected program-domain set. The complete decision becomes
+\begin{equation}
+I_{final}(c,p)=I_{admit}(c,p)\,I_{ctx}(c,p)\,I_{sem}(c,p),
+\label{eq:final-admission}
+\end{equation}
+where $I_{sem}$ verifies that the selected semester lies within the semantic and graph-derived study window. This positive guard preserves legitimate courses such as IT project management and business intelligence while excluding courses whose main professional object lies outside the selected fields.
+
+\subsection{Aggregation of domain evidence after deduplication}
+
+One canonical course $c$ may correspond to multiple source records $\mathcal{R}(c)$ from different EPVO programs. Sequentially reading these rows could previously assign the domain of the last record by mistake. We therefore use deterministic maximum-evidence aggregation:
+\begin{equation}
+E_{c,d}=\max_{r\in\mathcal{R}(c)} scope(r,d),\qquad
+scope(r,d)=
+\begin{cases}
+3,& group(r)=group(d),\\
+2,& direction(r)=direction(d),\\
+0,& \text{otherwise},
+\end{cases}
+\label{eq:domain-evidence}
+\end{equation}
+\begin{equation}
+d^{\ast}(c)=\arg\max_{d\in\mathcal{D}_p}E_{c,d},
+\label{eq:domain-assignment}
+\end{equation}
+where a predefined priority of the primary field is used to break ties. Domain membership is therefore determined by the complete provenance of the canonical course rather than by database row order.
+
+The effective credit volume of a field is
+\begin{equation}
+C_d(P)=\sum_{c\in P}cr_c\,\mathbb{I}[d^{\ast}(c)=d]+B_d(P),
+\label{eq:effective-domain-credits}
+\end{equation}
+where $B_d(P)$ includes only explicitly defined shares of disciplinary and integrative bridge modules. A general LO-gap bridge is not treated as domain evidence. The quota constraint is
+\begin{equation}
+C_d(P)+\delta_d\geq \rho_d CR^{\ast},
+\label{eq:domain-quota-tolerance}
+\end{equation}
+where $\rho_d$ is the specified share and $\delta_d$ is the credit tolerance.
+
+\subsection{Exact selection of the professional-credit remainder after SCES RK}
+
+For programs generated under SCES RK, the regulatory block of internships, research work, and final assessment is added separately. If its volume is $C^{GOSO}$, the credit remainder available for real professional courses is
+\begin{equation}
+  C^{prof}=C^{target}-C^{GOSO}.
+  \label{eq:professional-residual}
+\end{equation}
+Ordinary greedy course removal can leave an inconvenient sum and then fill the difference with bridge modules. To avoid this, bounded dynamic programming is introduced. For candidate $c_i$, a bit mask $m_i$ is defined over professional LOs supported with a strength of at least 0.50, and its utility is $u_i=\sum_{\ell\in m_i}s_{i\ell}^{eff}$. The state
+\begin{equation}
+  DP[q,m]=\max \sum_i u_i x_i
+  \quad\text{subject to}\quad
+  \sum_i cr_i x_i=q,
+  \quad \bigvee_{i:x_i=1}m_i=m
+  \label{eq:goso-knapsack}
+\end{equation}
+is constructed only for $0\le q\le C^{prof}$. Among states with $q=C^{prof}$, the lexicographic objective first maximizes the number of covered LOs, then the evidence strength, and finally minimizes the number of courses.
+
+\begin{plainbox}
+In a 180-credit doctoral program, the regulatory components occupied 155 credits, leaving exactly 25 professional credits. The new algorithm does not select the first available courses or alter their credit values; it finds a combination of real courses totalling exactly 25 credits that covers as many professional outcomes as possible. In the D094 control case, this produced five real five-credit courses and no bridge modules.
+\end{plainbox}
+
+\subsection{Two-threshold real coverage and bridge minimization}
+
+The effective evidence for a course--LO pair is
+\begin{equation}
+s_{c\ell}^{eff}=\max\{s_{c\ell}^{SBERT},s_{c\ell}^{EPVO}\}.
+\label{eq:effective-lo-link}
+\end{equation}
+Real coverage is not mixed with designed bridge support:
+\begin{equation}
+R_{\ell}(P)=\max_{c\in P:\,real(c)=1}s_{c\ell}^{eff}.
+\label{eq:real-lo-coverage}
+\end{equation}
+The threshold $\tau_r=0.50$ is used during repair to search for a real course, while $\tau_q=0.60$ is used in the strict quality report. A bridge score of 0.75 is a design hypothesis and is displayed separately; it cannot convert a bridge into an expert-validated course.
+
+The number of bridge modules is minimized lexicographically after the hard constraints are satisfied:
+\begin{equation}
+\min_P\left(
+N_{hard}(P),\;N_{miss}^{real}(P),\;N_{bridge}(P),\;
+\Pi_{quota}(P),\;\Pi_{load}(P),\;-Q(P)
+\right),
+\label{eq:lexicographic-repair}
+\end{equation}
+where $N_{miss}^{real}=\sum_{\ell}\mathbb{I}[R_{\ell}<\tau_r]$. If $N_{miss}^{real}=0$ and no bridge modules are present, the algorithm is prohibited from adding an artificial ``improvement'' bridge. After every quota, diversification, or expert repair step, all LOs are checked again, eliminating late-stage loss of coverage.
+
+A residual credit gap $g\in[3,7]$ is handled by a real-course-first rule. Let
+\begin{equation}
+\mathcal{F}_g=\{c\notin P:cr_c=g,\ I_{final}(c,p)=1,\
+Pre(c)\subseteq P\}.
+\label{eq:real-credit-fill-set}
+\end{equation}
+If $\mathcal{F}_g\ne\varnothing$, the course with the strongest effective LO and EPVO scope evidence is selected before any synthetic credit-balancing module is considered. Consequently, the algorithm cannot create a generic filler while an admissible real EPVO course of the required credit value is available.
+
+A candidate $c$ for replacing bridge $b$ is ranked by
+\begin{equation}
+J(c\mid b)=w_1|M_b\cap L_c|+w_2\mathbb{I}[s^{EPVO}>0]
++w_3\max_{\ell\in M_b}s_{c\ell}^{eff}
++w_4 rank_{scope}(c)-w_5|cr_c-cr_b|,
+\label{eq:bridge-candidate-ranking}
+\end{equation}
+where $M_b$ is the set of LOs supported by the bridge. An expert-confirmed replacement becomes an immutable constraint in the next generation cycle.
+
+\subsection{Semester sequencing and transactional verification of A/B/C}
+
+Semester workload is
+\begin{equation}
+L_s(P)=\sum_c cr_c z_{cs},\qquad
+L_s^{target}-\Delta_s\le L_s(P)\le L_s^{target}+\Delta_s,
+\label{eq:semester-load-new}
+\end{equation}
+and is verified jointly with $z_{pre(c),s'}<z_{c,s}$ for $s'<s$. Semantic windows prevent premature placement of advanced streaming, forensic, clinical, and research courses when the required foundations have not yet been completed. Repair may redistribute designed 3--7-credit modules, but it may not violate the final tolerance or stored expert decisions.
+
+The implementation follows the order
+\begin{equation}
+P_0\rightarrow G_{pre}(P_0)\rightarrow
+Repair_{semester}(P_0,G_{pre})\rightarrow
+G_{pre}(P_1)\rightarrow Verify(P_1).
+\label{eq:graph-repair-order}
+\end{equation}
+This order is important because an inferred prerequisite can legitimately raise the earliest admissible semester of an advanced course. The final repair performs bounded whole-course swaps, preserves original EPVO credit values, and then reconstructs the graph. Thus, a prerequisite added by the knowledge layer cannot silently invalidate a schedule that had already passed an earlier semantic check.
+
+\articlefigure
+  {fig06_semantic_admission_graph_repair.png}
+  {PROMPT FOR IMAGE GENERATION: Create a clean publication-grade scientific pipeline diagram on a white background, landscape 16:9, with restrained navy, teal, and green colours and no decorative AI imagery. Show six numbered stages connected left to right: (1) a scoped EPVO candidate repository with education-level, direction, group, and RU/KK/EN provenance badges; (2) SBERT and EPVO expert-evidence scoring for course--LO pairs; (3) a semantic professional-context guard that retains IT--medicine courses and excludes unrelated professional contexts; (4) a prerequisite directed acyclic graph with foundation courses before advanced courses; (5) a bounded whole-course semester swap that preserves original course credits; and (6) an independent verifier with green checks for exact credits, semester load, LO evidence, domain quotas, SCES RK, and distinct A/B/C alternatives. Add a small inset illustrating the real-course-first residual rule: an admissible 5-credit EPVO course is selected before a generic filler. Use concise English labels, vector-style shapes, sharp typography, no gradients, no robots, no glowing circuits, and no unreported numerical values.}
+  {Semantic admission, graph-aware semester repair, and independent verification in the final curriculum pipeline.}
+  {fig:semantic-admission-repair}
+
+Diversity between alternatives is measured by the symmetric difference
+\begin{equation}
+D(P_i,P_j)=|\mathcal{C}(P_i)\triangle\mathcal{C}(P_j)|,
+\qquad i\ne j.
+\label{eq:variant-diversity}
+\end{equation}
+A new set is published atomically only if
+\begin{equation}
+Commit(A,B,C)=\mathbb{I}\left[
+\bigwedge_{v\in\{A,B,C\}} Feasible(v)\land
+\bigwedge_{i<j}D(P_i,P_j)>0\right].
+\label{eq:transactional-commit}
+\end{equation}
+If $Commit=0$, the previous active curriculum is retained. After commit, the plans are read back from the database and passed through the same independent verifier. The system therefore verifies not only the in-memory object but also the actually stored result.
+
+\subsection{Scale and scope of verification}
+
+Across an almost complete development cycle, stress testing, and regression control, more than 100 educational programs from different fields and education levels passed through the system. For each program, the automated audit checked target credits, semester workload, prerequisite ordering, absence of duplicates, consistency with education level and selected field, real sources of LO coverage, the share of bridge modules, and compliance with the international quality checklist. The evaluation therefore covered the complete path from the initial specification to the stored curriculum rather than one isolated interface function.
+
+For a reproducible scientific report, representative control programs were documented in detail: three interdisciplinary bachelor's programs and conventional bachelor's, master's, and doctoral control cases. Fresh PostgreSQL generation produced distinct A/B/C alternatives at all three education levels. Every bachelor's alternative contained exactly 240 credits, every master's alternative 120 credits, and every doctoral alternative 180 credits; all 9 newly generated cross-level alternatives achieved zero hard violations, passed the pedagogical and SCES RK checks, preserved real course credits, contained no wrong-level or foreign-context courses, and achieved an internal international-checklist score of 100\%. In the stabilized PostgreSQL version, control programs across IT--medicine, digital public administration, AgroTech, artificial-intelligence governance, and digital forensics achieved target credits and zero hard violations after automatic repair. Remaining bridge modules, when pedagogically necessary, were explicitly marked as expert-review objects rather than hidden as ordinary courses. The measured changes form a system-level ablation: the level guard reduced the number of wrong-level courses in the Digital Forensics Investigator program from $5/6/5$ to zero; final LO repair increased real LO coverage to $9/9$; the contextual guard removed professionally unrelated courses hidden behind generic digital terminology; the real-course-first residual repair eliminated a technical filler in the IT--medicine variant; and exact-fit selection after SCES RK reduced bridge modules in D094 from five to zero and increased professional real LO coverage from $0/5$ to $5/5$. These checks validate software invariants, robustness, and reproducibility of generation; they do not replace subsequent measurement of student learning outcomes or decisions by an external accreditation body.
+
+\subsection{Training and end-to-end synthesis algorithms}
+
+The numerical expert label for a course--LO pair is defined as $y_i\in\{0,0.5,1\}$. In the operational run, SBERT was optimized using cosine regression:
+\begin{equation}
+  \mathcal{L}_{pair}(\theta)=\frac{1}{N}\sum_{i=1}^{N}
+  \left(
+  \cos\!\left(g_\theta(c_i),g_\theta(o_i)\right)-y_i
+  \right)^2.
+  \label{eq:sbert-pair-loss}
+\end{equation}
+The threshold $\tau^\ast$ is selected only on validation by maximizing F1, then fixed and applied to test without further tuning. This separates training, operating-point selection, and final evaluation.
+
+\begin{algorithm}[H]
+\caption{Fine-tuning and independent evaluation of the course--LO model}
+\label{alg:sbert-training}
+\begin{algorithmic}[1]
+\Require expert pairs $\mathcal{D}=\{(p_i,c_i,o_i,y_i)\}$; seed 42
+\Ensure model $g_{\theta^\ast}$, threshold $\tau^\ast$, and test metrics
+\State split $\mathcal{D}$ by complete program ID into train/validation/test
+\State select 40\,000 training pairs; initialize multilingual MPNet-SBERT
+\State partially freeze the lower encoder layers
+\For{one epoch with mixed precision}
+  \State minimize $\mathcal{L}_{pair}(\theta)$ over mini-batches
+\EndFor
+\State select $\tau^\ast=\arg\max_\tau F1(\tau)$ on validation
+\State freeze the model, $\tau^\ast$, seed, checksum, and configuration
+\State compute ROC-AUC, PR-AUC, F1, precision, recall, and accuracy once on test
+\State \Return $g_{\theta^\ast},\tau^\ast$ and the metric report
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Evidence-constrained end-to-end synthesis of A/B/C alternatives}
+\label{alg:end-to-end-synthesis}
+\begin{algorithmic}[1]
+\Require program specification $P$; approved repository $\mathcal{C}$; expert memory $\mathcal{M}_{exp}$; graph $\mathcal{G}$; rules $\mathcal{R}$
+\Ensure three distinct feasible plans $(A,B,C)$ or preservation of the previous active plan
+\State build a scoped catalogue by education level, field, and educational-program group
+\ForAll{program LO $o_j$}
+  \State retrieve top-$K$ candidates using the SBERT+BM25 hybrid
+  \State compute $p^{AI}_{ij}$, $e_{ij}$, and final evidence $w_{ij}$
+  \State remove candidates that fail $I_{admit}(c_i,P)$
+\EndFor
+\State perform prerequisite closure and add the mandatory regulatory block
+\State construct feasible course sets with NSGA-II; apply DP to the exact SCES RK remainder
+\ForAll{alternative $v\in\{A,B,C\}$}
+  \State assign courses to semesters
+  \State perform credit/load/prerequisite/LO repair
+  \State calculate the independent verifier $V(v)$ and international checklist $Q_{int}(v)$
+\EndFor
+\If{$V(A)=V(B)=V(C)=1$ and $D(A,B),D(A,C),D(B,C)>0$}
+  \State atomically store A/B/C and re-verify data read back from the database
+  \State \Return $(A,B,C)$
+\Else
+  \State roll back and preserve the previous active curriculum
+  \State \Return diagnostic report
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\section{Software Implementation and End-to-End Interface}
+
+\systemname{} is implemented as a web-based decision-support system. The interface follows the scientific pipeline and displays not only the final result but also intermediate evidence. A public demonstration URL will be provided after de-identification of the control projects: \systemdemolink.
+
+\subsection{User input}
+
+The wizard collects education level, program type, one or more fields, educational-program groups, language, duration, target credits, minimum domain shares, program goal, and LOs. For the interdisciplinary IT--medicine case, the input is: bachelor's level, four years, 240 credits, two fields, SCES RK, and integrative learning outcomes.
+
+\articlefigure
+  {S01_wizard_epvo_directions.png}
+  {Provide a real screenshot of the first wizard step. One screen should show the education level, program type, first and second EPVO fields or groups, duration, target credits, and domain quotas.}
+  {Interface for specifying the initial educational-program parameters.}
+  {fig:interface-input}
+
+\subsection{User output}
+
+After generation, the system presents alternatives A/B/C, semester allocation, selection rationale, real and bridge sources of LO coverage, the prerequisite graph, and national and international verification results. The expert can confirm or reject a link, exclude a questionable course, and restart transactional generation.
+
+\articlefigure
+  {S03_plan_variants_abc.png}
+  {Provide a real screenshot of the generation result. It should show three distinct alternatives A/B/C, the exact credit total, semester workload distribution, the selected active alternative, quality status, and access to explanations.}
+  {End-to-end synthesis result: three verifiable curriculum alternatives.}
+  {fig:interface-output}
+
+\articlefigure
+  {S04_course_lo_explanation.png}
+  {Provide a real screenshot of one selected course card. It should show the linked LO, AI-score as the model prediction, EPVO-score as Registry expert evidence, final relationship strength, course source, selection rationale, and expert-feedback buttons.}
+  {Explanation of course inclusion and separation of the model prediction, EPVO expert evidence, and final course--LO relationship strength.}
+  {fig:interface-explanation}
+
+The main implementation modules are the scoped repository, course--LO scorer, knowledge graph, multi-objective planner, independent verifier, bridge replacement, international quality checklist, Dataset Passport, Model Benchmark, and expert-feedback log. Long-running generation reports stage-level progress; the previous active curriculum is preserved until all new alternatives have been generated and re-verified successfully.
+
+\section{Experimental Design}
+
+The experiment separates the quality of the trained model from the quality of the complete end-to-end process. This prevents the mistaken conclusion that improving one retrieval metric automatically produces a correct curriculum. Four research questions are examined:
+\begin{itemize}
+  \item \textbf{RQ1:} does the nearly nine-year expert corpus contain a learnable signal for course--LO relationships;
+  \item \textbf{RQ2:} can the retrieval layer return at least one expert-relevant course in the top 10, and what proportion of all relevant courses does it recover;
+  \item \textbf{RQ3:} does the full pipeline ensure exact credits, real LO coverage, and zero hard violations across different education levels;
+  \item \textbf{RQ4:} what contributions are made by the admission guard, prerequisite closure, no-forced-bridge rule, exact-fit selection, and transactional verification.
+\end{itemize}
+
+\subsection{Dataset, split, and reproducibility}
+
+Table~\ref{tab:dataset-scale} reports corpus sizes after extraction and normalization. All pairs from one educational program belong to only one split. The partition was constructed deterministically from program ID with seed 42; the overlap of program IDs among train, validation, and test is zero.
+
+\begin{table}[H]
+\centering
+\caption{Scale of the national EPVO expert corpus}
+\label{tab:dataset-scale}
+\small
+\begin{tabularx}{0.88\linewidth}{>{\raggedright\arraybackslash}X r}
+\toprule
+\textbf{Object} & \textbf{Count}\\
+\midrule
+Educational programs & 12\,215\\
+Source course records & 408\,638\\
+Source learning outcomes & 124\,521\\
+Source expert evaluations & 935\,151\\
+Normalized courses & 191\,292\\
+Normalized course--LO expert links & 932\,483\\
+Links with a numerical expert label & 800\,793\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Program-level split, seed 42}
+\label{tab:dataset-split}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Partition} & \textbf{Programs} & \textbf{Course--LO pairs}\\
+\midrule
+Train & 8\,568 & 654\,470\\
+Validation & 1\,815 & 138\,443\\
+Test & 1\,832 & 142\,238\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A fixed benchmark of 6\,000 pairs drawn exclusively from test programs was used for model evaluation. The ranking audit used 120 frozen test programs and 1\,249 LO queries. The configuration, seed, threshold, training time, SHA-256 checksums of the source files, JSON metrics, and the list of control programs were stored. Source artifacts and the active production model were not replaced by an experimental candidate unless the predefined metrics improved simultaneously.
+
+\subsection{Models and computational configuration}
+
+The base model was \texttt{paraphrase-multilingual-mpnet-base-v2}. The operational \epvomodel{} model was trained on 40\,000 pairs from the training split for one epoch using mixed precision on an NVIDIA GeForce RTX 4050 Laptop GPU. The lower encoder layers were partially frozen. The final training loss was 0.2045, and training took 2\,292~s. The threshold 0.3449 was selected exclusively on validation and then fixed.
+
+The main paper compares only the original multilingual SBERT and the deployed production model. Experimental cached, hard-negative, cross-encoder, GNN, and LSTM variants are retained in supplementary reports but are not used to strengthen the main conclusion because they did not provide a stable advantage for the operational pipeline.
+
+\subsection{Metrics}
+
+For the binary task, positive predictive value (Precision), sensitivity to positive links (Recall), and their harmonic mean (F1-score) are used:
+\begin{align}
+  Precision &= \frac{TP}{TP+FP}, &
+  Recall &= \frac{TP}{TP+FN},\\
+  F1 &= 2\frac{Precision\cdot Recall}{Precision+Recall}.
+  \label{eq:classification-metrics-v2}
+\end{align}
+The Receiver Operating Characteristic Area Under the Curve (ROC-AUC) measures pair ordering quality over all thresholds, while the area under the precision--recall curve (PR-AUC) reflects the precision--recall trade-off under incomplete and potentially imbalanced labels. Accuracy is reported only at the validation-selected threshold and is not interpreted as ROC-AUC.
+
+For each LO query $q$ with a set of relevant courses $Rel_q$:
+\begin{align}
+ Recall@K &= \frac{1}{|Q|}\sum_{q\in Q}\frac{|Rel_q\cap TopK_q|}{|Rel_q|},\\
+ HitRate@K &= \frac{1}{|Q|}\sum_{q\in Q}\mathbb{I}[Rel_q\cap TopK_q\neq\varnothing],\\
+ MRR &= \frac{1}{|Q|}\sum_{q\in Q}\frac{1}{rank_q},\\
+ nDCG@K &= \frac{1}{|Q|}\sum_{q\in Q}\frac{DCG_q@K}{IDCG_q@K}.
+ \label{eq:ranking-metrics-v2}
+\end{align}
+HitRate@10 corresponds to the practical question ``Did the expert receive at least one relevant option?'', whereas Recall@10 measures the proportion of all historically linked courses that were retrieved.
+
+End-to-end evaluation uses the invariant vector
+\begin{equation}
+  E2E(\Pi)=
+  \bigl(
+  |CR(\Pi)-CR^\ast|,
+  N_{hard},N_{level},N_{scope},N_{pre},N_{dup},
+  N_{miss}^{real},Q_{int},T
+  \bigr),
+  \label{eq:e2e-vector}
+\end{equation}
+where $T$ is construction time. Success requires the exact target credit total, $N_{hard}=0$, no wrong-level, wrong-scope, or duplicate courses, real coverage of all declared LOs, and a successful transactional commit.
+
+\subsection{Control programs and ablations}
+
+The broader operational audit covered more than 100 educational programs from different fields. For detailed reproducible analysis, programs representing different system modes were selected: the main interdisciplinary IT--medicine case study, AgroTech, Digital Forensics Investigator, a conventional master's program, and the D094 doctoral program. Ablations were performed by disabling or adding one system constraint on the same program: the level guard, final LO repair, no-forced-bridge rule, exact-fit dynamic programming (DP), and transactional verifier. This design measures not only final quality but also the causal contribution of each engineering and mathematical mechanism within the software pipeline.
+
+\section{Results}
+
+\subsection{RQ1: learning from expert memory}
+
+\begin{table}[H]
+\centering
+\caption{Course--LO classification quality on independent test pairs}
+\label{tab:sbert-results}
+\small
+\begin{threeparttable}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Model} & \textbf{ROC-AUC} & \textbf{PR-AUC} & \textbf{F1} & \textbf{Precision} & \textbf{Recall} & \textbf{Accuracy}\\
+\midrule
+Base multilingual SBERT & 0.7031 & 0.6946 & 0.6886 & 0.5668 & 0.8773 & ---\\
+\textbf{EPVO SBERT 40k} & \textbf{0.7666} & \textbf{0.7681} & \textbf{0.7188} & \textbf{0.6255} & 0.8450 & 0.6695\\
+\bottomrule
+\end{tabular}%
+}
+\begin{tablenotes}\footnotesize
+\item Metrics were calculated on a fixed benchmark of 6\,000 pairs from test programs. Accuracy is reported at the validation-selected threshold of 0.3449.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+Domain fine-tuning increased ROC-AUC by 0.0635, PR-AUC by 0.0735, and F1 by 0.0302. Precision increased by 0.0587 while recall decreased by 0.0323. The result demonstrates that historical expert decisions contain a learnable signal that is not fully captured by the original general-purpose model. ROC-AUC of 0.7666 does not mean 76.66\% ``correct answers''; it is the probability of correctly ordering a randomly selected positive and negative pair over varying thresholds.
+
+\articlefigure
+  {fig04_sbert_benchmark.png}
+  {Create a grouped bar chart comparing Base SBERT and \epvomodel{} on ROC-AUC, PR-AUC, and F1. Add a small experiment card showing 40k training pairs, 6k test pairs, program-level split, and seed 42.}
+  {Measured effect of domain fine-tuning on the EPVO expert corpus.}
+  {fig:sbert-benchmark}
+
+\subsection{RQ2: top-10 ranking diagnostics}
+
+In the frozen ranking audit, the median was 42 candidates and five relevant courses per LO. For 262 of the 1\,249 LOs, the number of relevant courses exceeded ten; therefore, the mathematical ceiling of conventional Recall@10 was 0.9206. The operational baseline achieved Recall@10 of 0.6700, MRR of 0.7906, nDCG@10 of 0.6654, and HitRate@10 of 0.9704. Thus, at least one expert-linked course appeared in the top 10 for 97.04\% of LOs, and ceiling-normalized Recall@10 was 0.7278.
+
+\begin{table}[H]
+\centering
+\caption{Ranking metrics on 120 frozen test programs and 1\,249 LOs}
+\label{tab:ranking-results}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Model} & \textbf{Recall@5} & \textbf{Recall@10} & \textbf{MRR} & \textbf{nDCG@10} & \textbf{HitRate@10}\\
+\midrule
+Production SBERT 40k & 0.4898 & 0.6700 & 0.7906 & 0.6654 & 0.9704\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This combination of metrics is important for interpretation: the system almost always provides the expert with at least one strong candidate, but it does not claim that the top 10 should recover every historically possible alternative. Small subsequent gains from individual reranker variants are not presented as the central contribution of the paper.
+
+\subsection{RQ3: end-to-end synthesis of educational programs}
+
+In addition to the automated batch audit of more than 100 programs, detailed reproducible results are reported below for five control scenarios covering interdisciplinary and conventional programs across three education levels.
+
+\begin{table}[H]
+\centering
+\caption{Multi-level verification of the complete pipeline}
+\label{tab:end-to-end-results-v2}
+\scriptsize
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Program} & \textbf{Level} & \textbf{Alternatives} & \textbf{Credits} & \textbf{Real LOs} & \textbf{Bridge-only LOs} & \textbf{Hard}\\
+\midrule
+AgroTech & 6B & A/B/C & 240/240/240 & 9/9 & 0 & 0\\
+Digital Forensics Investigator & 6B & A/B/C & 240/240/240 & 9/9 & 0 & 0\\
+IT--medicine & 6B & A/B/C & 240/240/240 & 12/12 & 0 & 0\\
+Master's program & 7M & A/B/C & 120/120/120 & 9/9 & 0 & 0\\
+Doctoral program D094 & 8D & A/B/C & 180/180/180 & 5/5 professional LOs & 0 & 0\\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The nine bachelor's alternatives achieved exactly 240 credits, complete real LO coverage, and zero hard violations. The master's alternatives A/B/C each achieved 120 credits and 9/9 real LOs. Fresh doctoral alternatives A/B/C each achieved 180 credits, zero hard violations, no wrong-level or foreign-context courses, and an internal international-checklist score of 100\%. In D094, the mandatory regulatory block left 25 professional credits; dynamic programming selected five real five-credit courses, provided 5/5 professional LO coverage, produced zero bridge modules, and yielded semester workloads of $30/30/30/30/27/33$. No duplicates, wrong-level courses, corrupted real-course credit values, or prerequisite violations were found in the successful control cases.
+
+For IT--medicine, the complete pipeline generated three distinct 240-credit alternatives. All 12 LOs received real course sources; irrelevant general courses, foreign professional contexts, and artificial credit fillers were excluded. The final alternatives contained only two or three explicit interdisciplinary bridge modules, all with domain-specific content and expert-review status; no LO depended exclusively on a bridge. The inferred prerequisite graphs contained 23, 27, and 31 verified edges in the reported A, B, and C controls. For every course, the model score, Registry expert evidence, field, group, LO, semester-placement rationale, and prerequisite role were stored.
+
+\articlefigure
+  {fig05_end_to_end_results.png}
+  {PROMPT FOR IMAGE GENERATION: Create a publication-grade comparative scientific infographic on a white background, landscape orientation, using five aligned cards for AgroTech, Digital Forensics Investigator, IT--medicine, a conventional master's program, and doctoral program D094. Each card must show education level, A/B/C availability, exact credit total, real LO coverage, bridge-only LO count, hard-violation count, and a green PostgreSQL-verified badge. Add a narrow summary band showing fresh cross-level validation: bachelor's 240 credits, master's 120 credits, doctorate 180 credits, all A/B/C feasible and distinct, with zero hard violations. Use navy headings, teal data elements, green validation marks, consistent academic typography, and simple vector icons for courses, graph edges, and verification. Avoid decorative AI motifs, gradients, invented percentages, and any numbers not reported in the paper.}
+  {Results of multi-level verification of the complete end-to-end educational-program design process.}
+  {fig:end-to-end-results}
+
+\subsection{Alternative diversity and computational efficiency}
+
+Transactional generation does not publish a new set if any alternative violates an invariant or if A/B/C are identical. For the control project under SCES RK, pairwise Jaccard similarities were 0.8136, 0.8475, and 0.7419. Thus, the alternatives retained a common regulatory core but differed in their professional-course composition. After eliminating repeated indexing and introducing caching, the EPVO and scoring stages were reduced from 28.45 to 0.15~s and from 175.38 to 0.16~s, respectively. A repeated full project build was reduced from 320.5 to 138.3~s; the remaining time corresponded to the actual generation of A/B/C.
+
+A separate performance audit of the interdisciplinary hard-quota path identified an unnecessary NSGA-II run whose output was subsequently discarded by a deterministic quota algorithm. Removing that stage reduced the time for one alternative from 138.95 to 4.08~s without changing credits, LOs, or hard violations. For a standard 240-credit program, a reduced evidence-constrained NSGA-II mode generated A/B/C in 22.91~s instead of 479.83~s; the alternatives remained distinct and feasible.
+
+\subsection{RQ4: system ablation of formal mechanisms}
+
+\begin{table}[H]
+\centering
+\caption{Effect of key components on the final curriculum}
+\label{tab:ablation}
+\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Component} & \textbf{Before activation} & \textbf{After activation}\\
+\midrule
+Level guard & Digital Forensics Investigator: 5/6/5 wrong-level courses in A/B/C & 0/0/0 wrong-level courses\\
+Final real-LO repair & Real sources did not cover every professional LO & 9/9 real LOs, hard 0\\
+No-forced-bridge & IT--medicine: three artificial bridges despite available real courses & 12/12 real LOs, bridge-only LOs 0\\
+Professional-context guard & Generic digital words admitted courses from marketing, economics, or human-resource contexts & 0 foreign-context courses in fresh A/B/C controls\\
+Graph-before-repair order & An inferred prerequisite could raise the minimum semester after repair & 0 semester misplacements after graph-aware whole-course swaps\\
+Real-course-first residual repair & A technical credit filler could close a 3--7 credit remainder & An admissible exact-credit EPVO course is selected first\\
+Exact-fit DP after SCES RK & D094: 0/5 professional real LOs and five bridges & 5/5 professional real LOs, zero bridges, exactly 25 professional credits\\
+Transactional verifier & Failure of one alternative could damage the published set & New A/B/C are published only when all three are feasible and distinct; otherwise rollback\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The ablation confirms that curriculum quality cannot be reduced to embeddings. The semantic model creates a probabilistic candidate signal, while level/scope admission, the graph, exact-fit selection, and the verifier transform that signal into a feasible curriculum. It is the composition of these components that produces the end-to-end result.
+
+\subsection{International checklist and expert loop}
+
+The control curricula passed the internal checks for outcome mapping, progression, domain relevance, interdisciplinary integration, assessment alignment, and continuous improvement; successful alternatives achieved $Q_{int}=100\%$. This value indicates satisfaction of the system's automated criteria, not formal accreditation by ABET, CDIO, or Tuning.
+
+Expert verdicts \texttt{confirmed}, \texttt{weak}, \texttt{incorrect}, and \texttt{corrected} are stored separately from the original AI-score and reused during recalculation. The knowledge base evolves as
+\begin{equation}
+  \mathcal{K}_{t+1}=\mathcal{K}_{t}\cup\Delta\mathcal{K}_{expert},
+  \label{eq:knowledge-growth}
+\end{equation}
+so a correction not only changes the current curriculum but also creates a new learning signal for subsequent programs.
+
+\articlefigure
+  {S08_international_quality_checklist.png}
+  {Provide a real screenshot of the quality-verification screen. It should display national constraints and a separate international checklist for OBE, ABET-style continuous improvement, CDIO, and Tuning, together with the overall status, identified issues, and an explicit note that this is an internal automated check rather than formal accreditation.}
+  {Interface for national and international quality verification of the generated curriculum.}
+  {fig:quality-checklist}
+
+\section{Discussion}
+
+\subsection{Why the contribution is systemic}
+
+The main result is a reproducible method for transforming probabilistic and expert signals into a complete curriculum with verifiable invariants. \systemname{} integrates text, a graph, historical expert memory, and academic rules, thereby moving the task from ``AI recommends courses'' to ``the system synthesizes, verifies, and explains an educational program.''
+
+KAG simplifies the most labour-intensive stages: searching for analogues in a large repository, mapping courses to LOs, checking level and scope, reconstructing prerequisite chains, balancing credits, and preparing several alternatives. The expert retains control over the goal, LOs, disputed links, bridge modules, and the final choice.
+
+\subsection{Interdisciplinary and conventional programs}
+
+The system's main advantage appears when programs are created at the intersection of fields. In such tasks, selecting the most similar courses is insufficient: minimum domain shares, integrative LOs, and cross-domain semester sequencing must also be ensured. IT--medicine demonstrates this mode most clearly. The same level guard, evidence admission, exact-fit, and verification mechanisms also apply to conventional single-domain programs, supporting the generality of the architecture.
+
+\subsection{Uniqueness of the expert corpus}
+
+Most educational NLP studies use a small corpus from one university, synthetic annotation, or course titles without systematic expert links. This study uses a national database accumulated by domain experts over nearly nine years. Such information is rarely available in structured form and creates a foundation for future research on temporal holdout, domain transfer, expert disagreement, level-specific calibration, and learning from corrected feedback.
+
+\subsection{Relationship to international approaches}
+
+OBE, ABET-style continuous improvement, CDIO, and Tuning are not included as decorative references. Their principles are translated into machine-verifiable questions: Does every LO have evidence? Is progression respected? Are there integrative components? Are assessment methods specified? Are improvement results retained? This makes international experience part of operational quality assurance without replacing external accreditation.
+
+\subsection{Practical significance}
+
+The method can be used by universities to design new programs, revise existing curricula, prepare alternatives for academic committees, and identify uncovered LOs. The Registry provides evidence from existing educational practice, while KAG helps combine this evidence for new tasks. Curriculum developers receive not one ``AI answer'' but several verified alternatives with explanations and an opportunity for expert correction.
+
+\section{Limitations and Threats to Validity}
+
+\begin{enumerate}
+  \item The expert corpus reflects historical practice and may reproduce outdated decisions; emerging professions therefore require external industry expertise.
+  \item The absence of a relationship in a program record does not always prove irrelevance; negative labels remain incomplete.
+  \item The program-level split reduces direct leakage, but identical courses may occur in programs from different institutions.
+  \item Formal feasibility does not guarantee pedagogical effectiveness, successful accreditation, or future student performance.
+  \item The international checklist is an internal operationalization of principles, not a formal ABET, CDIO, or Tuning evaluation.
+  \item The Atlas of New Professions is used only to motivate the research problem; its data are not included in training or experiments.
+  \item A public demonstration requires project de-identification, verification of data rights, and preparation of a stable read-only version.
+  \item The doctoral regression check has so far been completed only for alternative A; additional 8D groups and independent expert evaluation of content are required.
+\end{enumerate}
+
+\section{Directions for Future Research}
+
+\begin{enumerate}
+  \item Conduct bootstrap analysis of ROC-AUC, PR-AUC, Recall@K, MRR, and nDCG with confidence intervals.
+  \item Construct external holdouts by university, field, and program-registration time.
+  \item Introduce calibrated probabilities and reliability diagrams separately for levels 6B, 7M, and 8D.
+  \item Train an expert head on accumulated local feedback labelled \texttt{confirmed}, \texttt{weak}, \texttt{incorrect}, and \texttt{corrected}.
+  \item Conduct temporal and institutional holdouts to test transfer of the nearly nine-year expert memory to new programs and professional domains.
+  \item Conduct blinded evaluation with several independent experts, measure Cohen/Fleiss $\kappa$, and compare manual design time with \systemname{}.
+\end{enumerate}
+
+\section{Conclusion}
+
+This paper proposed \systemname{}, an evidence-constrained end-to-end method for AI-assisted educational-program design. The system combines a trained semantic model, the national expert memory of the Registry of Educational Programs, vector retrieval, a knowledge graph, multi-objective synthesis, and independent verification.
+
+A central advantage is support for programs at the intersection of fields. The method constructs disciplinary blocks, integrative LOs, and bridge modules only when no real evidence-based course is available. At the same time, the architecture applies to conventional programs and to bachelor's, master's, and doctoral levels.
+
+The control experiments confirmed exact credit totals, real LO coverage, and the absence of hard violations in the stored alternatives. Fresh A/B/C generation reproduced these properties at bachelor's, master's, and doctoral levels. The PostgreSQL integrity audit additionally confirmed complete three-language records for all 21\,525 approved courses and no corrupted operational text. The scientific contribution is therefore not unrestricted text generation or a small reranker improvement, but the formal transformation of evidence-supported probabilistic relationships into a complete, explainable, and machine-verifiable curriculum.
+
+\begin{plainbox}
+The system simplifies the task as follows: the expert specifies the program idea and constraints; KAG retrieves and links relevant knowledge; the planner assembles alternatives; independent rules reject infeasible solutions; and the human expert reviews the evidence and makes the final decision.
+\end{plainbox}
+
+\appendix
+
+
+\begin{thebibliography}{99}
+\small
+
+\bibitem{Atlas2026}
+Ministry of Labour and Social Protection of the Population of the Republic of Kazakhstan.
+\textit{Atlas of New Professions and Competencies of the Republic of Kazakhstan}. 2026.
+\url{https://atlasbt.enbek.kz/ru} (accessed: 19 July 2026).
+
+\bibitem{Ibatov2017}
+Ibatov M.K., Omirbayev S.M., Zhetessova G.S., Nurmagambetov A.A., Abdibekova S.K., Smirnova G.M., Gotting V.V., Kozhanov M.G., Shebalina O.A., Koishibayeva A.T., Chikibayeva Z.N., Idiyatova Yu.M.
+\textit{Designing Educational Programs: Methodological Guidelines}.
+Karaganda: Karaganda State Technical University Publishing House, 2017. 40~p. [In Russian].
+
+\bibitem{Kozhanov2024Syllabus}
+Kozhanov M., Mosavi A., Amirov A., Kaibassova D., Poser V., Shakhatova A., Lira L., Eigner G.
+Syllabus Design and Planning with Artificial Intelligence and the Potential of Generative AI.
+In: \textit{2024 IEEE 24th International Symposium on Computational Intelligence and Informatics (CINTI)}. 2024. P.~257--264.
+\href{https://doi.org/10.1109/CINTI63048.2024.10830766}{doi:10.1109/CINTI63048.2024.10830766}.
+
+\bibitem{Kozhanov2026KAG}
+Kozhanov M., Mako C., Poser V., Eigner G., Mosavi A.
+Knowledge Augmented Generation for Curriculum Planning.
+\textit{Eurasian Journal of Mathematical and Computer Applications}. 2026. Vol.~14, No.~1. P.~17--34.
+\href{https://doi.org/10.32523/2306-6172-2026-14-1-17-34}{doi:10.32523/2306-6172-2026-14-1-17-34}.
+
+\bibitem{Jantassova2021}
+Jantassova D., Kozhanov M., Shebalina O.
+Digital Platform as a Tool for Internationalization: Model for Formation of International Competences' Database Applying the Hierarchy Analysis Method.
+\textit{Journal of Theoretical and Applied Information Technology}. 2021. Vol.~99, No.~21. P.~4942--4957.
+
+\bibitem{Biggs1996}
+Biggs J.
+Enhancing Teaching through Constructive Alignment.
+\textit{Higher Education}. 1996. Vol.~32. P.~347--364.
+\href{https://doi.org/10.1007/BF00138871}{doi:10.1007/BF00138871}.
+
+\bibitem{ABET2025}
+ABET.
+\textit{Criteria for Accrediting Computing Programs, 2025--2026}. 2025.
+\url{https://www.abet.org/accreditation/accreditation-criteria/criteria-for-accrediting-computing-programs-2025-2026/} (accessed: 19 July 2026).
+
+\bibitem{CDIO2022}
+Worldwide CDIO Initiative.
+\textit{CDIO Standards 3.0}. 2022.
+\url{https://www.cdio.org/content/cdio-standards-30} (accessed: 19 July 2026).
+
+\bibitem{Tuning2003}
+Gonzalez J., Wagenaar R. (eds.).
+\textit{Tuning Educational Structures in Europe: Final Report, Phase One}.
+University of Deusto and University of Groningen, 2003.
+
+\bibitem{Devlin2019}
+Devlin J., Chang M.-W., Lee K., Toutanova K.
+BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding.
+In: \textit{Proceedings of NAACL-HLT}. 2019. P.~4171--4186.
+\href{https://doi.org/10.18653/v1/N19-1423}{doi:10.18653/v1/N19-1423}.
+
+\bibitem{Reimers2019}
+Reimers N., Gurevych I.
+Sentence-BERT: Sentence Embeddings Using Siamese BERT-Networks.
+In: \textit{Proceedings of EMNLP-IJCNLP}. 2019. P.~3982--3992.
+\href{https://doi.org/10.18653/v1/D19-1410}{doi:10.18653/v1/D19-1410}.
+
+\bibitem{Reimers2020}
+Reimers N., Gurevych I.
+Making Monolingual Sentence Embeddings Multilingual Using Knowledge Distillation.
+In: \textit{Proceedings of EMNLP}. 2020. P.~4512--4525.
+\href{https://doi.org/10.18653/v1/2020.emnlp-main.365}{doi:10.18653/v1/2020.emnlp-main.365}.
+
+\bibitem{Song2020}
+Song K., Tan X., Qin T., Lu J., Liu T.-Y.
+MPNet: Masked and Permuted Pre-training for Language Understanding.
+In: \textit{Advances in Neural Information Processing Systems}. 2020. Vol.~33.
+
+\bibitem{Robertson2009}
+Robertson S., Zaragoza H.
+The Probabilistic Relevance Framework: BM25 and Beyond.
+\textit{Foundations and Trends in Information Retrieval}. 2009. Vol.~3, No.~4. P.~333--389.
+\href{https://doi.org/10.1561/1500000019}{doi:10.1561/1500000019}.
+
+\bibitem{Lewis2020}
+Lewis P., Perez E., Piktus A., Petroni F., Karpukhin V., Goyal N., Kuttler H., Lewis M., Yih W.-t., Rocktaschel T., Riedel S., Kiela D.
+Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.
+In: \textit{Advances in Neural Information Processing Systems}. 2020. Vol.~33.
+
+\bibitem{Zamani2024}
+Zamani H., Bendersky M.
+Stochastic RAG: End-to-End Retrieval-Augmented Generation through Expected Utility Maximization.
+In: \textit{Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval}. 2024. P.~2641--2646.
+\href{https://doi.org/10.1145/3626772.3657923}{doi:10.1145/3626772.3657923}.
+
+\bibitem{Yu2024RankRAG}
+Yu Y., Ping W., Liu Z., Wang B., You J., Zhang C., Shoeybi M., Catanzaro B.
+RankRAG: Unifying Context Ranking with Retrieval-Augmented Generation in LLMs.
+In: \textit{Advances in Neural Information Processing Systems}. 2024. Vol.~37.
+
+\bibitem{Asai2022}
+Asai A., Gardner M., Hajishirzi H.
+Evidentiality-Guided Generation for Knowledge-Intensive NLP Tasks.
+In: \textit{Proceedings of NAACL-HLT}. 2022. P.~2226--2243.
+\href{https://doi.org/10.18653/v1/2022.naacl-main.162}{doi:10.18653/v1/2022.naacl-main.162}.
+
+\bibitem{Liang2024}
+Liang L., Sun M., Gui Z. et al.
+KAG: Boosting LLMs in Professional Domains via Knowledge Augmented Generation.
+\textit{arXiv preprint arXiv:2409.13731}. 2024.
+\href{https://doi.org/10.48550/arXiv.2409.13731}{doi:10.48550/arXiv.2409.13731}.
+
+\bibitem{Chen2018KnowEdu}
+Chen P., Lu Y., Zheng V.W., Chen X., Yang B.
+KnowEdu: A System to Construct Knowledge Graph for Education.
+\textit{IEEE Access}. 2018. Vol.~6. P.~31553--31563.
+\href{https://doi.org/10.1109/ACCESS.2018.2839607}{doi:10.1109/ACCESS.2018.2839607}.
+
+\bibitem{Hogan2021}
+Hogan A., Blomqvist E., Cochez M. et al.
+Knowledge Graphs.
+\textit{ACM Computing Surveys}. 2021. Vol.~54, No.~4. P.~1--37.
+\href{https://doi.org/10.1145/3447772}{doi:10.1145/3447772}.
+
+\bibitem{Heileman2018}
+Heileman G.L., Hickman M., Slim A., Abdallah C.T.
+Characterizing the Complexity of Curricula with Directed Graphs.
+\textit{arXiv preprint arXiv:1811.09676}. 2018.
+
+\bibitem{Kipf2017}
+Kipf T.N., Welling M.
+Semi-Supervised Classification with Graph Convolutional Networks.
+In: \textit{International Conference on Learning Representations}. 2017.
+
+\bibitem{Hamilton2017}
+Hamilton W.L., Ying R., Leskovec J.
+Inductive Representation Learning on Large Graphs.
+In: \textit{Advances in Neural Information Processing Systems}. 2017. Vol.~30.
+
+\bibitem{Hochreiter1997}
+Hochreiter S., Schmidhuber J.
+Long Short-Term Memory.
+\textit{Neural Computation}. 1997. Vol.~9, No.~8. P.~1735--1780.
+\href{https://doi.org/10.1162/neco.1997.9.8.1735}{doi:10.1162/neco.1997.9.8.1735}.
+
+\bibitem{Kozhanov2025}
+Kozhanov M., Varkonyi-Koczy A.R.
+Modelling Curricula with Graph Neural Networks and Long Short-Term Memory Networks.
+\textit{Eurasian Journal of Mathematical and Computer Applications}. 2025. Vol.~13, No.~4. P.~159--167.
+
+\bibitem{Deb2002}
+Deb K., Pratap A., Agarwal S., Meyarivan T.
+A Fast and Elitist Multiobjective Genetic Algorithm: NSGA-II.
+\textit{IEEE Transactions on Evolutionary Computation}. 2002. Vol.~6, No.~2. P.~182--197.
+\href{https://doi.org/10.1109/4235.996017}{doi:10.1109/4235.996017}.
+
+\bibitem{Gebru2021}
+Gebru T., Morgenstern J., Vecchione B., Vaughan J.W., Wallach H., Daume III H., Crawford K.
+Datasheets for Datasets.
+\textit{Communications of the ACM}. 2021. Vol.~64, No.~12. P.~86--92.
+\href{https://doi.org/10.1145/3458723}{doi:10.1145/3458723}.
+
+\bibitem{Mitchell2019}
+Mitchell M., Wu S., Zaldivar A. et al.
+Model Cards for Model Reporting.
+In: \textit{Proceedings of the Conference on Fairness, Accountability, and Transparency}. 2019. P.~220--229.
+\href{https://doi.org/10.1145/3287560.3287596}{doi:10.1145/3287560.3287596}.
+
+\bibitem{Amershi2014}
+Amershi S., Cakmak M., Knox W.B., Kulesza T.
+Power to the People: The Role of Humans in Interactive Machine Learning.
+\textit{AI Magazine}. 2014. Vol.~35, No.~4. P.~105--120.
+\href{https://doi.org/10.1609/aimag.v35i4.2513}{doi:10.1609/aimag.v35i4.2513}.
+
+\bibitem{EPVORegistry}
+National Center for Higher Education Development.
+\textit{Registry of Educational Programs in Higher and Postgraduate Education}. 2026.
+\url{https://www.enic-kazakhstan.edu.kz/ru/reestr-op/reestr-op-1} (accessed: 19 July 2026).
+
+\end{thebibliography}
+
+\end{document}
