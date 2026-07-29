@@ -121,6 +121,45 @@ GOSO_COURSE_LO_CODES = {
     "DOCTORAL_FINAL_ATTESTATION": "LO-GOSO-D5",
 }
 
+GOSO_PREREQUISITE_CODES = {
+    "GOSO-KZ-KZ_RU_2": "GOSO-KZ-KZ_RU_1",
+    "GOSO-KZ-FOREIGN_2": "GOSO-KZ-FOREIGN_1",
+    "GOSO-KZ-PHYSICAL_2": "GOSO-KZ-PHYSICAL_1",
+    "GOSO-KZ-NIRM_2": "GOSO-KZ-NIRM_1",
+    "GOSO-KZ-NIRM_3": "GOSO-KZ-NIRM_2",
+    "GOSO-KZ-NIRM_4": "GOSO-KZ-NIRM_3",
+    "GOSO-KZ-FINAL_ATTESTATION": "GOSO-KZ-NIRM_4",
+    "GOSO-KZ-BACHELOR_FINAL_ATTESTATION": "GOSO-KZ-PROFESSIONAL_PRACTICE",
+    "GOSO-KZ-NIRD_2": "GOSO-KZ-NIRD_1",
+    "GOSO-KZ-NIRD_3": "GOSO-KZ-NIRD_2",
+    "GOSO-KZ-NIRD_4": "GOSO-KZ-NIRD_3",
+    "GOSO-KZ-NIRD_5": "GOSO-KZ-NIRD_4",
+    "GOSO-KZ-NIRD_6": "GOSO-KZ-NIRD_5",
+    "GOSO-KZ-EIRD_2": "GOSO-KZ-EIRD_1",
+    "GOSO-KZ-EIRD_3": "GOSO-KZ-EIRD_2",
+    "GOSO-KZ-EIRD_4": "GOSO-KZ-EIRD_3",
+    "GOSO-KZ-EIRD_5": "GOSO-KZ-EIRD_4",
+    "GOSO-KZ-EIRD_6": "GOSO-KZ-EIRD_5",
+}
+
+
+def _applicable_goso_prerequisite_pairs(by_code: Dict[str, Course]) -> List[tuple[Course, Course]]:
+    """Return only strict earlier-semester edges.
+
+    Research work and dissertation defence may coexist in the final semester;
+    that is a within-semester sequence, not a curriculum prerequisite edge.
+    """
+    result = []
+    for child_code, parent_code in GOSO_PREREQUISITE_CODES.items():
+        child, parent = by_code.get(child_code), by_code.get(parent_code)
+        if (
+            child
+            and parent
+            and int(parent.recommended_semester or 1) < int(child.recommended_semester or 1)
+        ):
+            result.append((child, parent))
+    return result
+
 
 def _definitions_for_constraints(constraints: Dict) -> List[tuple]:
     """Return only the ГОСО block applicable to this programme and track."""
@@ -230,33 +269,25 @@ def ensure_goso_items(version: ProjectVersion, db: Session) -> List[Dict]:
         if lo_code and goso_los.get(lo_code):
             course.learning_outcomes = [goso_los[lo_code]]
     by_code = {course.course_id: course for course in courses}
-    prerequisite_codes = {
-        "GOSO-KZ-KZ_RU_2": "GOSO-KZ-KZ_RU_1",
-        "GOSO-KZ-FOREIGN_2": "GOSO-KZ-FOREIGN_1",
-        "GOSO-KZ-PHYSICAL_2": "GOSO-KZ-PHYSICAL_1",
-        "GOSO-KZ-NIRM_2": "GOSO-KZ-NIRM_1",
-        "GOSO-KZ-NIRM_3": "GOSO-KZ-NIRM_2",
-        "GOSO-KZ-NIRM_4": "GOSO-KZ-NIRM_3",
-        "GOSO-KZ-FINAL_ATTESTATION": "GOSO-KZ-NIRM_4",
-        "GOSO-KZ-BACHELOR_FINAL_ATTESTATION": "GOSO-KZ-PROFESSIONAL_PRACTICE",
-        "GOSO-KZ-NIRD_2": "GOSO-KZ-NIRD_1",
-        "GOSO-KZ-NIRD_3": "GOSO-KZ-NIRD_2",
-        "GOSO-KZ-NIRD_4": "GOSO-KZ-NIRD_3",
-        "GOSO-KZ-NIRD_5": "GOSO-KZ-NIRD_4",
-        "GOSO-KZ-NIRD_6": "GOSO-KZ-NIRD_5",
-        "GOSO-KZ-EIRD_2": "GOSO-KZ-EIRD_1",
-        "GOSO-KZ-EIRD_3": "GOSO-KZ-EIRD_2",
-        "GOSO-KZ-EIRD_4": "GOSO-KZ-EIRD_3",
-        "GOSO-KZ-EIRD_5": "GOSO-KZ-EIRD_4",
-        "GOSO-KZ-EIRD_6": "GOSO-KZ-EIRD_5",
-    }
-    for child_code, parent_code in prerequisite_codes.items():
-        child, parent = by_code.get(child_code), by_code.get(parent_code)
-        if child and parent and parent not in child.prerequisites:
+    # These global catalogue rows are reused between projects. Rebuild their
+    # regulatory edges for the current duration instead of retaining a stale
+    # edge created by an earlier programme.
+    for course in courses:
+        course.prerequisites = [
+            parent for parent in course.prerequisites
+            if not str(parent.course_id or "").startswith("GOSO-KZ-")
+        ]
+    for child, parent in _applicable_goso_prerequisite_pairs(by_code):
+        if parent not in child.prerequisites:
             child.prerequisites.append(parent)
     profile_final = by_code.get("GOSO-KZ-MASTER_PROJECT_FINAL")
     profile_research = by_code.get("GOSO-KZ-EIRM_PROFILE_60") or by_code.get("GOSO-KZ-EIRM_PROFILE_90")
-    if profile_final and profile_research and profile_research not in profile_final.prerequisites:
+    if (
+        profile_final
+        and profile_research
+        and int(profile_research.recommended_semester or 1) < int(profile_final.recommended_semester or 1)
+        and profile_research not in profile_final.prerequisites
+    ):
         profile_final.prerequisites.append(profile_research)
     db.flush()
     return [{

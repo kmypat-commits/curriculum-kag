@@ -1,5 +1,6 @@
 param(
-    [switch]$RequireVerifiedBackup
+    [switch]$RequireVerifiedBackup,
+    [switch]$IncludeFreshGeneration
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +45,20 @@ Invoke-Checked {
         --database-url $databaseUrl `
         --output (Join-Path $runtime "course-localization-acceptance.json")
 } "RU/KK/EN localization audit"
+if ($IncludeFreshGeneration) {
+    Invoke-Checked {
+        & $python (Join-Path $backend "scripts\audit_cross_level_generation.py") `
+            --level master `
+            --output (Join-Path $runtime "fresh-master-acceptance.json") `
+            --variants A B C
+    } "Fresh master A/B/C generation"
+    Invoke-Checked {
+        & $python (Join-Path $backend "scripts\audit_cross_level_generation.py") `
+            --level doctorate `
+            --output (Join-Path $runtime "fresh-doctorate-acceptance.json") `
+            --variants A B C
+    } "Fresh doctorate A/B/C generation"
+}
 Invoke-Checked { & npm.cmd --prefix (Join-Path $root "frontend") run build } "Frontend production build"
 
 if ($RequireVerifiedBackup) {

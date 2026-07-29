@@ -121,7 +121,11 @@ def _unique_items_by_title(items: List[Dict]) -> List[Dict]:
         if key in seen:
             continue
         semantic_key = _foundation_equivalent_title_key(key)
-        semantic_identity = (semantic_key, int(item.get("credits") or 0))
+        # Named semantic families are duplicates even when catalogue records
+        # assign slightly different credits. Prefix-only equivalence remains
+        # credit-sensitive to avoid collapsing legitimately different courses.
+        semantic_credits = 0 if semantic_key.startswith("semantic ") else int(item.get("credits") or 0)
+        semantic_identity = (semantic_key, semantic_credits)
         if semantic_key and semantic_key != key and semantic_identity in seen_semantic:
             continue
         if semantic_key and semantic_key == key and semantic_identity in seen_semantic:
@@ -146,7 +150,19 @@ def _is_component_placeholder_title(key: str) -> bool:
 
 
 def _foundation_equivalent_title_key(key: str) -> str:
-    """Conservatively merge same-credit titles differing only by a foundation prefix."""
+    """Conservatively merge same-credit titles that denote the same course."""
+    research_methodology_markers = (
+        "методология исследования",
+        "методология исследований",
+        "методология научного исследования",
+        "методология научных исследований",
+        "research methodology",
+        "methodology of research",
+        "ғылыми зерттеу әдіснамасы",
+        "зерттеу әдіснамасы",
+    )
+    if key in research_methodology_markers:
+        return "semantic research methodology"
     prefixes = (
         "основы ", "введение в ", "введение в основы ", "базовый курс ",
         "fundamentals of ", "introduction to ", "basic course in ",
@@ -211,6 +227,8 @@ def _complexity_min_semester(item: Dict, num_semesters: int) -> int:
     if _has_domain_term(text, clinical_advanced_terms):
         return max(2, min(num_semesters, math.ceil(num_semesters * 0.55)))
     if _has_domain_term(text, research_terms):
+        if num_semesters <= 6:
+            return 1
         return max(2, min(num_semesters, math.ceil(num_semesters * 0.35)))
     if "первичной медицинской помощи" in text or "primary medical care" in text:
         return max(2, min(num_semesters, math.ceil(num_semesters * 0.45)))
@@ -1819,6 +1837,7 @@ def _diversify_variant_items(
         if not str(lo.lo_code or "").startswith("LO-GOSO-")
     }
     admission_by_course: Dict[int, Dict[str, object]] = {}
+    scores_by_course: Dict[int, Dict[str, float]] = {}
     for match in db.query(MatchScore).filter(
         MatchScore.project_version_id == project_version.id
     ).all():
@@ -1829,11 +1848,31 @@ def _diversify_variant_items(
         score = max(float(match.score or 0.0), expert_score)
         if score < 0.4:
             continue
+        scores_by_course.setdefault(int(match.course_id), {})[lo_code] = max(
+            scores_by_course.get(int(match.course_id), {}).get(lo_code, 0.0),
+            score,
+        )
         row = admission_by_course.setdefault(
             int(match.course_id), {"los": set(), "score": 0.0}
         )
         row["los"].add(lo_code)
         row["score"] = max(float(row["score"]), score)
+
+    def preserves_professional_coverage(course_ids: set[int]) -> bool:
+        for lo_code in professional_lo_codes.values():
+            scores = [
+                scores_by_course.get(int(course_id), {}).get(lo_code, 0.0)
+                for course_id in course_ids
+            ]
+            scores = [score for score in scores if score > 0]
+            if max(scores, default=0.0) + 1e-9 < 0.5:
+                return False
+            product = 1.0
+            for score in scores:
+                product *= 1.0 - max(0.0, min(1.0, score))
+            if 1.0 - product + 1e-9 < float(settings.COVERAGE_THRESHOLD):
+                return False
+        return True
     alternatives_by_credit: Dict[int, List[Course]] = {}
     for course in db.query(Course).all():
         key = _title_key(course.title)
@@ -1854,6 +1893,19 @@ def _diversify_variant_items(
                 course.id if variant_type == "C" else -course.id,
             )
         )
+    pair_candidates = [
+        course
+        for values in alternatives_by_credit.values()
+        for course in values
+    ]
+    pair_candidates.sort(
+        key=lambda course: (
+            int(course.credits or 5),
+            course.id if variant_type == "C" else -course.id,
+        ),
+        reverse=(variant_type == "C"),
+    )
+    pair_candidates = pair_candidates[:30]
 
     removable = [
         (index, item)
@@ -1871,7 +1923,19 @@ def _diversify_variant_items(
         while alternatives_by_credit.get(credits):
             possible = alternatives_by_credit[credits].pop(0)
             possible_title = _title_key(possible.title)
-            if possible.id not in selected_ids and possible_title not in selected_titles:
+            trial_ids = {
+                int(value) for value in selected_ids
+                if value is not None and int(value) != int(item.get("course_id") or 0)
+            } | {int(possible.id)}
+            if (
+                possible.id not in selected_ids
+                and possible_title not in selected_titles
+                and _education_level_course_allowed(
+                    possible,
+                    (project_version.project.constraints_json or {}).get("education_level"),
+                )
+                and preserves_professional_coverage(trial_ids)
+            ):
                 candidate = possible
                 break
         if candidate is None:
@@ -1894,6 +1958,61 @@ def _diversify_variant_items(
             "admission_score": round(float(admission_by_course[candidate.id]["score"]), 4),
         }
         swaps += 1
+
+    # A tight doctoral 25-credit envelope may have no safe one-course swap:
+    # every selected course can be the sole strong source for one LO. Two
+    # coordinated replacements can still form a genuinely different variant
+    # while preserving total credits and all probabilistic LO constraints.
+    if swaps == 0 and variant_type == "C":
+        removable_pairs = list(combinations(removable[:12], 2))
+        candidate_pairs = list(combinations(pair_candidates, 2))
+        candidate_pairs.sort(
+            key=lambda pair: (pair[0].id + pair[1].id, pair[0].id, pair[1].id),
+            reverse=True,
+        )
+        diversified = False
+        for old_pair in removable_pairs:
+            old_ids = {int(row[1].get("course_id") or 0) for row in old_pair}
+            old_credits = sum(int(row[1].get("credits") or 0) for row in old_pair)
+            for new_pair in candidate_pairs:
+                if sum(int(course.credits or 5) for course in new_pair) != old_credits:
+                    continue
+                if len({_title_key(course.title) for course in new_pair}) != 2:
+                    continue
+                if any(
+                    course.id in selected_ids
+                    or _title_key(course.title) in selected_titles
+                    or not _education_level_course_allowed(
+                        course,
+                        (project_version.project.constraints_json or {}).get("education_level"),
+                    )
+                    for course in new_pair
+                ):
+                    continue
+                trial_ids = {
+                    int(value) for value in selected_ids
+                    if value is not None and int(value) not in old_ids
+                } | {int(course.id) for course in new_pair}
+                if not preserves_professional_coverage(trial_ids):
+                    continue
+                for (item_index, old_item), course in zip(old_pair, new_pair):
+                    normalized[item_index] = {
+                        "course_id": course.id,
+                        "title": course.title,
+                        "domain": course.domain,
+                        "credits": int(course.credits or 5),
+                        "recommended_semester": course.recommended_semester,
+                        "prerequisites": [],
+                        "type": course.cycle_component or "mandatory",
+                        "selection_method": "diversified_pair_alternative",
+                        "admission_reason": "diversified_course_and_lo",
+                        "admission_los": sorted(admission_by_course[course.id]["los"]),
+                        "admission_score": round(float(admission_by_course[course.id]["score"]), 4),
+                    }
+                diversified = True
+                break
+            if diversified:
+                break
     return normalized
 
 
@@ -2299,7 +2418,7 @@ def _select_exact_professional_subset(
         if credits <= 0 or credits > capacity or course_id <= 0:
             continue
         mask, utility = evidence.get(course_id, (0, 0.0))
-        if not mask:
+        if utility <= 0:
             continue
         domain_index = domain_index_by_course.get(course_id)
         snapshot = [
@@ -2410,10 +2529,11 @@ def _fit_real_professional_block_after_goso(
     ).all():
         expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
         score = max(float(match.score or 0.0), expert)
-        if score < 0.5:
+        if score < 0.4:
             continue
         mask, value = evidence.get(int(match.course_id), (0, 0.0))
-        evidence[int(match.course_id)] = (mask | lo_bit[match.lo_id], value + score)
+        strong_mask = lo_bit[match.lo_id] if score >= 0.5 else 0
+        evidence[int(match.course_id)] = (mask | strong_mask, value + score)
 
     project_domains = [
         str(project_version.project.domain1 or "").casefold().strip(),
@@ -2738,6 +2858,31 @@ def build_curriculum_plan(
             total_before_gap_fill += increase
             remaining_gap -= increase
         selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
+
+    if (
+        variant_type == "C"
+        and str(constraints.get("education_level") or "").lower()
+        in {"doctorate", "doctoral", "phd"}
+    ):
+        preferred_semester = max(1, num_semesters - 1)
+        trajectory_candidates = [
+            item for item in selected_courses
+            if item.get("course_id") is not None
+            and not item.get("regulatory_required")
+            and int(item.get("credits") or 0) == 5
+            and _foundation_max_semester(item.get("title"), num_semesters)
+            >= preferred_semester
+        ]
+        if trajectory_candidates:
+            trajectory_item = max(
+                trajectory_candidates,
+                key=lambda item: int(item.get("course_id") or 0),
+            )
+            trajectory_item["variant_preferred_semester"] = preferred_semester
+            trajectory_item["latest_semester"] = max(
+                preferred_semester,
+                int(trajectory_item.get("latest_semester") or 1),
+            )
 
     # Close residual credit/load gaps even when prerequisite verification was
     # already clean. This fixes plans such as 238/240 with a 24-credit semester.
@@ -3072,19 +3217,33 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         if not professional_scope:
             return items
         normalized = [dict(item) for item in items]
-        lo_by_id = {lo.id: lo for lo in version.learning_outcomes}
+        lo_by_id = {
+            lo.id: lo
+            for lo in version.learning_outcomes
+            if not str(lo.lo_code or "").startswith("LO-GOSO-")
+        }
         if not lo_by_id:
             return normalized
         selected_course_ids = [int(item["course_id"]) for item in normalized if item.get("course_id")]
-        coverage = {lo.lo_code: 0.0 for lo in lo_by_id.values()}
-        if selected_course_ids:
-            for match in db.query(MatchScore).filter(
-                MatchScore.project_version_id == project_version_id,
-                MatchScore.course_id.in_(selected_course_ids),
-            ).all():
-                lo = lo_by_id.get(match.lo_id)
-                if lo:
-                    coverage[lo.lo_code] = max(coverage.get(lo.lo_code, 0.0), float(match.score or 0.0))
+        score_by_course: Dict[int, Dict[str, float]] = {}
+        expert_by_course: Dict[int, Dict[str, float]] = {}
+        for match in db.query(MatchScore).filter(
+            MatchScore.project_version_id == project_version_id,
+            MatchScore.lo_id.in_(list(lo_by_id)),
+        ).all():
+            lo = lo_by_id.get(match.lo_id)
+            if not lo:
+                continue
+            expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+            effective = max(float(match.score or 0.0), expert)
+            score_by_course.setdefault(int(match.course_id), {})[lo.lo_code] = max(
+                score_by_course.get(int(match.course_id), {}).get(lo.lo_code, 0.0),
+                effective,
+            )
+            expert_by_course.setdefault(int(match.course_id), {})[lo.lo_code] = max(
+                expert_by_course.get(int(match.course_id), {}).get(lo.lo_code, 0.0),
+                expert,
+            )
         # A proposed bridge is not evidence that a real discipline covers the
         # outcome.  Real-course gaps remain open until an EPVO/confirmed course
         # reaches the threshold; bridges are reported separately by verifier.
@@ -3093,7 +3252,35 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         # correctly required 0.60, producing a plan that the generator itself
         # immediately marked as incomplete.
         required_coverage = float(settings.COVERAGE_THRESHOLD)
-        missing = [code for code, score in coverage.items() if score < required_coverage]
+
+        def coverage_state(values: List[Dict]) -> tuple[Dict[str, float], Dict[str, float], List[str]]:
+            products = {lo.lo_code: 1.0 for lo in lo_by_id.values()}
+            maximums = {lo.lo_code: 0.0 for lo in lo_by_id.values()}
+            for item in values:
+                course_id = int(item.get("course_id") or 0)
+                for code, score in score_by_course.get(course_id, {}).items():
+                    bounded = max(0.0, min(1.0, float(score)))
+                    products[code] *= 1.0 - bounded
+                    maximums[code] = max(maximums[code], bounded)
+            coverage = {code: 1.0 - product for code, product in products.items()}
+            missing_codes = [
+                code
+                for code in coverage
+                if coverage[code] + 1e-9 < required_coverage
+                or maximums[code] + 1e-9 < 0.5
+            ]
+            return coverage, maximums, missing_codes
+
+        def coverage_objective(values: List[Dict]) -> tuple:
+            coverage, maximums, missing_codes = coverage_state(values)
+            return (
+                len(coverage) - len(missing_codes),
+                min(coverage.values(), default=0.0),
+                sum(coverage.values()),
+                sum(maximums.values()),
+            )
+
+        coverage, maximums, missing = coverage_state(normalized)
         if not missing:
             return normalized
 
@@ -3129,14 +3316,18 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 if not lo:
                     continue
                 evidence = candidate_evidence.setdefault(course.id, {
-                    "los": set(), "max": 0.0, "expert": 0.0,
+                    "los": set(), "max": 0.0, "expert": 0.0, "scores": {},
                 })
                 expert_value = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
                 effective_score = max(float(match.score or 0.0), expert_value)
-                if effective_score < required_coverage:
+                if effective_score < 0.4:
                     continue
                 evidence["los"].add(lo.lo_code)
                 evidence["max"] = max(evidence["max"], effective_score)
+                evidence["scores"][lo.lo_code] = max(
+                    evidence["scores"].get(lo.lo_code, 0.0),
+                    effective_score,
+                )
                 evidence["expert"] = max(
                     evidence["expert"],
                     expert_value,
@@ -3160,38 +3351,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if not still_missing:
                 continue
             candidate_credits = int(candidate.credits or 5)
-            replaceable = []
-            for index, item in enumerate(normalized):
-                if (
-                    item.get("bridge_module_id") is not None
-                    and int(item.get("credits") or 0) == candidate_credits
-                ):
-                    # A real in-scope course is always preferable to an
-                    # unconfirmed bridge that only assumes LO coverage.
-                    replaceable.append((-1, False, 0.0, -1, index))
-                    continue
-                old_course = courses.get(item.get("course_id"))
-                if (
-                    not old_course
-                    or old_course.id in protected_ids
-                    or item.get("regulatory_required")
-                    or int(item.get("credits") or 0) != candidate_credits
-                ):
-                    continue
-                old_evidence = aggregates.get(old_course.id, {})
-                old_supported_missing = len(set(old_evidence.get("lo_codes") or []) & set(missing))
-                replaceable.append((
-                    old_supported_missing,
-                    float(old_evidence.get("expert") or 0.0) > 0,
-                    float(old_evidence.get("max") or 0.0),
-                    _course_role_rank(old_course, project_domains),
-                    index,
-                ))
-            if not replaceable:
-                continue
-            replaceable.sort()
-            replace_index = replaceable[0][-1]
-            normalized[replace_index] = {
+            candidate_item = {
                 "course_id": candidate.id,
                 "title": candidate.title,
                 "domain": candidate.domain,
@@ -3206,10 +3366,35 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                     "epvo_expert_score": round(float(evidence["expert"]), 4),
                 },
             }
+            current_objective = coverage_objective(normalized)
+            best_trial = None
+            best_objective = current_objective
+            for index, item in enumerate(normalized):
+                if (
+                    item.get("bridge_module_id") is not None
+                    and int(item.get("credits") or 0) == candidate_credits
+                ):
+                    pass
+                else:
+                    old_course = courses.get(item.get("course_id"))
+                    if (
+                        not old_course
+                        or old_course.id in protected_ids
+                        or item.get("regulatory_required")
+                        or int(item.get("credits") or 0) != candidate_credits
+                    ):
+                        continue
+                trial = [dict(value) for value in normalized]
+                trial[index] = dict(candidate_item)
+                objective = coverage_objective(trial)
+                if objective > best_objective:
+                    best_objective = objective
+                    best_trial = trial
+            if best_trial is None:
+                continue
+            normalized = best_trial
             selected_ids.add(candidate.id)
-            for code in still_missing:
-                coverage[code] = max(coverage.get(code, 0.0), float(evidence["max"]))
-            missing = [code for code, score in coverage.items() if score < required_coverage]
+            coverage, maximums, missing = coverage_state(normalized)
             if not missing:
                 return _unique_items_by_title(normalized)
 
@@ -3491,7 +3676,28 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     medical_programme = any(marker in domain_text for marker in ("медицин", "здрав", "clinical", "health"))
     agro_programme = any(marker in domain_text for marker in ("агро", "сельск", "растен", "почв"))
 
+    def has_foreign_scope_conflict(course: Course) -> bool:
+        text = _title_key(" ".join(str(value or "") for value in (
+            course.title, course.description, course.domain,
+        )))
+        topic_groups = (
+            (("химич", "химия", "chemical", "chemistry"), ("хим", "chemical", "chemistry")),
+            (("нефт", "газов", "petroleum", "oil and gas"), ("нефт", "газ", "petroleum")),
+            (("горн", "геолог", "mining", "geology"), ("горн", "геолог", "mining")),
+            (("медицин", "клинич", "пациент", "medical", "clinical"), ("медицин", "здрав", "medical", "health")),
+            (("агро", "сельск", "растен", "почв", "crop", "soil"), ("агро", "сельск", "растен", "почв")),
+            (("ветерин", "veterinary"), ("ветерин", "veterinary")),
+            (("строител", "civil engineering", "construction"), ("строител", "construction")),
+        )
+        return any(
+            any(marker in text for marker in topic_markers)
+            and not any(marker in domain_text for marker in allowed_domain_markers)
+            for topic_markers, allowed_domain_markers in topic_groups
+        )
+
     def course_matches_scope_theme(course: Course) -> bool:
+        if has_foreign_scope_conflict(course):
+            return False
         text = " ".join(str(value or "") for value in (course.title, course.description, course.domain)).lower()
         if ict_programme:
             if any(marker in text for marker in (
@@ -3516,6 +3722,17 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         if agro_programme:
             return any(marker in text for marker in ("агро", "сельск", "растен", "почв", "урож", "животн", "agro", "crop", "soil"))
         return True
+
+    def has_strong_exact_scope_evidence(course: Course) -> bool:
+        """Let exact EPVO group evidence override a shallow keyword mismatch."""
+        evidence = aggregates.get(course.id, {})
+        return (
+            not has_foreign_scope_conflict(course)
+            and
+            scope_rank(course) >= 3
+            and bool(evidence.get("professional_lo_codes"))
+            and float(evidence.get("max") or 0.0) >= 0.5
+        )
 
     def admit_real_courses(items: List[Dict]) -> List[Dict]:
         """Final evidence gate shared by every A/B/C selection path.
@@ -3554,7 +3771,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 continue
             if course_code.startswith("EPVO-") and scope_rank(course) <= 0:
                 continue
-            if course_code.startswith("EPVO-") and not course_matches_scope_theme(course):
+            if (
+                course_code.startswith("EPVO-")
+                and not course_matches_scope_theme(course)
+                and not has_strong_exact_scope_evidence(course)
+            ):
                 continue
             if not is_project_domain(course):
                 continue
@@ -3665,11 +3886,12 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     maximum = target if foundation_reserve else target + max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE)))
     optimizer_cache_key = f"nsga2_variants:{project_version_id}"
     if optimizer_cache_key not in db.info:
-        # Interdisciplinary programmes are intentionally handled by the
-        # deterministic hard-quota path below.  The previous implementation
-        # still ran the full NSGA-II search and then discarded its result,
-        # repeating hundreds of millions of operations for no plan benefit.
-        if interdisciplinary:
+        # Interdisciplinary and explicitly EPVO-scoped programmes are handled
+        # by the deterministic hard-constraint path below. NSGA-II's early
+        # return can satisfy credits before the scoped real-course top-up and
+        # therefore replace valid M/B/D-group courses with synthetic bridges.
+        # Keep NSGA-II only for unscoped experimental catalogues.
+        if interdisciplinary or epvo_professional_scope:
             db.info[optimizer_cache_key] = {}
         else:
             from app.planner.nsga2 import optimize_variants
@@ -3833,7 +4055,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 continue
             if not is_project_domain(course) or scope_rank(course) <= 0:
                 continue
-            if not course_matches_scope_theme(course):
+            if not course_matches_scope_theme(course) and not has_strong_exact_scope_evidence(course):
                 continue
             if course_depth(course.id) >= num_semesters:
                 continue
@@ -4565,6 +4787,40 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = replace_redundant_bridges_with_real_courses(result)
     result = _trim_to_target_credits(result, target, db)
     result = rebalance_domain_quotas(result)
+    # The last trim/bridge replacement must not remove the sole real source
+    # for a programme LO. Reclose gaps at the true end of selection.
+    result = close_professional_lo_gaps(result)
+    result = admit_real_courses(result)
+    result = top_up_with_real_epvo_courses(result)
+    result = top_up_with_credit_bridges(result)
+    result = _trim_to_target_credits(result, target, db)
+    result = rebalance_domain_quotas(result)
+    if (
+        variant_type == "C"
+        and str(constraints.get("education_level") or "").lower()
+        in {"doctorate", "doctoral", "phd"}
+    ):
+        preferred_semester = max(1, int(constraints.get("total_semesters") or 6) - 1)
+        trajectory_candidates = [
+            item for item in result
+            if item.get("course_id") is not None
+            and not item.get("regulatory_required")
+            and int(item.get("credits") or 0) == 5
+            and _foundation_max_semester(
+                item.get("title"),
+                int(constraints.get("total_semesters") or 6),
+            ) >= preferred_semester
+        ]
+        if trajectory_candidates:
+            trajectory_item = max(
+                trajectory_candidates,
+                key=lambda item: int(item.get("course_id") or 0),
+            )
+            trajectory_item["variant_preferred_semester"] = preferred_semester
+            trajectory_item["latest_semester"] = max(
+                preferred_semester,
+                int(trajectory_item.get("latest_semester") or 1),
+            )
     for item in result:
         course = courses.get(item.get("course_id"))
         domain_index = project_domain_index(course) if course else None
@@ -4877,7 +5133,7 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
         candidates = list(range(earliest, latest + 1))
         valid = [s for s in candidates if loads[s] + (item.get("credits") or 0) <= upper]
         pool = valid or candidates
-        recommended = item.get("recommended_semester")
+        recommended = item.get("variant_preferred_semester") or item.get("recommended_semester")
         target = min(
             pool,
             key=lambda semester: (

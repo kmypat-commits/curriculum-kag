@@ -43,6 +43,8 @@ def _semantic_min_semester(title: str | None, num_semesters: int) -> int:
     if any(marker in text for marker in clinical):
         return max(2, min(num_semesters, -(-num_semesters * 55 // 100)))
     if any(marker in text for marker in research):
+        if num_semesters <= 6:
+            return 1
         return max(2, min(num_semesters, -(-num_semesters * 35 // 100)))
     if "первичной медицинской помощи" in text or "primary medical care" in text:
         return max(2, min(num_semesters, -(-num_semesters * 45 // 100)))

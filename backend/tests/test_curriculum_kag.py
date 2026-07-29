@@ -4,12 +4,14 @@ from unittest.mock import MagicMock
 from check_text_encoding import looks_like_mojibake
 from app.kag.bridge_generator import call_llm, parse_llm_response
 from app.planner.scheduler import (
+    _complexity_min_semester,
+    _foundation_equivalent_title_key,
     _rebalance_semester_load,
     _repair_semester_appropriateness,
     _select_exact_professional_subset,
     schedule_courses,
 )
-from app.planner.verifier import verify_curriculum_plan
+from app.planner.verifier import _semantic_min_semester, verify_curriculum_plan
 from app.services.content_localization import register_course_translations
 
 
@@ -18,6 +20,27 @@ def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
     assert looks_like_mojibake("ÐÐ»Ð°Ð½ ÑÑÐµÐ±Ð½Ð¾Ð¹ Ð¿ÑÐ¾Ð³ÑÐ°Ð¼Ð¼Ñ")
     assert not looks_like_mojibake("План образовательной программы")
     assert not looks_like_mojibake("Білім беру бағдарламасының жоспары")
+
+
+def test_research_methods_are_early_but_not_locked_to_semester_three_postgraduate():
+    item = {"title": "Методы научных исследований", "type": "elective"}
+    assert _complexity_min_semester(item, 6) == 1
+    assert _semantic_min_semester(item["title"], 6) == 1
+    assert _complexity_min_semester(item, 8) >= 2
+    assert _semantic_min_semester(item["title"], 8) >= 2
+
+
+def test_research_methodology_title_variants_share_semantic_key():
+    variants = {
+        "методология исследования",
+        "методология исследований",
+        "методология научного исследования",
+        "методология научных исследований",
+    }
+    assert {
+        _foundation_equivalent_title_key(title)
+        for title in variants
+    } == {"semantic research methodology"}
 
 
 def test_verified_translations_are_stored_in_database_without_json_write():

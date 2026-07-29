@@ -133,6 +133,7 @@ def main() -> None:
                 "quality_passed": verification.get("quality_passed"),
                 "goso_compliant": (verification.get("goso_compliance") or {}).get("compliant"),
                 "wrong_semester": len(audit.get("semester_misplacements") or []),
+                "semester_misplacements": audit.get("semester_misplacements") or [],
                 "wrong_level": len((metrics.get("course_admission") or {}).get("wrong_level_courses") or []),
                 "bridges": int(metrics.get("num_bridge_modules") or 0),
                 "international_score": (metrics.get("international_quality") or {}).get("score"),
@@ -142,14 +143,42 @@ def main() -> None:
                     for item in items
                     if item.get("course_id") and not item.get("regulatory_required")
                 ],
+                "real_course_semesters": [
+                    {
+                        "semester": int(semester),
+                        "course_id": item.get("course_id"),
+                        "title": item.get("title"),
+                        "credits": int(item.get("credits") or 0),
+                        "recommended_semester": item.get("recommended_semester"),
+                        "variant_preferred_semester": item.get("variant_preferred_semester"),
+                        "latest_semester": item.get("latest_semester"),
+                    }
+                    for semester, items in schedule.items()
+                    for item in items
+                    if item.get("course_id") and not item.get("regulatory_required")
+                ],
                 "bridge_titles": [
                     item.get("title")
                     for items in schedule.values()
                     for item in items
                     if item.get("bridge_module_id")
                 ],
+                "schedule_fingerprint": sorted(
+                    (
+                        int(semester),
+                        str(item.get("title") or ""),
+                        int(item.get("credits") or 0),
+                    )
+                    for semester, items in schedule.items()
+                    for item in items
+                ),
             }
             print(f"variant {code}: {variants[code]}", flush=True)
+        fingerprints = {
+            json.dumps(row["schedule_fingerprint"], ensure_ascii=False)
+            for row in variants.values()
+        }
+        variants_are_distinct = len(fingerprints) == len(variants)
         report.update({
             "status": "complete",
             "elapsed_seconds": round(time.perf_counter() - started, 2),
@@ -160,7 +189,8 @@ def main() -> None:
             "temporary_project_id": project_id if args.keep else None,
             "temporary_version_id": version.id if args.keep else None,
             "variants": variants,
-            "passed": all(
+            "variants_are_distinct": variants_are_distinct,
+            "passed": variants_are_distinct and all(
                 row["credits"] == total_credits
                 and row["hard_violations"] == 0
                 and row["quality_passed"] is True
@@ -188,7 +218,15 @@ def main() -> None:
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps(report, ensure_ascii=False), flush=True)
+        print(json.dumps({
+            "level": report.get("level"),
+            "status": report.get("status"),
+            "passed": report.get("passed", False),
+            "elapsed_seconds": report.get("elapsed_seconds"),
+            "output": str(path),
+        }, ensure_ascii=False), flush=True)
+    if not report.get("passed", False):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

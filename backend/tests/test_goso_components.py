@@ -1,6 +1,10 @@
 from types import SimpleNamespace
 
-from app.planner.goso import _definitions_for_constraints, ensure_goso_items
+from app.planner.goso import (
+    _applicable_goso_prerequisite_pairs,
+    _definitions_for_constraints,
+    ensure_goso_items,
+)
 
 
 def _sum(definitions, component):
@@ -28,3 +32,13 @@ def test_goso_completion_volumes_by_level_and_track():
 def test_international_program_does_not_receive_goso_courses():
     version = SimpleNamespace(project=SimpleNamespace(constraints_json={"jurisdiction": "INTERNATIONAL"}))
     assert ensure_goso_items(version, None) == []
+
+
+def test_final_research_and_defence_in_same_semester_are_not_prerequisites():
+    research = SimpleNamespace(course_id="GOSO-KZ-NIRM_4", recommended_semester=4)
+    defence = SimpleNamespace(course_id="GOSO-KZ-FINAL_ATTESTATION", recommended_semester=4)
+    pairs = _applicable_goso_prerequisite_pairs({
+        research.course_id: research,
+        defence.course_id: defence,
+    })
+    assert pairs == []
