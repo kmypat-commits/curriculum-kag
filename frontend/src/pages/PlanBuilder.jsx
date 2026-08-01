@@ -924,7 +924,6 @@ export default function PlanBuilder() {
 
                         {currentPlan?.metrics?.verification && (
                             <CompactSection title={t('verification')} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{t('verification')}</h3>
                                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                                     <span>{t('feasible')}: <strong>{currentPlan.metrics.verification.feasible ? t('yes') : t('no')}</strong></span>
                                     <span>{t('total_credits')}: <strong>{currentPlan.metrics.total_credits}/{currentPlan.metrics.target_credits}</strong></span>
@@ -1384,7 +1383,6 @@ export default function PlanBuilder() {
                         })()}
                         {currentPlan?.metrics?.optimizer && (
                             <CompactSection title={t('optimizer')} accent={'#3949ab'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{t('optimizer')}</h3>
                                 <strong>{currentPlan.metrics.optimizer.name}</strong>
                                 {currentPlan.metrics.optimizer.selection_method === 'nsga2' && (
                                     <span style={{ marginLeft: '12px', color: '#555' }}>
@@ -1399,7 +1397,6 @@ export default function PlanBuilder() {
                             <CompactSection title={t('international_quality')} subtitle={'OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences'} accent={currentPlan.metrics.international_quality.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '12px' }}>
                                     <div>
-                                        <h3 style={{ margin: 0 }}>{t('international_quality')}</h3>
                                         <p style={{ margin: '6px 0 0', color: '#666', fontSize: '14px' }}>
                                             OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences
                                         </p>
