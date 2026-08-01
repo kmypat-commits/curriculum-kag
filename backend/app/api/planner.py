@@ -1278,6 +1278,7 @@ async def apply_quality_improvements(
 @router.post("/{project_version_id}/build")
 def build_plan(
     project_version_id: int,
+    payload: dict = Body(default={}),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1363,8 +1364,19 @@ def build_plan(
         old_active_plan = next((plan for plan in old_plans if plan.is_active == 1), None)
         old_active_snapshot = _plan_snapshot(old_active_plan, db)
 
+        requested = payload.get("variants") if isinstance(payload, dict) else None
+        if requested in (None, "", "all"):
+            requested_variants = ["A", "B", "C"]
+        elif isinstance(requested, str):
+            requested_variants = [item.strip().upper() for item in requested.split(",")]
+        else:
+            requested_variants = [str(item).strip().upper() for item in requested]
+        requested_variants = [item for item in requested_variants if item in {"A", "B", "C"}]
+        if not requested_variants:
+            raise HTTPException(status_code=422, detail="Выберите хотя бы один вариант плана: A, B или C")
+
         variants = {}
-        for variant_type in ["A", "B", "C"]:
+        for variant_type in requested_variants:
             variant_started = time.perf_counter()
             _plan_build_status[project_version_id].update(
                 stage=f"variant_{variant_type}_start", progress={"A": 25, "B": 50, "C": 75}[variant_type]

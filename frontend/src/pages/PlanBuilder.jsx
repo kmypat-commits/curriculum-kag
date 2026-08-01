@@ -39,6 +39,7 @@ export default function PlanBuilder() {
     const [changeReport, setChangeReport] = useState(null)
     const [variants, setVariants] = useState(null)
     const [activeVariant, setActiveVariant] = useState('A')
+    const [buildVariants, setBuildVariants] = useState('all')
     const [showCourseDescriptions, setShowCourseDescriptions] = useState(false)
     const [matchFeedbackState, setMatchFeedbackState] = useState({})
     const [bridgePreview, setBridgePreview] = useState(null)
@@ -318,7 +319,7 @@ export default function PlanBuilder() {
             setChangeReport(null)
             setBuildProgress(5)
             setBuildStatus({ state: 'running', stage: 'matching', progress: 5 })
-            const buildRequest = axios.post(`/api/planner/${versionId}/build`)
+            const buildRequest = axios.post(`/api/planner/${versionId}/build`, { variants: buildVariants === 'all' ? ['A', 'B', 'C'] : [buildVariants] })
             startBuildStatusPolling(versionId)
             const buildResponse = await buildRequest
             await fetchVariants(versionId)
@@ -727,6 +728,12 @@ export default function PlanBuilder() {
                     </div>
                     <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                         <LanguageSelector />
+                        <label style={{ fontSize: 12, color: '#667085' }}>
+                            {language === 'ru' ? 'Строить' : language === 'kk' ? 'Құру' : 'Build'}
+                            <select value={buildVariants} onChange={event => setBuildVariants(event.target.value)} disabled={building} style={{ marginLeft: 6, padding: '7px 8px', borderRadius: 6 }}>
+                                <option value="all">A/B/C</option><option value="A">A</option><option value="B">B</option><option value="C">C</option>
+                            </select>
+                        </label>
                         <button
                             className="btn btn-primary"
                             onClick={handleBuild}
