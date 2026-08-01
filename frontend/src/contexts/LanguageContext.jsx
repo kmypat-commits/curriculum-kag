@@ -26,9 +26,9 @@ export const LanguageProvider = ({ children }) => {
     const localizeCycle = (value) => {
         const key = String(value || '').trim().toUpperCase();
         const labels = {
-            ru: { БД: 'БД — базовые дисциплины', ПД: 'ПД — профильные дисциплины', ООД: 'ООД — общеобразовательные дисциплины', КВ: 'КВ — компонент по выбору', ВК: 'ВК — вузовский компонент' },
-            kk: { БД: 'БД — базалық пәндер', ПД: 'ПД — бейіндік пәндер', ООД: 'ООД — жалпы білім беретін пәндер', КВ: 'КВ — таңдау компоненті', ВК: 'ВК — жоғары оқу орны компоненті' },
-            en: { БД: 'BD — basic disciplines', BD: 'BD — basic disciplines', ПД: 'PD — profile disciplines', PD: 'PD — profile disciplines', ООД: 'GED — general education disciplines', GED: 'GED — general education disciplines', КВ: 'EC — elective component', EC: 'EC — elective component', ВК: 'UC — university component', UC: 'UC — university component' },
+            ru: { БД: 'БД — базовые дисциплины', BD: 'БД — базовые дисциплины', БАЗОВЫЕ: 'БД — базовые дисциплины', ПД: 'ПД — профильные дисциплины', PD: 'ПД — профильные дисциплины', ООД: 'ООД — общеобразовательные дисциплины', OOD: 'ООД — общеобразовательные дисциплины', КВ: 'КВ — компонент по выбору', 'КОМПОНЕНТ ПО ВЫБОРУ': 'КВ — компонент по выбору', ВК: 'ВК — вузовский компонент', 'ВУЗОВСКИЙ КОМПОНЕНТ': 'ВК — вузовский компонент' },
+            kk: { БД: 'БД — базалық пәндер', BD: 'БД — базалық пәндер', ПД: 'ПД — бейіндік пәндер', PD: 'ПД — бейіндік пәндер', ООД: 'ООД — жалпы білім беретін пәндер', OOD: 'ООД — жалпы білім беретін пәндер', КВ: 'КВ — таңдау компоненті', ВК: 'ВК — жоғары оқу орны компоненті' },
+            en: { БД: 'BD — basic disciplines', BD: 'BD — basic disciplines', ПД: 'PD — profile disciplines', PD: 'PD — profile disciplines', ООД: 'GED — general education disciplines', OOD: 'GED — general education disciplines', КВ: 'EC — elective component', EC: 'EC — elective component', ВК: 'UC — university component', UC: 'UC — university component', 'ELECTIVE COMPONENT': 'EC — elective component', 'UNIVERSITY COMPONENT': 'UC — university component' },
         };
         return labels[normalizedLanguage]?.[key] || localize(value);
     };
