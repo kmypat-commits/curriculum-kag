@@ -51,9 +51,17 @@ def _scope_pairs(version: ProjectVersion) -> list[tuple[str, str]]:
 
 
 def _table_stamp(db: Session, model) -> list[Any]:
-    """O(log n) source revision stamp for append-only/raw repository tables."""
+    """Source stamp that also detects in-place updates and deletes.
+
+    ``max(id)`` alone only detects appended rows.  EPVO normalization and
+    localization repairs can update existing records without changing their
+    ids, so include row count and ``updated_at`` when the table provides it.
+    """
     latest_id = db.query(func.max(model.id)).scalar() or 0
-    return [model.__tablename__, int(latest_id)]
+    row_count = db.query(func.count(model.id)).scalar() or 0
+    updated_column = getattr(model, "updated_at", None)
+    latest_update = db.query(func.max(updated_column)).scalar() if updated_column is not None else None
+    return [model.__tablename__, int(row_count), int(latest_id), str(latest_update or "")]
 
 
 def _approved_scope_stamp(version: ProjectVersion, db: Session) -> list[Any]:
@@ -66,8 +74,8 @@ def _approved_scope_stamp(version: ProjectVersion, db: Session) -> list[Any]:
         if code
     })
     query = db.query(
-        func.count(EpvoDisciplineNormalized.approved_course_id),
-        func.max(EpvoDisciplineNormalized.approved_course_id),
+        func.count(EpvoDisciplineNormalized.id),
+        func.max(EpvoDisciplineNormalized.id),
     ).filter(EpvoDisciplineNormalized.approved_course_id.isnot(None))
     if codes:
         conditions = [
@@ -84,6 +92,7 @@ def _approved_scope_stamp(version: ProjectVersion, db: Session) -> list[Any]:
         codes,
         int(approved[0] or 0),
         int(approved[1] or 0),
+        "",
     ]
 
 

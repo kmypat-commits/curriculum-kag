@@ -9,7 +9,12 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // Check if user is logged in
-        const token = localStorage.getItem('token')
+        // Keep the access token for the current browser session only.  Migrate
+        // an older localStorage token once, then remove the persistent copy.
+        const legacyToken = localStorage.getItem('token')
+        const token = sessionStorage.getItem('token') || legacyToken
+        if (legacyToken && !sessionStorage.getItem('token')) sessionStorage.setItem('token', legacyToken)
+        if (legacyToken) localStorage.removeItem('token')
         if (token) {
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
             fetchCurrentUser()
@@ -25,7 +30,7 @@ export const AuthProvider = ({ children }) => {
                 const status = error.response?.status
                 const url = String(error.config?.url || '')
                 if (status === 401 && !url.includes('/auth/login')) {
-                    localStorage.removeItem('token')
+                    sessionStorage.removeItem('token')
                     delete axios.defaults.headers.common['Authorization']
                     setUser(null)
                     error.authExpired = true
@@ -45,7 +50,7 @@ export const AuthProvider = ({ children }) => {
             const response = await axios.get('/api/auth/me')
             setUser(response.data)
         } catch (error) {
-            localStorage.removeItem('token')
+            sessionStorage.removeItem('token')
             delete axios.defaults.headers.common['Authorization']
         } finally {
             setLoading(false)
@@ -60,14 +65,14 @@ export const AuthProvider = ({ children }) => {
         const response = await axios.post('/api/auth/login', params)
         const { access_token } = response.data
 
-        localStorage.setItem('token', access_token)
+        sessionStorage.setItem('token', access_token)
         axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
 
         await fetchCurrentUser()
     }
 
     const logout = () => {
-        localStorage.removeItem('token')
+        sessionStorage.removeItem('token')
         delete axios.defaults.headers.common['Authorization']
         setUser(null)
     }

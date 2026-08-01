@@ -102,12 +102,12 @@ export default function Repository() {
             await axios.post('/api/repository/courses/import', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             })
-            alert('Import successful!')
+            alert(t('Import successful!'))
             setShowImport(false)
             setImportFile(null)
             fetchCourses()
         } catch (error) {
-            alert('Import error: ' + (error.response?.data?.detail || error.message))
+            alert(t('Import error') + ': ' + (error.response?.data?.detail || error.message))
         }
     }
 
@@ -143,7 +143,7 @@ export default function Repository() {
             setAddForm({ course_id: '', title: '', domain: '', credits: 4, cycle_component: 'elective', recommended_semester: 1, description: '' })
             fetchCourses()
         } catch (err) {
-            alert('Error: ' + (err.response?.data?.detail || err.message))
+            alert(t('Error') + ': ' + (err.response?.data?.detail || err.message))
         } finally {
             setAddSaving(false)
         }
@@ -211,9 +211,9 @@ export default function Repository() {
         try {
             await axios.delete(`/api/repository/courses/${courseId}`)
             setCourses(courses.filter(c => c.id !== courseId))
-            alert('Course deleted')
+            alert(t('Course deleted'))
         } catch (error) {
-            alert('Error deleting')
+            alert(t('Error deleting'))
         }
     }
 
@@ -230,11 +230,11 @@ export default function Repository() {
                 prerequisites: editingCourse.prerequisites?.map(p => p.id) || []
             }
             await axios.put(`/api/repository/courses/${editingCourse.id}`, data)
-            alert('Changes saved')
+            alert(t('Changes saved'))
             setEditingCourse(null)
             fetchCourses()
         } catch (error) {
-            alert('Error saving')
+            alert(t('Error saving'))
         }
     }
 

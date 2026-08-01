@@ -106,7 +106,7 @@ export default function LOCoverageDashboard() {
             setSaveSuccess(true)
             setTimeout(() => setSaveSuccess(false), 5000)
         } catch (err) {
-            alert('Error saving weights')
+            alert(t('Error saving weights'))
         } finally {
             setSaving(false)
         }
