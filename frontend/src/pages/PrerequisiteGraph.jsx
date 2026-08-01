@@ -216,7 +216,12 @@ export default function PrerequisiteGraph() {
             </div>
         </header>
         <main className="container" style={{ paddingTop: 18, paddingBottom: 80 }}>
-            {error && <div className="stage-card" style={{ padding: 16, color: '#ff8a9a' }}>{error}</div>}
+            {error && <div className="stage-card" style={{ padding: 16, color: '#ff8a9a', marginBottom: 16 }}>
+                <div>{error}</div>
+                <button type="button" onClick={() => window.location.reload()} style={{ ...futureButton, marginTop: 10 }}>
+                    {language === 'ru' ? 'Повторить загрузку графа' : language === 'kk' ? 'Графты қайта жүктеу' : 'Retry graph loading'}
+                </button>
+            </div>}
             {graph && competencies && <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', marginBottom: 18 }}>
                     <div><div style={{ color: '#64d8ff', fontSize: 11, letterSpacing: '.14em' }}>{project?.title}</div><h2 style={{ margin: '6px 0', fontSize: 28 }}>{t('scroll_through_program')}</h2><p style={{ margin: 0, color: '#89a4b9' }}>{t('scroll_graph_hint')}</p></div>
