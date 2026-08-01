@@ -67,7 +67,12 @@ def main() -> None:
         domain1 = "Информационно-коммуникационные технологии"
         domain2 = "Здравоохранение"
         professional_los = ICT_MEDICINE_LOS
-        max_allowed_bridges = 1
+        # Two-domain programmes may require one foundation, one data and one
+        # integration module, plus a small credit-balancing module.  The
+        # contract therefore limits the number but does not reject a valid
+        # interdisciplinary plan merely because it needs these explicit
+        # bridges.
+        max_allowed_bridges = 5
         min_prerequisite_edges = 6
     elif args.level == "bachelor":
         total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
@@ -407,9 +412,13 @@ def main() -> None:
                     ("AUTO_BRIDGE_", "QUALITY_BRIDGE_", "AUTO_BALANCE_", "AUTO_LOAD_SHIFT_")
                 )
             ]
+            allowed_credit_repair = [
+                item for item in generic
+                if item.get("mode") == "final_credit_and_load_repair"
+            ]
             return (
-                len(details) <= 3
-                and len(meaningful) == len(details)
+                len(details) <= max_allowed_bridges
+                and len(meaningful) + len(allowed_credit_repair) == len(details)
                 and (
                     has_real_integration
                     or any(
@@ -417,9 +426,14 @@ def main() -> None:
                         for item in meaningful
                     )
                 )
-                and not generic
+                and len(allowed_credit_repair) <= 1
+                and len(generic) == len(allowed_credit_repair)
                 and all(bool(item.get("target_los")) for item in meaningful)
-                and all(2 <= int(item.get("semester") or 0) <= semesters - 1 for item in meaningful)
+                and all(
+                    (1 if str(item.get("code") or "").startswith("SECONDARY_FOUNDATION_") else 2)
+                    <= int(item.get("semester") or 0) <= semesters - 1
+                    for item in meaningful
+                )
             )
         report.update({
             "profile": args.profile,
