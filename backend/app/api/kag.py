@@ -402,17 +402,35 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
             if settings.LLM_BASE_URL:
                 client_kwargs["base_url"] = settings.LLM_BASE_URL
             client = OpenAI(**client_kwargs)
-            response = client.chat.completions.create(
-                model=settings.LLM_MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": "You are an expert curriculum quality assessor. Always respond with valid JSON only, no markdown."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.4,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
-            )
-            raw = response.choices[0].message.content
+            try:
+                response = client.chat.completions.create(
+                    model=settings.LLM_MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": "You are an expert curriculum quality assessor. Always respond with valid JSON only, no markdown."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=2000,
+                    response_format={"type": "json_object"}
+                )
+                raw = response.choices[0].message.content
+            except Exception:
+                # The UI must remain usable when the external provider is unavailable,
+                # rate-limited, or has an expired key. Use the same deterministic
+                # evidence-based fallback as offline mode instead of returning HTTP 500.
+                gap_count = len(gap_los)
+                total = len(los) or 1
+                score = max(0, 100 - int(gap_count / total * 100))
+                verdict = "Ready" if gap_count == 0 else ("Needs Improvement" if gap_count <= total // 2 else "Critical Gaps")
+                raw = json.dumps({
+                    "verdict": verdict,
+                    "score": score,
+                    "summary": ("Все результаты обучения имеют достаточное покрытие." if language == "ru" else "Барлық оқу нәтижелері жеткілікті қамтылған." if language == "kk" else "All learning outcomes are adequately covered.") if gap_count == 0 else (f"Обнаружены пробелы покрытия: {gap_count} из {total} результатов обучения." if language == "ru" else f"Қамтуда олқылықтар бар: {total} нәтижеден {gap_count}." if language == "kk" else f"Coverage gaps found: {gap_count} of {total} learning outcomes."),
+                    "recommendations": [
+                        {"lo_code": code, "status": "needs_courses", "issue": f"Coverage is only {round(float(item.get('max_coverage', item.get('coverage', 0))) * 100)}%.", "suggestion": "Add or generate courses that directly address this learning outcome."}
+                        for code, item in gap_los.items()
+                    ]
+                })
         else:
             # Mock response when no real API key is configured
             gap_count = gaps_result.get("gap_count", 0)
