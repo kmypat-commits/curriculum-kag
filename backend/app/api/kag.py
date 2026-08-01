@@ -311,20 +311,35 @@ async def analyze_lo_achievability(
 ):
     """Analyze LO achievability using LLM — returns a verdict, score, and per-LO recommendations."""
     try:
-        # Gather coverage data
-        matches_result = compute_all_matches(project_version_id, db)
-        gaps_result = detect_gaps(project_version_id, db)
-
         project_version = db.query(ProjectVersion).filter(
             ProjectVersion.id == project_version_id
         ).first()
         if not project_version:
             raise HTTPException(status_code=404, detail="Версия проекта не найдена")
 
+        # A generated plan already contains the authoritative verifier coverage.
+        # Do not rescore the entire EPVO repository on every button click: after
+        # the repository grew, compute_all_matches could take several minutes
+        # and the UI reported a misleading 500/timeout.  Recompute only for a
+        # version that has no stored plan evidence yet.
+        plan_coverage = _plan_coverage_for_version(project_version_id, db)
+        if plan_coverage:
+            matches_result = {"lo_coverage": {}}
+            gaps_result = {
+                "gap_count": sum(
+                    1 for item in plan_coverage["coverage_by_lo"].values()
+                    if item["coverage"] < plan_coverage["coverage_threshold"]
+                ),
+                "total_los": plan_coverage["total_los"],
+                "gaps": [],
+            }
+        else:
+            matches_result = compute_all_matches(project_version_id, db)
+            gaps_result = detect_gaps(project_version_id, db)
+
         lo_coverage = matches_result.get("lo_coverage", {})
         los = project_version.learning_outcomes
         gap_los = {g["lo_code"]: g for g in gaps_result.get("gaps", [])}
-        plan_coverage = _plan_coverage_for_version(project_version_id, db)
         if plan_coverage:
             threshold = plan_coverage["coverage_threshold"]
             lo_coverage = {
@@ -398,7 +413,11 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
 
         if has_real_key and settings.LLM_PROVIDER == "openai":
             from openai import OpenAI
-            client_kwargs = {"api_key": api_key}
+            # Bound the external call: a stale/invalid key or unavailable
+            # provider must fall back to the deterministic evidence analysis,
+            # never leave the button hanging until the reverse proxy returns
+            # a misleading HTTP 500/timeout.
+            client_kwargs = {"api_key": api_key, "timeout": 15.0, "max_retries": 0}
             if settings.LLM_BASE_URL:
                 client_kwargs["base_url"] = settings.LLM_BASE_URL
             client = OpenAI(**client_kwargs)
