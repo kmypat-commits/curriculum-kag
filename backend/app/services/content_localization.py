@@ -90,6 +90,27 @@ def course_translations(course_id, field="title"):
     return value if isinstance(value, dict) else {}
 
 
+@lru_cache(maxsize=1)
+def _title_translation_index():
+    """Index legacy EPVO translations by normalized Russian title.
+
+    New normalized EPVO rows use an ``EPVO-*`` identifier, while the older
+    export is keyed by numeric course id.  Matching by the canonical Russian
+    title lets us recover an existing expert-sourced KK/EN title without
+    inventing a translation or modifying the raw dataset.
+    """
+    index = {}
+    for record in _course_translations().values():
+        title = record.get("title", {}) if isinstance(record, dict) else {}
+        if not isinstance(title, dict):
+            continue
+        ru = _repair_mojibake(title.get("ru") or "")
+        key = " ".join(str(ru).casefold().split())
+        if key and title.get("kk") and title.get("en"):
+            index.setdefault(key, {lang: _repair_mojibake(title.get(lang)) for lang in ("ru", "kk", "en")})
+    return index
+
+
 def course_translation_status(course_id):
     return _course_translations().get(str(course_id), {}).get("review_status")
 
@@ -205,6 +226,11 @@ def course_localization_map(db, course_ids, include_descriptions=True):
                 payload["title_translations"]["ru"] = course.title
             if include_descriptions and not payload["description_translations"] and course.description:
                 payload["description_translations"]["ru"] = course.description
+            if len(payload["title_translations"]) < 3:
+                legacy = _title_translation_index().get(" ".join(str(course.title or "").casefold().split()))
+                if legacy:
+                    for language, title in legacy.items():
+                        payload["title_translations"].setdefault(language, title)
     except Exception:
         # Localization must never make the plan endpoint unavailable. The
         # database/local JSON values collected above remain valid fallbacks.
