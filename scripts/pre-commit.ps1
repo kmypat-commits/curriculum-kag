@@ -10,7 +10,9 @@ foreach ($path in $staged) {
     $full = Join-Path $root $path
     if (Test-Path -LiteralPath $full -PathType Leaf) {
         $size = (Get-Item -LiteralPath $full).Length
-        if ($size -gt 50MB) {
+        $filter = (git check-attr filter -- $path 2>$null)
+        $isLfs = $filter -match ': filter: lfs$'
+        if ($size -gt 50MB -and -not $isLfs) {
             throw "Refusing to commit file larger than 50 MB: $path"
         }
     }
