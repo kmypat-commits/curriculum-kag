@@ -259,7 +259,11 @@ async def list_courses(
         courses = query.order_by(Course.id.desc()).offset(skip).limit(limit).all()
     # Format for response
     results = []
-    localization_by_course = course_localization_map(db, [c.id for c in courses], include_descriptions=include_descriptions)
+    relation_ids = [relation.id for c in courses for relation in (list(c.prerequisites or []) + list(c.postrequisites or []))]
+    localization_by_course = course_localization_map(
+        db, [c.id for c in courses] + relation_ids,
+        include_descriptions=include_descriptions,
+    )
     for c in courses:
         localization = localization_by_course.get(c.id, {})
         results.append({
@@ -275,8 +279,8 @@ async def list_courses(
             "recommended_semester": c.recommended_semester,
             "prerequisite_exempt": prerequisite_exempt(c),
             "cycle_component": c.cycle_component,
-            "prerequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title} for p in c.prerequisites] if include_relations else [],
-            "postrequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title} for p in c.postrequisites] if include_relations else []
+            "prerequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title, "title_translations": localization_by_course.get(p.id, {}).get("title_translations", {})} for p in c.prerequisites] if include_relations else [],
+            "postrequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title, "title_translations": localization_by_course.get(p.id, {}).get("title_translations", {})} for p in c.postrequisites] if include_relations else []
         })
     return results
 
@@ -311,6 +315,8 @@ async def create_course(
     except Exception:
         pass
     db.commit()
+    relation_ids = [relation.id for relation in (list(course.prerequisites or []) + list(course.postrequisites or []))]
+    relation_localizations = course_localization_map(db, relation_ids, include_descriptions=False)
     localization = course_localization_payload(db, course.id)
     return {
         "id": course.id,
@@ -428,8 +434,8 @@ async def get_course(
         "translation_status": localization.get("translation_status"),
         "prerequisite_exempt": prerequisite_exempt(course),
         "cycle_component": course.cycle_component,
-        "prerequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title} for p in course.prerequisites],
-        "postrequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title} for p in course.postrequisites]
+        "prerequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title, "title_translations": relation_localizations.get(p.id, {}).get("title_translations", {})} for p in course.prerequisites],
+        "postrequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title, "title_translations": relation_localizations.get(p.id, {}).get("title_translations", {})} for p in course.postrequisites]
     }
 @router.put("/courses/{course_id}")
 async def update_course(
