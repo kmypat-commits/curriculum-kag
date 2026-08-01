@@ -3872,6 +3872,12 @@ def build_curriculum_plan(
     )
     schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
     schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    # Rebalancing can expose a residual gap after the first bridge repair.
+    # Run the bounded repair once more at the final envelope; no later step
+    # removes these explicit bridge credits.
+    schedule = _fill_schedule_credit_gap(
+        schedule, project_version, target_credits, maximum_credits, db
+    )
     prerequisite_graph = _infer_schedule_prerequisites(schedule)
 
     invalid_domain_courses = []
@@ -6204,15 +6210,45 @@ def _fill_schedule_credit_gap(
         return schedule
     if total + gap > int(maximum_credits):
         return schedule
-    modules = ensure_credit_bridge_modules(project_version, db, gap, 1, desired_count=1)
+    # Late prerequisite/domain repairs can remove several real courses after
+    # the earlier bridge-slot pass.  Creating only one module here left new
+    # programmes at 120--151/240 credits even though the planner was allowed
+    # to use explicit bridge modules.  Close the residual gap atomically with
+    # the minimum number of 3--7 credit modules instead of silently returning
+    # an incomplete plan.  The verifier still marks bridge-heavy plans for
+    # expert review; this change only makes the credit envelope deterministic.
+    slots_needed = max(1, math.ceil(gap / 7))
+    modules = ensure_credit_bridge_modules(
+        project_version,
+        db,
+        gap,
+        slots_needed,
+        desired_count=slots_needed,
+    )
     if not modules:
         return schedule
-    module = modules[0]
-    module.credits = max(3, min(7, gap))
-    item = _bridge_item(module)
-    item["credits"] = module.credits
-    semester = min(schedule, key=lambda value: sum(int(row.get("credits") or 0) for row in schedule[value]))
-    schedule[semester].append(item)
+    remaining = gap
+    for module in modules:
+        if remaining <= 0:
+            break
+        module.credits = max(3, min(7, math.ceil(remaining / max(1, len(modules)))) )
+        item = _bridge_item(module)
+        item["credits"] = module.credits
+        upper = int((project_version.project.constraints_json or {}).get(
+            "max_credits_per_semester", 30
+        )) + 3
+        eligible = [
+            value for value in schedule
+            if sum(int(row.get("credits") or 0) for row in schedule[value]) + int(item["credits"]) <= upper
+        ]
+        if not eligible:
+            break
+        semester = min(
+            eligible,
+            key=lambda value: sum(int(row.get("credits") or 0) for row in schedule[value]),
+        )
+        schedule[semester].append(item)
+        remaining -= module.credits
     return schedule
 
 
