@@ -8,18 +8,25 @@ import LoadingSpinner from '../components/LoadingSpinner'
 const neon = ['#64a8ff', '#9b8cff', '#5ac8a8', '#e4ae57', '#dc78a5', '#6fb7c9', '#8fbd63', '#b68ac9']
 const stageHeight = 520
 let cytoscapeLoader = null
+let dagreAvailable = false
 
 function loadCytoscape() {
     if (!cytoscapeLoader) {
-        cytoscapeLoader = Promise.all([
-            import('cytoscape'),
-            import('cytoscape-dagre'),
-        ]).then(([cytoscapeModule, dagreModule]) => {
+        cytoscapeLoader = import('cytoscape').then(async cytoscapeModule => {
             const cytoscape = cytoscapeModule.default || cytoscapeModule
-            const dagre = dagreModule.default || dagreModule
-            if (!cytoscape.__curriculumDagreRegistered) {
-                cytoscape.use(dagre)
-                cytoscape.__curriculumDagreRegistered = true
+            // The optional dagre chunk can fail to load in a stale/partially
+            // rebuilt frontend. Keep the graph usable with Cytoscape's
+            // built-in layout instead of blanking the whole page.
+            try {
+                const dagreModule = await import('cytoscape-dagre')
+                const dagre = dagreModule.default || dagreModule
+                if (!cytoscape.__curriculumDagreRegistered) {
+                    cytoscape.use(dagre)
+                    cytoscape.__curriculumDagreRegistered = true
+                }
+                dagreAvailable = true
+            } catch (_) {
+                dagreAvailable = false
             }
             return cytoscape
         })
@@ -133,7 +140,9 @@ export default function PrerequisiteGraph() {
                     { selector: '.flowPath', style: { 'opacity': 1, 'line-color': '#64a8ff', 'target-arrow-color': '#64a8ff', 'width': 3, 'z-index': 30 }},
                     { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 4, 'shadow-color': '#64a8ff', 'shadow-opacity': .65 }}
                 ],
-                layout: { name: 'dagre', rankDir: 'LR', rankSep: 86, nodeSep: 20, edgeSep: 10, padding: 35 }
+                layout: dagreAvailable
+                    ? { name: 'dagre', rankDir: 'LR', rankSep: 86, nodeSep: 20, edgeSep: 10, padding: 35 }
+                    : { name: 'breadthfirst', directed: true, spacingFactor: 1.25, padding: 35, animate: false }
             })
             cy.on('tap', 'node', event => {
                 const node = event.target
