@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # The UI uses the ISO 639-1 code `kk`; `kz` remains accepted as a
     # backwards-compatible request alias in EPVO endpoints.
     SUPPORTED_LANGUAGES: List[str] = ["ru", "kk", "en"]
+    # PostgreSQL CourseLocalization/EPVO rows are authoritative. Enable the
+    # JSON fallback only for a deliberate legacy-data recovery run.
+    LEGACY_TRANSLATIONS_FALLBACK: bool = False
     
     # Application
     APP_NAME: str = "Curriculum-KAG Generator"

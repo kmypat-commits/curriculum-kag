@@ -6,6 +6,7 @@
 - Основной список зависимостей: `backend/requirements.txt`.
 - Локальный облегчённый список: `backend/requirements-local.txt`; его версии синхронизированы с production baseline, но ML-пакеты остаются опциональными по конфигурации.
 - Версия Python закреплена в `.python-version`.
+- Локализации читаются из PostgreSQL (`CourseLocalization` и EPVO normalized rows); legacy JSON fallback отключён (`LEGACY_TRANSLATIONS_FALLBACK=false`) и включается только для отдельного восстановления старых данных.
 
 После изменения зависимостей необходимо выполнить `test.ps1`, production-сборку frontend и smoke-проверку PostgreSQL.
 

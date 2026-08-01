@@ -135,7 +135,7 @@ def course_localization_payload(db, course_id):
                 status = row.status
     except Exception:
         pass
-    if len(titles) < 3:
+    if len(titles) < 3 and _legacy_fallback_enabled():
         legacy_titles = course_translations(course_id, "title")
         legacy_descriptions = course_translations(course_id, "description")
         for language, value in legacy_titles.items():
@@ -183,7 +183,7 @@ def course_localization_map(db, course_ids, include_descriptions=True):
         course_id for course_id, payload in result.items()
         if len(payload["title_translations"]) < 3
     ]
-    for course_id in missing_ids:
+    for course_id in missing_ids if _legacy_fallback_enabled() else []:
         payload = result[course_id]
         for language, value in course_translations(course_id, "title").items():
             payload["title_translations"].setdefault(language, value)
@@ -228,7 +228,7 @@ def course_localization_map(db, course_ids, include_descriptions=True):
                 payload["description_translations"]["ru"] = course.description
             if len(payload["title_translations"]) < 3:
                 legacy = _title_translation_index().get(" ".join(str(course.title or "").casefold().split()))
-                if legacy:
+                if legacy and _legacy_fallback_enabled():
                     for language, title in legacy.items():
                         payload["title_translations"].setdefault(language, title)
     except Exception:
@@ -252,6 +252,15 @@ def course_localization_map(db, course_ids, include_descriptions=True):
             if payload.get("translation_status") not in {"verified", "verified_epvo", "machine_reviewed"}:
                 payload["translation_status"] = "needs_translation"
     return result
+
+
+def _legacy_fallback_enabled():
+    """Return whether the legacy JSON catalogue may be used as a fallback."""
+    try:
+        from app.config import settings
+        return bool(settings.LEGACY_TRANSLATIONS_FALLBACK)
+    except Exception:
+        return False
 
 
 def register_course_translations(records, db=None):
