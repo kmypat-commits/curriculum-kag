@@ -128,6 +128,9 @@ export default function PlanBuilder() {
         const cycle = localizeCycle(value)
         if (cycle !== String(value || '').trim()) return cycle
         const normalized = String(value).trim().toLowerCase()
+        if (['bd', 'бд', 'basic', 'basic disciplines', 'базовые дисциплины'].includes(normalized)) return localizeCycle('БД')
+        if (['pd', 'пд', 'profile', 'profile disciplines', 'профильные дисциплины'].includes(normalized)) return localizeCycle('ПД')
+        if (['ged', 'ood', 'оод', 'general', 'general education'].includes(normalized)) return localizeCycle('ООД')
         if (['elective', 'elective component', 'компонент по выбору'].includes(normalized)) return t('elective')
         if (['university', 'university component', 'вузовский компонент'].includes(normalized)) return t('university')
         return t('mandatory')
@@ -1562,7 +1565,7 @@ export default function PlanBuilder() {
                                                             )}
                                                             <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
                                                                 {c.academic_cycle && <>{localText('Цикл', 'Цикл', 'Cycle')}: <b>{c.academic_cycle}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('расчёт системы', 'жүйе есебі', 'system estimate')})` : ''}{' · '}</>}
-                                                                {localText('Компонент', 'Компонент', 'Component')}: {c.academic_component || componentLabel(c.cycle_component || c.type)}
+                                                                {localText('Компонент', 'Компонент', 'Component')}: {componentLabel(c.academic_component || c.cycle_component || c.type)}
                                                                 {' · '}{localText('Источник', 'Дереккөз', 'Source')}: {
                                                                     c.course_source === 'rk_mandatory' ? localText('обязательная дисциплина РК', 'ҚР міндетті пәні', 'RK mandatory course')
                                                                     : c.course_source === 'ai_confirmed' ? localText('подтверждённая замена ИИ', 'ЖИ расталған ауыстыру', 'AI-confirmed replacement')

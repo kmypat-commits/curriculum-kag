@@ -8,7 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function Repository() {
     const { user, logout } = useAuth()
-    const { t, localize, language } = useLanguage()
+    const { t, localize, localizeCycle, language } = useLanguage()
     const localizedCourse = (course = {}) => {
         const translations = course.title_translations || (course.title_ru || course.title_kk || course.title_en ? { ru: course.title_ru, kk: course.title_kk || course.title_kz, en: course.title_en } : null)
         return localize(translations || course.title)
@@ -415,7 +415,7 @@ export default function Repository() {
                                     <td><strong>{localizedCourse(course)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}</td>
                                     <td>{course.domain}</td>
                                     <td>{course.credits}</td>
-                                    <td>{t(course.cycle_component) || course.cycle_component}</td>
+                                    <td>{localizeCycle(course.cycle_component || course.academic_component || course.type)}</td>
                                     <td style={{ fontSize: '11px', color: '#666', maxWidth: '120px' }}>
                                         {course.prerequisites?.map(p => p.course_id).join(', ') || '-'}
                                     </td>
