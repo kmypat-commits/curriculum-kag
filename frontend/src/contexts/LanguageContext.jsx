@@ -23,6 +23,23 @@ export const LanguageProvider = ({ children }) => {
         const text = String(value);
         return translations[normalizedLanguage]?.[text] || translations.ru?.[text] || text;
     };
+    const localizeDomain = (value) => {
+        const text = String(value || '').trim();
+        const key = text.toLowerCase();
+        const labels = {
+            'информационно-коммуникационные технологии': { ru: 'Информационно-коммуникационные технологии', kk: 'Ақпараттық-коммуникациялық технологиялар', en: 'Information and Communication Technologies' },
+            'information and communication technologies': { ru: 'Информационно-коммуникационные технологии', kk: 'Ақпараттық-коммуникациялық технологиялар', en: 'Information and Communication Technologies' },
+            'информационная безопасность': { ru: 'Информационная безопасность', kk: 'Ақпараттық қауіпсіздік', en: 'Information Security' },
+            'information security': { ru: 'Информационная безопасность', kk: 'Ақпараттық қауіпсіздік', en: 'Information Security' },
+            'сельское хозяйство и биоресурсы': { ru: 'Сельское хозяйство и биоресурсы', kk: 'Ауыл шаруашылығы және биоресурстар', en: 'Agriculture and Bioresources' },
+            'agriculture and bioresources': { ru: 'Сельское хозяйство и биоресурсы', kk: 'Ауыл шаруашылығы және биоресурстар', en: 'Agriculture and Bioresources' },
+            'инженерные, обрабатывающие и строительные отрасли': { ru: 'Инженерные, обрабатывающие и строительные отрасли', kk: 'Инженерлік, өңдеу және құрылыс салалары', en: 'Engineering and Manufacturing' },
+            'engineering and manufacturing': { ru: 'Инженерные, обрабатывающие и строительные отрасли', kk: 'Инженерлік, өңдеу және құрылыс салалары', en: 'Engineering and Manufacturing' },
+            'здравоохранение': { ru: 'Здравоохранение', kk: 'Денсаулық сақтау', en: 'Healthcare' },
+            'healthcare': { ru: 'Здравоохранение', kk: 'Денсаулық сақтау', en: 'Healthcare' },
+        };
+        return labels[key]?.[normalizedLanguage] || text;
+    };
     const localizeCycle = (value) => {
         const key = String(value || '').trim().toUpperCase();
         const labels = {
@@ -33,7 +50,7 @@ export const LanguageProvider = ({ children }) => {
         return labels[normalizedLanguage]?.[key] || localize(value);
     };
     const changeLanguage = (lang) => { setLanguage(lang); localStorage.setItem('language', lang); };
-    return <LanguageContext.Provider value={{ language, t, localize, localizeCycle, changeLanguage }}>{children}</LanguageContext.Provider>;
+    return <LanguageContext.Provider value={{ language, t, localize, localizeDomain, localizeCycle, changeLanguage }}>{children}</LanguageContext.Provider>;
 };
 
 export const useLanguage = () => {

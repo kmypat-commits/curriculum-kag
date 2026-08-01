@@ -9,7 +9,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 export default function ProjectDetails() {
     const { id } = useParams()
     const { user } = useAuth()
-    const { t, language } = useLanguage()
+    const { t, language, localizeDomain } = useLanguage()
     const navigate = useNavigate()
     const [project, setProject] = useState(null)
     const [loading, setLoading] = useState(true)
@@ -239,10 +239,10 @@ export default function ProjectDetails() {
                                     <label style={{ fontSize: '12px', color: '#666', display: 'block' }}>{t('domains')}</label>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                                         <span className="badge" style={{ background: '#366092', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '12px' }}>
-                                            {project.domain1}
+                                            {localizeDomain(project.domain1)}
                                         </span>
                                         <span className="badge" style={{ background: '#764ba2', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '12px' }}>
-                                            {project.domain2}
+                                            {localizeDomain(project.domain2)}
                                         </span>
                                     </div>
                                 </div>
