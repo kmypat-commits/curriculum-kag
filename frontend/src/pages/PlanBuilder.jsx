@@ -92,6 +92,7 @@ export default function PlanBuilder() {
         if (language === 'en') return text
         const patterns = language === 'kk'
             ? [
+                [/^Project feedback: (\d+); EPVO expert-supported links: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Кері байланыс: $1; ЕПВО сарапшылары растаған байланыстар: $2; расталған bridge оқиғалары: $3; жоспардағы bridge модульдері: $4.'],
                 [/^(\d+)\/(\d+) courses have direct EPVO scope, programme-LO evidence, domain evidence, or RK mandatory status; domain quota violations: (\d+)\.$/, '$1/$2 пәннің тікелей ЕПВО бағыты, бағдарлама LO дәлелі, пәндік сала дәлелі немесе ҚР міндетті мәртебесі бар; пәндік квота бұзушылықтары: $3.'],
                 [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 оқу нәтижесі қамту шегіне жетті.'],
                 [/^Hard violations: (\d+)\.$/, 'Қатаң бұзушылықтар: $1.'],
@@ -104,6 +105,7 @@ export default function PlanBuilder() {
                 [/^Expert feedback: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Сарапшылық кері байланыс: $1; жаңартылған bridge оқиғалары: $2; жоспардағы bridge модульдер: $3.'],
             ]
             : [
+                [/^Project feedback: (\d+); EPVO expert-supported links: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Обратная связь по проекту: $1; связей, подтверждённых экспертами ЕПВО: $2; подтверждённых bridge-событий: $3; bridge-модулей в плане: $4.'],
                 [/^(\d+)\/(\d+) courses have direct EPVO scope, programme-LO evidence, domain evidence, or RK mandatory status; domain quota violations: (\d+)\.$/, '$1/$2 дисциплин имеют прямое направление ЕПВО, подтверждение связью с РО программы, подтверждение предметной областью или статус обязательной дисциплины РК; нарушений квот областей: $3.'],
                 [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 результатов обучения достигли порога покрытия.'],
                 [/^Hard violations: (\d+)\.$/, 'Жёстких нарушений: $1.'],
