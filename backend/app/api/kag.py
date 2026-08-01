@@ -421,10 +421,12 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
             verdict = "Ready" if gap_count == 0 else ("Needs Improvement" if gap_count <= total // 2 else "Critical Gaps")
             recs = []
             for g in gap_los.values():
+                coverage = float(g.get("max_coverage", g.get("coverage", g.get("max_score", 0))) or 0)
                 recs.append({
                     "lo_code": g["lo_code"],
                     "status": "needs_courses",
-                    "issue": f"Coverage is only {round(g['max_coverage']*100)}% — below the 65% threshold.",
+                    "issue": f"Coverage is only {round(coverage * 100)}% — below the 65% threshold.",
+                    "coverage": round(coverage, 4),
                     "suggestion": "Add or generate courses that specifically address this learning outcome."
                 })
             if language == "ru":
@@ -440,7 +442,8 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
                 issue_template = "Coverage is only {value}% against the required 60% threshold."
                 suggestion = "Add or generate courses that directly address this learning outcome."
             for rec, gap in zip(recs, gap_los.values()):
-                rec["issue"] = issue_template.format(value=round(gap["max_coverage"] * 100))
+                coverage = float(gap.get("max_coverage", gap.get("coverage", gap.get("max_score", 0))) or 0)
+                rec["issue"] = issue_template.format(value=round(coverage * 100))
                 rec["suggestion"] = suggestion
 
             raw = json.dumps({
