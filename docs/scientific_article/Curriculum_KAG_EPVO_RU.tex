@@ -137,7 +137,7 @@ Retrieval-Augmented Generation (RAG) связывает параметричес
   \item собран воспроизводимый корпус из 935\,151 пар с программно-уровневым разбиением и контрольными суммами;
   \item дообучена SBERT-модель, улучшившая ROC-AUC на 0,0635 и PR-AUC на 0,0735 относительно исходной модели;
   \item экспериментально показано, что ranking-loss улучшает порядок кандидатов, хотя не становится лучшим классификатором;
-  \item реализован NSGA-II-подобный многокритериальный планировщик с жёсткой верификацией;
+  \item реализован детерминированный constrained-планировщик A/B/C с repair-эвристиками, точным кредитным балансированием и независимой жёсткой верификацией; NSGA-II сохранён как экспериментальная ветка для программ без явного EPVO-скоупа и не заявляется как основной производственный оптимизатор;
   \item реализованы объяснения, bridge-модули, замена bridge реальными дисциплинами ЕПВО и экспертная обратная связь;
   \item создан научный контур Dataset Passport и Model Benchmark, фиксирующий данные, split, seed, checksum и метрики.
 \end{enumerate}
@@ -169,7 +169,7 @@ SBERT здесь похож на помощника библиотекаря: о
 
 \begin{figure}[H]
 \centering
-\placeholderfigure{fig01\_curriculum\_kag\_architecture.pdf}{Концептуальная архитектура: мастер ОП $\rightarrow$ scoped EPVO repository $\rightarrow$ hybrid retrieval $\rightarrow$ course--LO scoring $\rightarrow$ knowledge graph $\rightarrow$ NSGA-II planner $\rightarrow$ verifier $\rightarrow$ explainability and expert feedback.}
+\placeholderfigure{fig01\_curriculum\_kag\_architecture.pdf}{Концептуальная архитектура: мастер ОП $\rightarrow$ scoped EPVO repository $\rightarrow$ hybrid retrieval $\rightarrow$ course--LO scoring $\rightarrow$ knowledge graph $\rightarrow$ deterministic constrained planner $\rightarrow$ verifier $\rightarrow$ explainability and expert feedback. NSGA-II показан отдельной экспериментальной веткой.}
 \caption{Общая архитектура \systemname{}. Это должна быть научная схема, а не скриншот интерфейса. Промпт для её генерации приведён в приложении~\ref{app:prompts}.}
 \label{fig:architecture}
 \end{figure}
@@ -655,7 +655,7 @@ Domain/content guard дополнительно проверяет содерж�
   \item мастер создания программы;
   \item репозиторий дисциплин с фильтрами направления и группы;
   \item генератор связей course--LO;
-  \item NSGA-II-планировщик A/B/C;
+  \item детерминированный constrained-планировщик A/B/C; NSGA-II — отдельная экспериментальная ветка;
   \item граф пре- и постреквизитов;
   \item анализ покрытия и достижимости LO;
   \item bridge generator и preview замены;
@@ -1586,5 +1586,10 @@ Kozhanov M., V\'arkonyi-K\'oczy A.R.
 Eurasian Journal of Mathematical and Computer Applications, 13(4) (2025), 159--167.
 
 \end{thebibliography}
+
+\section*{Уточнение производственного контура и воспроизводимости}
+В итоговой реализации следует различать алгоритм, используемый для реальных программ, и экспериментальные оптимизаторы. Для программ с явным направлением или группой ЕПВО рабочим является детерминированный constrained-планировщик с repair-эвристиками, точным кредитным балансированием и независимым admission-верификатором. NSGA-II реализован как воспроизводимая экспериментальная ветка для каталогов без явного EPVO-скоупа; поэтому результаты его профилирования не следует выдавать за производственную генерацию всех программ.
+
+Инфраструктурная проверка зафиксировала PostgreSQL как актуальное хранилище рабочего контура, подтверждённое резервной копией и тестом восстановления. При публикации необходимо указывать версию базы, контрольную сумму дампа, версию Python и параметры модели. Приёмочный минимум включает 33/33 backend-теста, чистую проверку UTF-8, production-сборку frontend и независимую проверку кредитов, LO-покрытия, пререквизитов и ГОСО для контрольных программ. Эти сведения отделяют воспроизводимые результаты от планов развития (Alembic, дальнейшая миграция локализаций и расширение независимой валидации).
 
 \end{document}
