@@ -203,3 +203,4 @@
 - 2026-08-01: репозиторий поддерживает ручное редактирование title/description на RU, KK и EN через CourseLocalization. Записи без подтверждённого перевода получают статус `needs_translation`.
 - 2026-08-01: свежий acceptance ICT+Medicine: A/B/C по 240 кредитов, hard violations 0, ГОСО true, international score 100%, итоговый аудит `passed=true`.
 - 2026-08-01: API карточки дисциплины теперь передаёт `title_translations` также для пререквизитов и постреквизитов; переключение языка не возвращается к русскому только из-за структуры связи.
+- 2026-08-01: замер локального runtime показал `/projects` около 0.1 с, `/repository/stats` около 0.64 с и `/repository/courses?limit=100` около 0.65 с; подтверждённого backend-зависания на этих страницах нет.
