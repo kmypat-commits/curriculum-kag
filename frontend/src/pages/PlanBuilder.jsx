@@ -1384,7 +1384,6 @@ export default function PlanBuilder() {
                         {currentPlan?.metrics?.verification?.pedagogical_audit && (() => {
                             const audit = currentPlan.metrics.verification.pedagogical_audit
                             return <CompactSection title={localText('\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043b\u0430\u043d\u0430', '\u0416\u043e\u0441\u043f\u0430\u0440 \u0441\u0430\u043f\u0430\u0441\u044b\u043d \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0442\u044b \u0442\u0435\u043a\u0441\u0435\u0440\u0443', 'Automatic curriculum quality audit')} accent={audit.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{localText('Автоматическая проверка качества плана', 'Жоспар сапасын автоматты тексеру', 'Automatic curriculum quality audit')}</h3>
                                 <div style={{ fontSize: 13, color: '#566', marginBottom: 10 }}>{audit.engine}</div>
                                 <strong style={{ color: audit.passed ? '#1b5e20' : '#9a5b00' }}>
                                     {audit.passed

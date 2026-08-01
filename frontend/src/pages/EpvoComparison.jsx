@@ -277,7 +277,8 @@ export default function EpvoComparison() {
                 </div>}
 
                 {data.similar_programs?.length > 0 && <div className="card">
-                    <div className="section-head"><h2>{l('similar_epvo_programs')}</h2></div>
+                    <div className="section-head"><h2>{localText('Сравнение программы с аналогичными ОП ЕПВО', 'Бағдарламаны ұқсас ЕПВО ББ-мен салыстыру', 'Compare with similar EPVO programmes')}</h2></div>
+                    <p style={{ color: '#667', fontSize: 13, marginTop: 0 }}>{localText('Здесь показаны похожие программы из выбранного направления ЕПВО, их типовые дисциплины и результаты обучения.', 'Мұнда таңдалған ЕПВО бағыты бойынша ұқсас бағдарламалар, типтік пәндер және оқу нәтижелері көрсетіледі.', 'This section shows similar programmes from the selected EPVO scope, their typical courses and learning outcomes.')}</p>
                     <div className="table-wrap"><table className="table"><thead><tr><th>{t('title')}</th><th>{t('credits')}</th><th>{l('disciplines')}</th><th>LO</th><th>{l('similarity')}</th></tr></thead><tbody>
                         {data.similar_programs.map(item => <tr key={item.source_id}><td><b>{item.title}</b><div style={{ fontSize: 12, color: '#667' }}>{item.goal}</div></td><td>{item.credits || dash}</td><td>{item.discipline_count}</td><td>{item.lo_count}</td><td>{Math.round((item.similarity || 0) * 100)}%</td></tr>)}
                     </tbody></table></div>
