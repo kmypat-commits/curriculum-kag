@@ -444,6 +444,11 @@ async def update_course(
         raise HTTPException(status_code=404, detail="Дисциплина не найдена")
     
     if "title" in course_data: course.title = course_data["title"]
+    if "title_translations" in course_data or "description_translations" in course_data:
+        upsert_course_localizations(db, course.id, {
+            "title": course_data.get("title_translations") or {},
+            "description": course_data.get("description_translations") or {},
+        }, source="manual")
     if "domain" in course_data: course.domain = course_data["domain"]
     if "credits" in course_data: course.credits = course_data["credits"]
     if "cycle_component" in course_data: course.cycle_component = course_data["cycle_component"]

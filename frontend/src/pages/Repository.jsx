@@ -222,6 +222,8 @@ export default function Repository() {
         try {
             const data = {
                 title: editingCourse.title,
+                title_translations: editingCourse.title_translations || {},
+                description_translations: editingCourse.description_translations || {},
                 domain: editingCourse.domain,
                 credits: editingCourse.credits,
                 prerequisite_exempt: Boolean(editingCourse.prerequisite_exempt),
@@ -445,6 +447,12 @@ export default function Repository() {
                                 <label className="form-label">{t('title')}</label>
                                 <input type="text" className="form-control" value={editingCourse.title} onChange={e => setEditingCourse({ ...editingCourse, title: e.target.value })} />
                             </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: 10 }}>
+                                {['ru', 'kk', 'en'].map(lang => <div key={lang}>
+                                    <label className="form-label">{lang.toUpperCase()} title</label>
+                                    <input className="form-control" value={editingCourse.title_translations?.[lang] || ''} onChange={e => setEditingCourse({ ...editingCourse, title_translations: { ...(editingCourse.title_translations || {}), [lang]: e.target.value } })} />
+                                </div>)}
+                            </div>
                             <div className="form-group" style={{ marginTop: '12px' }}>
                                 <label className="form-label">{localText('\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u2014 \u0440\u0443\u0441\u0441\u043a\u0438\u0439', '\u041f\u04d9\u043d \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430\u0441\u044b \u2014 \u043e\u0440\u044b\u0441\u0448\u0430', 'Course description \u2014 Russian')}</label>
                                 <div style={{ whiteSpace: 'pre-wrap', background: '#f7f9fc', border: '1px solid #e1e7ef', padding: '10px', borderRadius: '7px', minHeight: '42px' }}>
@@ -457,6 +465,10 @@ export default function Repository() {
                                 <label className="form-label" style={{ marginTop: '9px' }}>{localText('\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u2014 \u0430\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u0438\u0439', '\u041f\u04d9\u043d \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430\u0441\u044b \u2014 \u0430\u0493\u044b\u043b\u0448\u044b\u043d\u0448\u0430', 'Course description \u2014 English')}</label>
                                 <div style={{ whiteSpace: 'pre-wrap', background: '#f7f9fc', border: '1px solid #e1e7ef', padding: '10px', borderRadius: '7px', minHeight: '42px' }}>
                                     {editingCourse.description_translations?.en || localText('\u0410\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043f\u043e\u043a\u0430 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442', '\u0410\u0493\u044b\u043b\u0448\u044b\u043d\u0448\u0430 \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430 \u04d9\u0437\u0456\u0440\u0433\u0435 \u0436\u043e\u049b', 'English description is not available yet')}
+                                </div>
+                                <div style={{ marginTop: 10 }}>
+                                    <label className="form-label">{localText('Редактировать описания RU/KK/EN', 'RU/KK/EN сипаттамаларын өңдеу', 'Edit RU/KK/EN descriptions')}</label>
+                                    {['ru', 'kk', 'en'].map(lang => <textarea key={`edit-desc-${lang}`} className="form-control" rows={2} placeholder={`${lang.toUpperCase()} description`} value={editingCourse.description_translations?.[lang] || ''} onChange={e => setEditingCourse({ ...editingCourse, description_translations: { ...(editingCourse.description_translations || {}), [lang]: e.target.value } })} style={{ marginBottom: 6 }} />)}
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
