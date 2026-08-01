@@ -262,11 +262,11 @@ export default function ResearchDashboard() {
                             {bestModel?.name || '—'} · ROC-AUC {pct(bestModel?.roc_auc)} · PR-AUC {pct(bestModel?.pr_auc)} · F1 {pct(bestModel?.f1)}
                         </div>
                         <div>
-                            <b>GNN smoke</b><br />
+                            <b>{l('Проверка GNN', 'GNN тексеруі', 'GNN smoke')}</b><br />
                             {gnnTest ? <>ROC-AUC {pct(gnnTest.roc_auc)} · PR-AUC {pct(gnnTest.pr_auc)} · F1 {pct(gnnTest.f1)}</> : l('метрик пока нет', 'метрика әлі жоқ', 'no metrics yet')}
                         </div>
                         <div>
-                            <b>LSTM smoke</b><br />
+                            <b>{l('Проверка LSTM', 'LSTM тексеруі', 'LSTM smoke')}</b><br />
                             {lstmStatus?.test ? <>ROC-AUC {pct(lstmStatus.test.roc_auc)} · PR-AUC {pct(lstmStatus.test.pr_auc)} · F1 {pct(lstmStatus.test.f1)}</> : `${lstmStatus?.state || 'idle'} · ${l('метрик пока нет', 'метрика әлі жоқ', 'no metrics yet')}`}
                         </div>
                         <div>
@@ -345,7 +345,7 @@ export default function ResearchDashboard() {
                     </div>
                     <div className="table-wrap">
                         <table className="table">
-                            <thead><tr><th>Verdict</th><th>Course</th><th>LO</th><th>Model score</th><th>Date</th></tr></thead>
+                            <thead><tr><th>{l('Решение эксперта', 'Сарапшы шешімі', 'Verdict')}</th><th>{l('Дисциплина', 'Пән', 'Course')}</th><th>LO</th><th>{l('Оценка модели', 'Модель бағасы', 'Model score')}</th><th>{l('Дата', 'Күні', 'Date')}</th></tr></thead>
                             <tbody>
                                 {(feedback?.recent || []).map(row => (
                                     <tr key={row.id}>

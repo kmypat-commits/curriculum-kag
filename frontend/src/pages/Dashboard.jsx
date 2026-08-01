@@ -44,7 +44,7 @@ export default function Dashboard() {
 
     const copy = language === 'ru'
         ? 'Проектируйте образовательные программы, проверяйте результаты обучения и управляйте учебными планами в одном спокойном рабочем пространстве.'
-        : language === 'kz'
+        : language === 'kk'
             ? 'Білім беру бағдарламаларын жобалаңыз, оқу нәтижелерін тексеріңіз және оқу жоспарларын бір жұмыс кеңістігінде басқарыңыз.'
             : 'Design programmes, verify learning outcomes and manage curricula in one focused workspace.'
 

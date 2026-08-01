@@ -321,7 +321,7 @@ function ResultStage({ record, active, t, language, insight, loading, onAnalyze 
         <div style={{ color, fontSize: 11 }}>{t('result_of_stage')}</div><h3 style={{ margin: '5px 0 12px' }}>{t('student_can_now')}</h3>
         {record.new_course_outcomes.slice(0, 7).map((outcome, index) => <div className="ability" key={index}>{outcome}</div>)}
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.08)' }}><div style={{ fontSize: 11, color: '#89a4b9' }}>{t('confirmed_program_los')}</div><div style={{ color, fontWeight: 700 }}>{record.cumulative_program_los.join(' · ') || '—'}</div></div>
-        <div style={{ marginTop: 12 }}><div style={{ fontSize: 11, color: '#89a4b9' }}>{t('next_unlocked_courses')}</div><div style={{ fontSize: 12, lineHeight: 1.45 }}>{record.next_unlocked_courses.slice(0, 5).map(item => item.title).join('; ') || t('none')}</div></div>
+        <div style={{ marginTop: 12 }}><div style={{ fontSize: 11, color: '#89a4b9' }}>{t('next_unlocked_courses')}</div><div style={{ fontSize: 12, lineHeight: 1.45 }}>{record.next_unlocked_courses.slice(0, 5).map(item => localize(item.title_translations || item.title)).join('; ') || t('none')}</div></div>
         <button onClick={onAnalyze} disabled={loading} style={{ ...futureButton, marginTop: 14, width: '100%' }}>
             {loading ? (language === 'ru' ? 'ИИ анализирует…' : language === 'kk' ? 'ЖИ талдап жатыр…' : 'AI is analysing…') : (language === 'ru' ? '✨ Объяснить итог семестра через ИИ' : language === 'kk' ? '✨ Семестр нәтижесін ЖИ арқылы түсіндіру' : '✨ Explain semester outcome with AI')}
         </button>

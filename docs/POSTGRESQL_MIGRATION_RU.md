@@ -30,8 +30,8 @@
 - Есть post-migration сравнение counts: `backend/scripts/compare_sqlite_postgres_counts.py`.
 - Есть API-аудит контрольных программ, независимый от движка БД: `backend/scripts/audit_control_programs_api.py`.
 - Создан быстрый backup:
-  - `backups/baseline-2026-07-25_fast/curriculum_kag.db`;
-  - `backups/baseline-2026-07-25_fast/manifest.json`;
+  - `archive/backups_2026-08-01/baseline-2026-07-25_fast/curriculum_kag.db`;
+  - `archive/backups_2026-08-01/baseline-2026-07-25_fast/manifest.json`;
   - размер backup DB: 12 296 245 248 bytes.
 
 ## Важный текущий статус

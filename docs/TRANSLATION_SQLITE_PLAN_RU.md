@@ -29,7 +29,7 @@
 - Добавлена ORM-модель `CourseLocalization`.
 - Создана таблица `course_localizations`.
 - Перед изменением создан rollback-файл SQLite:
-  `backups/translation-migration/curriculum_kag_before_course_localizations_2026-07-25_15-55-30.db`.
+  `archive/backups_2026-08-01/translation-migration/curriculum_kag_before_course_localizations_2026-07-25_15-55-30.db`.
 - Перенесены переводы из ЕПВО и старого `backend/data/course_translations.json`.
 - В таблице `course_localizations`: 62180 записей.
 - API репозитория дисциплин и API планов читают `title_translations`, `description_translations`, `translation_status` из SQLite-таблицы `course_localizations` с fallback на старый JSON.

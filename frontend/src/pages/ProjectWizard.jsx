@@ -9,7 +9,7 @@ export default function ProjectWizard() {
     const { user } = useAuth()
     const { t, language } = useLanguage()
     const navigate = useNavigate()
-    const localText = (ru, kz, en) => language === 'kz' ? kz : language === 'en' ? en : ru
+    const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const [step, setStep] = useState(1)
     const [goalSuggestions, setGoalSuggestions] = useState([])
     const [loSuggestions, setLoSuggestions] = useState([])

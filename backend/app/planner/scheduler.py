@@ -4,7 +4,6 @@ from typing import Dict, List
 from itertools import combinations
 import math
 import re
-import unicodedata
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
@@ -24,55 +23,10 @@ from app.planner.verifier import (
     verify_curriculum_plan,
 )
 from app.planner.goso import merge_goso_items
-
-
-def _remove_item_once(items: List[Dict], item: Dict) -> bool:
-    """Remove an item only if it is still present in the source list."""
-    try:
-        items.remove(item)
-        return True
-    except ValueError:
-        return False
-
-
-def _move_item(schedule: Dict[int, List[Dict]], source: int, target: int, item: Dict) -> bool:
-    """Move an item between semesters without crashing on stale candidates."""
-    if source == target:
-        return False
-    if not _remove_item_once(schedule[source], item):
-        return False
-    schedule[target].append(item)
-    return True
-
-
-def _swap_items(schedule: Dict[int, List[Dict]], left_semester: int, left_item: Dict, right_semester: int, right_item: Dict) -> bool:
-    """Swap two semester items only when both are still present."""
-    if left_item not in schedule[left_semester] or right_item not in schedule[right_semester]:
-        return False
-    schedule[left_semester].remove(left_item)
-    schedule[right_semester].remove(right_item)
-    schedule[left_semester].append(right_item)
-    schedule[right_semester].append(left_item)
-    return True
-
-
-def _title_key(title: str | None) -> str:
-    """Canonical course title used to prevent semantic duplicates."""
-    value = title or ""
-    suspicious = "Ð" in value or "Ñ" in value or (
-        len(value) > 6 and (value.count("Р") + value.count("С")) > len(value) / 4
-    )
-    if suspicious:
-        for source_encoding in ("latin1", "cp1251"):
-            try:
-                repaired = value.encode(source_encoding).decode("utf-8")
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                continue
-            if repaired and repaired != value:
-                value = repaired
-                break
-    value = unicodedata.normalize("NFKC", value).casefold()
-    return " ".join(re.findall(r"\w+", value, flags=re.UNICODE))
+from app.planner.scheduler_utils import move_item as _move_item
+from app.planner.scheduler_utils import remove_item_once as _remove_item_once
+from app.planner.scheduler_utils import swap_items as _swap_items
+from app.planner.scheduler_utils import title_key as _title_key
 
 
 def _short_lo_theme(lo: LearningOutcome | None) -> str:
@@ -4859,7 +4813,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             continue
         seen_candidate_titles.add(title)
         unique_candidate_ids.append(cid)
-    candidate_ids = unique_candidate_ids
+    # A large EPVO scope can contain many thousands of eligible rows.  The
+    # deterministic scheduler only needs a ranked frontier; traversing the
+    # complete catalogue makes each variant quadratic and can exhaust memory.
+    # Keep enough diversity for both domains while bounding generation time.
+    candidate_ids = unique_candidate_ids[:50]
     root_credits = sum(
         int(course.credits or 5)
         for course in courses.values()

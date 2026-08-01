@@ -66,6 +66,12 @@ export default function PlanBuilder() {
         return String(translated || fallback || '').trim()
     }
 
+    // These labels bypass legacy mojibake entries in the translation bundle.
+    const cycleLabel = language === 'en' ? 'Cycle' : 'Цикл'
+    const cycleEstimateLabel = language === 'en' ? 'system estimate' : language === 'kk' ? 'жүйе есебі' : 'расчёт системы'
+    const componentLabelText = language === 'en' ? 'Component' : 'Компонент'
+    const sourceLabel = language === 'en' ? 'Source' : language === 'kk' ? 'Дереккөз' : 'Источник'
+
     const errorMessage = (err) => {
         const detail = err?.response?.data?.detail
         if (Array.isArray(detail)) {
@@ -797,8 +803,8 @@ export default function PlanBuilder() {
                         <h3 style={{ marginTop: 0 }}>{localText('Что изменилось после перестройки', 'Қайта құрудан кейін не өзгерді', 'What changed after rebuild')}</h3>
                         <div className="quick-grid">
                             <div><b>{localText('Кредиты', 'Кредиттер', 'Credits')}</b><br />{changeReport.credits_delta > 0 ? '+' : ''}{changeReport.credits_delta}</div>
-                            <div><b>Bridge</b><br />{changeReport.bridges_delta > 0 ? '+' : ''}{changeReport.bridges_delta}</div>
-                            <div><b>Min LO</b><br />{changeReport.min_lo_delta == null ? '—' : `${changeReport.min_lo_delta > 0 ? '+' : ''}${Math.round(changeReport.min_lo_delta * 100)}%`}</div>
+                            <div><b>{localText('Bridge-модули', 'Bridge-модульдер', 'Bridge modules')}</b><br />{changeReport.bridges_delta > 0 ? '+' : ''}{changeReport.bridges_delta}</div>
+                            <div><b>{localText('Минимальное покрытие РО', 'ОН ең төменгі қамтылуы', 'Minimum LO coverage')}</b><br />{changeReport.min_lo_delta == null ? '—' : `${changeReport.min_lo_delta > 0 ? '+' : ''}${Math.round(changeReport.min_lo_delta * 100)}%`}</div>
                             <div><b>{localText('Качество', 'Сапа', 'Quality')}</b><br />{String(changeReport.quality_before)} → {String(changeReport.quality_after)}</div>
                         </div>
                         <p style={{ color: '#667', fontSize: 13, marginTop: 10 }}>
@@ -1010,7 +1016,7 @@ export default function PlanBuilder() {
                                                                                         checked={Number(selectedBridgeReplacements[row.bridge_item_id]) === Number(c.course_id)}
                                                                                         onChange={() => setSelectedBridgeReplacements(current => ({ ...current, [row.bridge_item_id]: c.course_id }))}
                                                                                     />
-                                                                                    <strong>→ {(c.title_translations || {})[language] || c.title}</strong>
+                                                                                    <strong>→ {localizedCourseField(c.title_translations, c.title)}</strong>
                                                                                 </label> · {c.credits} {t('credits')} · {c.quality_level === 'strong' ? localText('сильная', 'күшті', 'strong') : localText('средняя, нужно подтвердить', 'орташа, растау керек', 'medium, needs confirmation')} · AI {Math.round((c.model_score || 0) * 100)}% · EPVO {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
                                                                                 <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{c.description}</div>
                                                                             </span>
@@ -1044,8 +1050,8 @@ export default function PlanBuilder() {
                                                                 <div style={{ marginTop: 8, display: 'grid', gap: 7 }}>
                                                                     {(aiBridgeCandidates[row.bridge_item_id].candidates || []).map(candidate => (
                                                                         <div key={candidate.candidate_id} style={{ padding: 8, borderRadius: 6, background: '#f7f9fc', border: '1px solid #dce5ef' }}>
-                                                                            <strong>{candidate[`title_${language}`] || candidate.title_ru}</strong> · {row.credits} {t('credits')}
-                                                                            <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{candidate[`description_${language}`] || candidate.description_ru}</div>
+                                                                            <strong>{localizedCourseField({ ru: candidate.title_ru, kk: candidate.title_kk, en: candidate.title_en }, candidate.title_ru)}</strong> · {row.credits} {t('credits')}
+                                                                            <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{localizedCourseField({ ru: candidate.description_ru, kk: candidate.description_kk, en: candidate.description_en }, candidate.description_ru)}</div>
                                                                             <div style={{ marginTop: 4, color: '#53657a' }}>LO: {(candidate.target_los || []).join(', ')}</div>
                                                                             <button
                                                                                 className="btn btn-primary"
@@ -1676,7 +1682,7 @@ export default function PlanBuilder() {
                                                                                         {c.plan_requisites?.prerequisites?.length > 0
                                                                                             ? c.plan_requisites.prerequisites.map(item => (
                                                                                                 <span key={`pre-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eef4ff', color: '#244b78' }}>
-                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {item.title}
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {localizedCourseField(item.title_translations, item.title)}
                                                                                                 </span>
                                                                                             ))
                                                                                             : <span style={{ color: '#8a96a3' }}>{localText('в плане нет обязательных предшествующих дисциплин', 'жоспарда міндетті алдыңғы пәндер жоқ', 'no required earlier courses in the plan')}</span>
@@ -1687,7 +1693,7 @@ export default function PlanBuilder() {
                                                                                         {c.plan_requisites?.postrequisites?.length > 0
                                                                                             ? c.plan_requisites.postrequisites.map(item => (
                                                                                                 <span key={`post-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eefaf3', color: '#1b5e20' }}>
-                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {item.title}
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {localizedCourseField(item.title_translations, item.title)}
                                                                                                 </span>
                                                                                             ))
                                                                                             : <span style={{ color: '#8a96a3' }}>{localText('в текущем плане нет дисциплин, которые явно требуют её как пререквизит', 'ағымдағы жоспарда оны пререквизит ретінде талап ететін пәндер жоқ', 'no later courses explicitly require it in this plan')}</span>

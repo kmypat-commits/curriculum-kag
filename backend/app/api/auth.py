@@ -33,11 +33,9 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """Authenticate user and return JWT token"""
-    print(f"DEBUG: Login attempt for: {form_data.username}")
     user = db.query(User).filter(User.email == form_data.username).first()
     
     if not user:
-        print(f"DEBUG: User not found: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный адрес электронной почты или пароль",
@@ -45,7 +43,6 @@ async def login(
         )
     
     is_valid = verify_password(form_data.password, user.hashed_password)
-    print(f"DEBUG: Password valid: {is_valid}")
     
     if not is_valid:
         raise HTTPException(

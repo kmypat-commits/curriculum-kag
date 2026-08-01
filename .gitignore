@@ -62,6 +62,7 @@ experiment-results/
 backend/models/
 backend/experiment-results/
 backend/outputs/
+archive/
 
 # Logs
 *.log

@@ -391,14 +391,14 @@ export default function LOCoverageDashboard() {
                     <div className="card" style={{ marginBottom: '24px', borderLeft: '5px solid #7b1fa2', background: '#f8f3ff' }}>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                             <span style={{ background: '#7b1fa2', color: 'white', borderRadius: '999px', padding: '5px 10px', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                {language === 'ru' ? 'Прогноз ИИ' : language === 'kz' ? 'ЖИ болжамы' : 'AI prediction'}
+                                {language === 'ru' ? 'Прогноз ИИ' : language === 'kk' ? 'ЖИ болжамы' : 'AI prediction'}
                             </span>
                             <div>
                                 <strong>
-                                    {language === 'ru' ? 'Связи дисциплин и результатов обучения предложены моделью ЕПВО' : language === 'kz' ? 'Пәндер мен оқу нәтижелерінің байланыстарын ЕПВО моделі ұсынды' : 'Course–outcome links are suggested by the EPVO model'}
+                                    {language === 'ru' ? 'Связи дисциплин и результатов обучения предложены моделью ЕПВО' : language === 'kk' ? 'Пәндер мен оқу нәтижелерінің байланыстарын ЕПВО моделі ұсынды' : 'Course–outcome links are suggested by the EPVO model'}
                                 </strong>
                                 <p style={{ margin: '6px 0 0', color: '#555', lineHeight: 1.5 }}>
-                                    {language === 'ru' ? 'Это рекомендация, а не решение эксперта. Перед утверждением программы подтвердите или исправьте связи.' : language === 'kz' ? 'Бұл сарапшы шешімі емес, ұсыныс. Бағдарламаны бекітпес бұрын байланыстарды растаңыз немесе түзетіңіз.' : 'This is a recommendation, not an expert decision. Confirm or correct the links before approval.'}
+                                    {language === 'ru' ? 'Это рекомендация, а не решение эксперта. Перед утверждением программы подтвердите или исправьте связи.' : language === 'kk' ? 'Бұл сарапшы шешімі емес, ұсыныс. Бағдарламаны бекітпес бұрын байланыстарды растаңыз немесе түзетіңіз.' : 'This is a recommendation, not an expert decision. Confirm or correct the links before approval.'}
                                 </p>
                             </div>
                         </div>

@@ -139,41 +139,34 @@ async def create_project(
 ):
     """Create a new educational program project"""
     
-    # Create project
-    project = Project(
-        title=project_data.title,
-        domain1=project_data.domain1,
-        domain2=project_data.domain2,
-        goal=project_data.goal,
-        constraints_json=project_data.constraints,
-        created_by=current_user.id
-    )
-    
-    db.add(project)
-    db.flush()
-    
-    # Create first version
-    version = ProjectVersion(
-        project_id=project.id,
-        version_number=1,
-        status="draft"
-    )
-    
-    db.add(version)
-    db.flush()
-    
-    # Add learning outcomes
-    for idx, lo_data in enumerate(project_data.learning_outcomes):
-        lo = LearningOutcome(
-            project_version_id=version.id,
-            lo_code=lo_data.lo_code,
-            lo_text=lo_data.lo_text,
-            taxonomy_level=lo_data.taxonomy_level,
-            order_index=idx
+    try:
+        project = Project(
+            title=project_data.title,
+            domain1=project_data.domain1,
+            domain2=project_data.domain2,
+            goal=project_data.goal,
+            constraints_json=project_data.constraints,
+            created_by=current_user.id
         )
-        db.add(lo)
-    
-    db.commit()
+        db.add(project)
+        db.flush()
+        version = ProjectVersion(project_id=project.id, version_number=1, status="draft")
+        db.add(version)
+        db.flush()
+        for idx, lo_data in enumerate(project_data.learning_outcomes):
+            db.add(LearningOutcome(
+                project_version_id=version.id,
+                lo_code=lo_data.lo_code,
+                lo_text=lo_data.lo_text,
+                taxonomy_level=lo_data.taxonomy_level,
+                order_index=idx
+            ))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        # Return a short actionable error instead of leaving the client waiting
+        # for a generic 500 after the transaction has already failed.
+        raise HTTPException(status_code=422, detail=f"Не удалось сохранить программу: {exc.__class__.__name__}") from exc
     db.refresh(project)
     
     return project

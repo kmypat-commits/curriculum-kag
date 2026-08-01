@@ -42,14 +42,20 @@ class Settings(BaseSettings):
     # 200x100 settings spent minutes ranking near-identical curricula. 36x50
     # retained 100/100 quality and distinct A/B/C on the 240-credit control
     # programme while reducing the complete dry-run to 22.91 seconds.
-    NSGA2_POPULATION: int = 36
-    NSGA2_GENERATIONS: int = 50
+    # Keep interactive plan generation bounded.  The previous 36x50 search
+    # evaluated every candidate thousands of times and could occupy the only
+    # API worker for 20+ minutes.  18x20 preserves evolutionary diversity while
+    # keeping a new programme responsive; users can still rerun after review.
+    NSGA2_POPULATION: int = 18
+    NSGA2_GENERATIONS: int = 20
     NSGA2_CROSSOVER_PROBABILITY: float = 0.9
     NSGA2_MUTATION_PROBABILITY: float = 0.1
     
     # Localization
     DEFAULT_LANGUAGE: str = "ru"
-    SUPPORTED_LANGUAGES: List[str] = ["ru", "kz", "en"]
+    # The UI uses the ISO 639-1 code `kk`; `kz` remains accepted as a
+    # backwards-compatible request alias in EPVO endpoints.
+    SUPPORTED_LANGUAGES: List[str] = ["ru", "kk", "en"]
     
     # Application
     APP_NAME: str = "Curriculum-KAG Generator"

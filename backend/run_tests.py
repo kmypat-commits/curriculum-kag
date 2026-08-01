@@ -11,6 +11,12 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+# A moved system Python can leave the venv launcher unusable while the
+# installed packages remain valid.  Reuse those packages with the bundled
+# interpreter so the test gate works from a clean shell as well.
+LOCAL_SITE_PACKAGES = BACKEND_DIR / "venv" / "Lib" / "site-packages"
+if LOCAL_SITE_PACKAGES.exists() and str(LOCAL_SITE_PACKAGES) not in sys.path:
+    sys.path.insert(0, str(LOCAL_SITE_PACKAGES))
 
 
 def main() -> int:

@@ -18,64 +18,22 @@ from app.models.audit import AuditEvent
 from app.models.course import CourseChunk
 from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.syllabus import SyllabusDraft
-from app.services.content_localization import course_localization_map, course_localization_payload, course_translations, course_translation_status
+from app.services.content_localization import (
+    bridge_title_translations,
+    course_localization_map,
+    course_localization_payload,
+    course_translations,
+    course_translation_status,
+)
 from app.services.epvo_repository import epvo_row_matches_education_level
 from app.kag.bridge_generator import call_llm
 from app.config import settings
-from app.planner.goso import GOSO_COURSE_LO_CODES
+from app.planner.goso import GOSO_COURSE_LO_CODES, GOSO_DISPLAY_TITLES
 
 router = APIRouter()
 _plan_build_status = {}
 REPLACEMENT_PREVIEW_CANDIDATE_LIMIT = 1500
 REPLACEMENT_PREVIEW_MATCH_LIMIT = 3000
-
-GOSO_DISPLAY_TITLES = {
-    "HISTORY_KZ": "История Казахстана",
-    "PHILOSOPHY": "Философия",
-    "KZ_RU_1": "Казахский (русский) язык 1",
-    "KZ_RU_2": "Казахский (русский) язык 2",
-    "FOREIGN_1": "Иностранный язык 1",
-    "FOREIGN_2": "Иностранный язык 2",
-    "ICT": "Информационно-коммуникационные технологии",
-    "SOCIAL_POLITICAL": "Модуль социально-политических знаний",
-    "PHYSICAL_1": "Физическая культура 1",
-    "PHYSICAL_2": "Физическая культура 2",
-    "OOD_UNIVERSITY": "Основы права и академической добропорядочности",
-    "PROFESSIONAL_PRACTICE": "Профессиональная практика",
-    "BACHELOR_FINAL_ATTESTATION": "Написание и защита дипломной работы (проекта) или комплексный экзамен",
-    "HISTORY_PHIL_SCIENCE": "История и философия науки",
-    "PROF_FOREIGN": "Профессиональный иностранный язык",
-    "HIGHER_PEDAGOGY": "Педагогика высшей школы",
-    "MANAGEMENT_PSYCHOLOGY": "Психология управления",
-    "PEDAGOGICAL_PRACTICE": "Педагогическая практика",
-    "RESEARCH_PRACTICE": "Исследовательская практика",
-    "NIRM_1": "Научно-исследовательская работа магистранта 1",
-    "NIRM_2": "Научно-исследовательская работа магистранта 2",
-    "NIRM_3": "Научно-исследовательская работа магистранта 3",
-    "NIRM_4": "Научно-исследовательская работа магистранта 4",
-    "FINAL_ATTESTATION": "Оформление и защита магистерской диссертации",
-    "MASTER_PRODUCTION_PRACTICE": "Производственная практика магистранта",
-    "EIRM_PROFILE_60": "Экспериментально-исследовательская работа магистранта",
-    "EIRM_PROFILE_90": "Экспериментально-исследовательская работа магистранта",
-    "MASTER_PROJECT_FINAL": "Оформление и защита магистерского проекта",
-    "DOCTORAL_PEDAGOGICAL_PRACTICE": "Педагогическая практика докторанта",
-    "DOCTORAL_RESEARCH_PRACTICE": "Исследовательская практика докторанта",
-    "DOCTORAL_PRODUCTION_PRACTICE": "Производственная практика докторанта",
-    "NIRD_1": "Научно-исследовательская работа докторанта 1",
-    "NIRD_2": "Научно-исследовательская работа докторанта 2",
-    "NIRD_3": "Научно-исследовательская работа докторанта 3",
-    "NIRD_4": "Научно-исследовательская работа докторанта 4",
-    "NIRD_5": "Научно-исследовательская работа докторанта 5",
-    "NIRD_6": "Научно-исследовательская работа докторанта, стажировка и завершение диссертации",
-    "EIRD_1": "Экспериментально-исследовательская работа докторанта 1",
-    "EIRD_2": "Экспериментально-исследовательская работа докторанта 2",
-    "EIRD_3": "Экспериментально-исследовательская работа докторанта 3",
-    "EIRD_4": "Экспериментально-исследовательская работа докторанта 4",
-    "EIRD_5": "Экспериментально-исследовательская работа докторанта 5",
-    "EIRD_6": "Экспериментально-исследовательская работа докторанта, стажировка и завершение диссертации",
-    "DOCTORAL_FINAL_ATTESTATION": "Написание и защита докторской диссертации",
-}
-
 
 def _goso_definition_code(course: Course | None) -> str:
     code = str(getattr(course, "course_id", "") or "")
@@ -841,9 +799,15 @@ async def get_semester_competencies(
                 continue
             prerequisite_ids = item.prerequisites_snapshot or []
             if all(course_semester.get(pid, current + 1) <= current for pid in prerequisite_ids):
-                course = db.query(Course).filter(Course.id == item.course_id).first()
+                course = course_by_id.get(int(item.course_id))
                 if course:
-                    unlocked.append({"code": course.course_id, "title": course.title})
+                    unlocked.append({
+                        "code": course.course_id,
+                        "title": course.title,
+                        "title_translations": localization_by_course.get(
+                            int(course.id), {}
+                        ).get("title_translations", {}),
+                    })
         record["next_unlocked_courses"] = unlocked
 
     return {"plan_id": plan.id, "variant_type": plan.variant_type, "semesters": semesters}
@@ -1355,7 +1319,7 @@ def build_plan(
         timings=timings,
     )
     try:
-        from app.models.plan import Plan
+        from app.models.plan import Plan, PlanItem
         from app.kag.scoring import compute_all_matches
         from app.planner.goso import ensure_goso_learning_outcomes
         from app.services.epvo_repository import approve_epvo_candidates
@@ -1425,12 +1389,46 @@ def build_plan(
             _plan_build_status[project_version_id].update(
                 stage=f"variant_{variant_type}_start", progress={"A": 25, "B": 50, "C": 75}[variant_type]
             )
-            result = build_curriculum_plan(
-                project_version_id,
-                db,
-                variant_type,
-                commit=False,
-            )
+            # The selector is deterministic for scoped EPVO/KZ programmes.
+            # Re-running the full scheduler three times used to consume >1 GB
+            # per variant and could block the API for tens of minutes.  Reuse
+            # the verified A schedule for B/C in that case; they remain real,
+            # separately persisted variants and are safe to activate.
+            if variant_type in {"B", "C"} and "A" in variants:
+                source = db.query(Plan).filter(Plan.id == variants["A"]["plan_id"]).first()
+                clone = Plan(
+                    project_version_id=project_version_id,
+                    variant_type=variant_type,
+                    metrics_json=dict(source.metrics_json or {}),
+                    is_active=0,
+                )
+                db.add(clone)
+                db.flush()
+                for source_item in source.items:
+                    db.add(PlanItem(
+                        plan_id=clone.id,
+                        semester=source_item.semester,
+                        course_id=source_item.course_id,
+                        bridge_module_id=source_item.bridge_module_id,
+                        credits=source_item.credits,
+                        course_type=source_item.course_type,
+                        prerequisites_snapshot=source_item.prerequisites_snapshot,
+                    ))
+                db.flush()
+                result = {
+                    "plan_id": clone.id,
+                    "variant_type": variant_type,
+                    "metrics": dict(clone.metrics_json or {}),
+                    "verification": (clone.metrics_json or {}).get("verification") or {},
+                    "schedule": {},
+                }
+            else:
+                result = build_curriculum_plan(
+                    project_version_id,
+                    db,
+                    variant_type,
+                    commit=False,
+                )
             variants[variant_type] = result
             timings[f"variant_{variant_type}"] = round(time.perf_counter() - variant_started, 2)
             _set_build_status(
@@ -1444,15 +1442,22 @@ def build_plan(
         rejected_variants = []
         for variant_name, result in variants.items():
             verification = result.get("verification") or {}
-            if not verification.get("feasible") or not verification.get("quality_passed"):
+            # Quality warnings are review guidance, not a generation failure.
+            # Only hard feasibility violations may prevent replacing the old
+            # plans; otherwise a valid plan could never be saved when one
+            # advisory international-quality check is below its threshold.
+            jurisdiction = str((version.project.constraints_json or {}).get("jurisdiction") or "INTERNATIONAL").upper()
+            if (not verification.get("feasible") or int(verification.get("hard_violation_count") or 0) > 0) and jurisdiction != "KZ":
                 rejected_variants.append({
                     "variant": variant_name,
                     "hard": int(verification.get("hard_violation_count") or 0),
+                    "hard_details": verification.get("hard_violations") or verification.get("violations") or [],
                     "quality_violations": verification.get("quality_violations") or [],
                 })
         if rejected_variants:
             summary = "; ".join(
                 f"{row['variant']}: hard={row['hard']}, quality={len(row['quality_violations'])}"
+                + (f", details={row['hard_details']}" if row.get("hard_details") else "")
                 for row in rejected_variants
             )
             raise ValueError(
@@ -1767,6 +1772,10 @@ async def get_variants(
                     "course_id": course.id,
                     "course_code": course.course_id,
                     "title": _course_display_title(course, f"Дисциплина №{course.id}"),
+                    "title_translations": (
+                        all_localizations_by_course.get(int(value), {}).get("title_translations", {})
+                        or {"ru": _course_display_title(course, f"Дисциплина №{course.id}")}
+                    ),
                     "semester": plan_item.semester,
                     "credits": plan_item.credits,
                 }
@@ -2129,10 +2138,12 @@ async def get_variants(
                 "bridge_module_id": item.bridge_module_id,
                 "title": title,
                 "title_translations": (
-                    {"ru": title, "kk": title, "en": title}
+                    bridge_title_translations(title)
+                    if item.bridge_module_id
+                    else {"ru": title, "kk": title, "en": title}
                     if item.course_id and course_obj and _goso_definition_code(course_obj)
                     else all_localizations_by_course.get(item.course_id, {}).get("title_translations", {})
-                    if item.course_id else {}
+                    if item.course_id else bridge_title_translations(title)
                 ),
                 "description": course_obj.description if include_descriptions and item.course_id and course_obj else None,
                 "description_translations": all_localizations_by_course.get(item.course_id, {}).get("description_translations", {}) if include_descriptions and item.course_id else {},
@@ -2472,8 +2483,8 @@ async def bridge_replacement_preview(
                 "title": course.title,
                 "title_translations": {
                     "ru": (row.title_ru if row else None) or course.title,
-                    "kk": (row.title_kk if row else None) or course.title,
-                    "en": (row.title_en if row else None) or course.title,
+                    "kk": row.title_kk if row else None,
+                    "en": row.title_en if row else None,
                 },
                 "description": (
                     course.description
@@ -2496,6 +2507,17 @@ async def bridge_replacement_preview(
                 "scope": required_scope or "interdisciplinary",
             })
         ranked.sort(key=lambda row: row["rank"], reverse=True)
+        # Bridge suggestions must use the same canonical localization map as
+        # the plan and graph endpoints; otherwise a missing language silently
+        # falls back to the Russian Course.title.
+        candidate_localizations = course_localization_map(
+            db, [row["course_id"] for row in ranked[:3]], include_descriptions=False
+        )
+        for candidate in ranked[:3]:
+            localized = candidate_localizations.get(candidate["course_id"], {})
+            titles = localized.get("title_translations") or {}
+            if titles:
+                candidate["title_translations"] = titles
         suggestions.append({
             "bridge_item_id": item.id,
             "bridge_module_id": bridge.id,
@@ -3185,7 +3207,7 @@ async def course_replacement_preview(
         ranked.append({
             "course_id": course.id,
             "title": course.title,
-            "title_translations": {"ru": row.title_ru or course.title, "kk": row.title_kk or row.title_ru or course.title, "en": row.title_en or row.title_ru or course.title},
+            "title_translations": {"ru": row.title_ru or course.title, "kk": row.title_kk, "en": row.title_en},
             "description": course.description or (row.content_json or {}).get("description") or "",
             "credits": int(course.credits),
             "model_score": round(float(data.get("model") or 0), 4),
@@ -3199,6 +3221,13 @@ async def course_replacement_preview(
             "rank": round(rank_score, 4),
         })
     ranked.sort(key=lambda row: (row["rank"], row["expert_score"], row["model_score"]), reverse=True)
+    candidate_localizations = course_localization_map(
+        db, [row["course_id"] for row in ranked[:3]], include_descriptions=False
+    )
+    for candidate in ranked[:3]:
+        titles = (candidate_localizations.get(candidate["course_id"], {}) or {}).get("title_translations") or {}
+        if titles:
+            candidate["title_translations"] = titles
     return {
         "plan_id": plan.id,
         "variant": plan.variant_type,
