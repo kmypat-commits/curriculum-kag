@@ -25,7 +25,7 @@ function CompactSection({ title, subtitle, accent = '#366092', defaultOpen = fal
 export default function PlanBuilder() {
     const { id } = useParams()
     const [searchParams] = useSearchParams()
-    const { t, localize, language } = useLanguage()
+    const { t, localize, localizeCycle, language } = useLanguage()
     const [project, setProject] = useState(null)
     const [loading, setLoading] = useState(true)
     const [building, setBuilding] = useState(false)
@@ -65,6 +65,10 @@ export default function PlanBuilder() {
             ? localize(translations)
             : translations
         return String(translated || fallback || '').trim()
+    }
+    const localizedCourse = (course = {}) => {
+        const translations = course.title_translations || (course.title_ru || course.title_kk || course.title_en ? { ru: course.title_ru, kk: course.title_kk || course.title_kz, en: course.title_en } : null)
+        return localizedCourseField(translations, course.title)
     }
 
     // These labels bypass legacy mojibake entries in the translation bundle.
@@ -121,6 +125,8 @@ export default function PlanBuilder() {
     }
 
     const componentLabel = (value = '') => {
+        const cycle = localizeCycle(value)
+        if (cycle !== String(value || '').trim()) return cycle
         const normalized = String(value).trim().toLowerCase()
         if (['elective', 'elective component', 'компонент по выбору'].includes(normalized)) return t('elective')
         if (['university', 'university component', 'вузовский компонент'].includes(normalized)) return t('university')
@@ -343,6 +349,22 @@ export default function PlanBuilder() {
         } finally {
             setBuilding(false)
         }
+    }
+
+    const missingVariants = ['A', 'B', 'C'].filter(item => !variants?.[item])
+    const handleBuildMissing = async () => {
+        if (!missingVariants.length || building) return
+        setBuildVariants(missingVariants.join(','))
+        try {
+            setBuilding(true)
+            setBuildNotice(null)
+            setBuildStatus({ state: 'running', stage: 'matching', progress: 5 })
+            const response = await axios.post(`/api/planner/${project.latest_version.id}/build`, { variants: missingVariants })
+            await fetchVariants(project.latest_version.id)
+            setBuildStatus({ state: 'complete', stage: 'complete', progress: 100, change_report: response.data?.change_report })
+        } catch (err) {
+            alert(t('build_error') + ': ' + errorMessage(err))
+        } finally { setBuilding(false) }
     }
 
     const handleToggleActive = async (planId) => {
@@ -741,6 +763,11 @@ export default function PlanBuilder() {
                         >
                             {building ? `${t('building_plan')} ${buildProgress}%` : '✨ ' + t('generate_variants')}
                         </button>
+                        {missingVariants.length > 0 && variants && (
+                            <button className="btn btn-secondary" onClick={handleBuildMissing} disabled={building}>
+                                {localText('Построить отсутствующие: ' + missingVariants.join(', '), 'Жетпейтін нұсқаларды құру: ' + missingVariants.join(', '), 'Build missing: ' + missingVariants.join(', '))}
+                            </button>
+                        )}
                         <button
                             className="btn btn-secondary"
                             onClick={handleRecomputeMatches}
@@ -1526,7 +1553,7 @@ export default function PlanBuilder() {
                                                                 style={{ fontSize: '15px', fontWeight: 'bold', color: '#17233b' }}
                                                                 title={localizedCourseField(c.description_translations, c.description)}
                                                             >
-                                                                {localizedCourseField(c.title_translations, c.title)}{c.translation_status === 'machine_reviewed' && <span title={t('ai_translation')} style={{marginLeft:5,color:'#9a5b00',fontSize:10}}>AI</span>}
+                                                                {localizedCourse(c)}{c.translation_status === 'machine_reviewed' && <span title={t('ai_translation')} style={{marginLeft:5,color:'#9a5b00',fontSize:10}}>AI</span>}
                                                             </div>
                                                             {showCourseDescriptions && localizedCourseField(c.description_translations, c.description) && (
                                                                 <div style={{ fontSize: '11px', color: '#777', marginTop: 3, lineHeight: 1.35 }}>
@@ -1686,7 +1713,7 @@ export default function PlanBuilder() {
                                                                                         {c.plan_requisites?.prerequisites?.length > 0
                                                                                             ? c.plan_requisites.prerequisites.map(item => (
                                                                                                 <span key={`pre-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eef4ff', color: '#244b78' }}>
-                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {localizedCourseField(item.title_translations, item.title)}
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {localizedCourse(item)}
                                                                                                 </span>
                                                                                             ))
                                                                                             : <span style={{ color: '#8a96a3' }}>{localText('в плане нет обязательных предшествующих дисциплин', 'жоспарда міндетті алдыңғы пәндер жоқ', 'no required earlier courses in the plan')}</span>
@@ -1697,7 +1724,7 @@ export default function PlanBuilder() {
                                                                                         {c.plan_requisites?.postrequisites?.length > 0
                                                                                             ? c.plan_requisites.postrequisites.map(item => (
                                                                                                 <span key={`post-${item.course_id}`} title={`${localText('Семестр', 'Семестр', 'Semester')} ${item.semester} · ${item.credits} ${localText('кредитов', 'кредит', 'credits')}`} style={{ display: 'inline-block', margin: '2px 4px 2px 0', padding: '2px 6px', borderRadius: 999, background: '#eefaf3', color: '#1b5e20' }}>
-                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {localizedCourseField(item.title_translations, item.title)}
+                                                                                                    {localText('Сем.', 'Сем.', 'Sem.')} {item.semester}: {localizedCourse(item)}
                                                                                                 </span>
                                                                                             ))
                                                                                             : <span style={{ color: '#8a96a3' }}>{localText('в текущем плане нет дисциплин, которые явно требуют её как пререквизит', 'ағымдағы жоспарда оны пререквизит ретінде талап ететін пәндер жоқ', 'no later courses explicitly require it in this plan')}</span>

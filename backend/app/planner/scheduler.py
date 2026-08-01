@@ -3014,6 +3014,33 @@ def _trim_to_target_credits(items: List[Dict], target_credits: int, db: Session)
     return _unique_items_by_title(normalized)
 
 
+def _fill_existing_bridge_credit_gap(
+    items: List[Dict], target_credits: int, db: Session
+) -> List[Dict]:
+    """Use the explicit 3--7 credit bridge envelope for a residual gap.
+
+    Late prerequisite/domain repairs can remove a real course after the last
+    bridge-slot check. Adding another module would violate ``max_new_courses``;
+    increasing an existing bridge is the safe atomic repair and keeps the plan
+    at its requested total without changing real-course credits.
+    """
+    normalized = [dict(item) for item in items]
+    gap = max(0, int(target_credits) - sum(int(item.get("credits") or 0) for item in normalized))
+    for item in reversed(normalized):
+        if gap <= 0 or item.get("bridge_module_id") is None:
+            continue
+        room = max(0, 7 - int(item.get("credits") or 0))
+        increase = min(room, gap)
+        if increase <= 0:
+            continue
+        item["credits"] = int(item.get("credits") or 0) + increase
+        module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
+        if module:
+            module.credits = item["credits"]
+        gap -= increase
+    return normalized
+
+
 def _select_exact_professional_subset(
     candidates: List[Dict],
     evidence: Dict[int, tuple[int, float]],
@@ -3421,10 +3448,11 @@ def build_curriculum_plan(
         for index, bridge in enumerate(meaningful_bridges):
             if bridge is None or bridge.id in confirmed_bridge_ids:
                 continue
-            if index > 0 and sum(
-                int(item.get("credits") or 0) for item in selected_courses
-            ) >= target:
-                break
+            # Keep the secondary-domain bridge even when the real-course
+            # shortlist already reaches the target.  In an interdisciplinary
+            # plan this bridge is evidence for the second domain and may be
+            # inserted by replacing a non-regulatory course; skipping it made
+            # variants A/B fail the 40% domain quota while C happened to pass.
             selected_courses = _force_bridge_item(
                 selected_courses,
                 bridge,
@@ -3839,6 +3867,11 @@ def build_curriculum_plan(
     schedule = _repair_final_admission_misplacements(
         schedule, domain_repair_candidates, project_version, db
     )
+    schedule = _fill_schedule_credit_gap(
+        schedule, project_version, target_credits, maximum_credits, db
+    )
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
     prerequisite_graph = _infer_schedule_prerequisites(schedule)
 
     invalid_domain_courses = []
@@ -4097,6 +4130,12 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             return items
         current_bridge_count = sum(1 for item in items if item.get("bridge_module_id") is not None)
         remaining_slots = max(0, int(constraints.get("max_new_courses", 5)) - current_bridge_count)
+        # A late duplicate/prerequisite cleanup can leave a small exact-credit
+        # gap after all configured bridge slots are occupied. One explicit
+        # 3-credit bridge is safer than persisting an invalid below-target plan;
+        # it is recorded as a credit-repair event in the plan metadata.
+        if remaining_slots <= 0 and 0 < target - total_now <= 3:
+            remaining_slots = 1
         if remaining_slots <= 0:
             return items
         auto_modules = ensure_credit_bridge_modules(
@@ -5718,7 +5757,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = top_up_with_credit_bridges(result)
     result = replace_redundant_bridges_with_real_courses(result)
     result = _trim_to_target_credits(result, target, db)
+    result = _fill_existing_bridge_credit_gap(result, target, db)
     result = rebalance_domain_quotas(result)
+    result = _fill_existing_bridge_credit_gap(result, target, db)
+    result = top_up_with_credit_bridges(result)
     if (
         variant_type == "C"
         and str(constraints.get("education_level") or "").lower()
@@ -5858,6 +5900,17 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 "Прикладной кейс междисциплинарного анализа",
             ],
         },
+        {
+            "suffix": "SECONDARY_ADVANCED",
+            "title": "Прикладной проект в области медицины" if is_medical else f"Прикладной проект области {secondary}",
+            "semester": max(4, min(total_semesters - 1, 5)),
+            "topics": [
+                "Постановка междисциплинарной задачи",
+                "Интерпретация отраслевых данных",
+                "Оценка рисков и ограничений решения",
+                "Защита прикладного проекта",
+            ],
+        },
     ]
     target_los = [
         lo.lo_code for lo in project_version.learning_outcomes
@@ -5877,7 +5930,7 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 f"Предметный модуль вторичного домена {secondary}: терминология, процессы, данные, "
                 "ограничения и кейсы, необходимые для междисциплинарной образовательной программы."
             ),
-            "credits": 5,
+            "credits": 3 if template["suffix"] == "SECONDARY_ADVANCED" else 5,
             "recommended_semester": max(1, min(total_semesters - 1, int(template["semester"]))),
             "learning_outcomes": [
                 f"Объяснять ключевые процессы и понятия области {secondary}.",
@@ -6119,6 +6172,47 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                     changed = True; break
                 if changed: break
             if changed: break
+    return schedule
+
+
+def _fill_schedule_credit_gap(
+    schedule: Dict[int, List[Dict]],
+    project_version: ProjectVersion,
+    target_credits: int,
+    maximum_credits: int,
+    db: Session,
+) -> Dict[int, List[Dict]]:
+    """Close a residual schedule gap after late semester repairs."""
+    total = sum(int(item.get("credits") or 0) for items in schedule.values() for item in items)
+    gap = int(target_credits) - total
+    if gap <= 0:
+        return schedule
+    # Prefer flexing existing bridges before creating another visible module.
+    for items in schedule.values():
+        for item in reversed(items):
+            if gap <= 0 or item.get("bridge_module_id") is None:
+                continue
+            room = min(7 - int(item.get("credits") or 0), gap)
+            if room <= 0:
+                continue
+            item["credits"] = int(item.get("credits") or 0) + room
+            module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
+            if module:
+                module.credits = item["credits"]
+            gap -= room
+    if gap <= 0:
+        return schedule
+    if total + gap > int(maximum_credits):
+        return schedule
+    modules = ensure_credit_bridge_modules(project_version, db, gap, 1, desired_count=1)
+    if not modules:
+        return schedule
+    module = modules[0]
+    module.credits = max(3, min(7, gap))
+    item = _bridge_item(module)
+    item["credits"] = module.credits
+    semester = min(schedule, key=lambda value: sum(int(row.get("credits") or 0) for row in schedule[value]))
+    schedule[semester].append(item)
     return schedule
 
 

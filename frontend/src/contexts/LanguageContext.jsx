@@ -23,8 +23,17 @@ export const LanguageProvider = ({ children }) => {
         const text = String(value);
         return translations[normalizedLanguage]?.[text] || translations.ru?.[text] || text;
     };
+    const localizeCycle = (value) => {
+        const key = String(value || '').trim().toUpperCase();
+        const labels = {
+            ru: { БД: 'БД — базовые дисциплины', ПД: 'ПД — профильные дисциплины', ООД: 'ООД — общеобразовательные дисциплины', КВ: 'КВ — компонент по выбору', ВК: 'ВК — вузовский компонент' },
+            kk: { БД: 'БД — базалық пәндер', ПД: 'ПД — бейіндік пәндер', ООД: 'ООД — жалпы білім беретін пәндер', КВ: 'КВ — таңдау компоненті', ВК: 'ВК — жоғары оқу орны компоненті' },
+            en: { БД: 'BD — basic disciplines', BD: 'BD — basic disciplines', ПД: 'PD — profile disciplines', PD: 'PD — profile disciplines', ООД: 'GED — general education disciplines', GED: 'GED — general education disciplines', КВ: 'EC — elective component', EC: 'EC — elective component', ВК: 'UC — university component', UC: 'UC — university component' },
+        };
+        return labels[normalizedLanguage]?.[key] || localize(value);
+    };
     const changeLanguage = (lang) => { setLanguage(lang); localStorage.setItem('language', lang); };
-    return <LanguageContext.Provider value={{ language, t, localize, changeLanguage }}>{children}</LanguageContext.Provider>;
+    return <LanguageContext.Provider value={{ language, t, localize, localizeCycle, changeLanguage }}>{children}</LanguageContext.Provider>;
 };
 
 export const useLanguage = () => {

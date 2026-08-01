@@ -9,6 +9,10 @@ import LoadingSpinner from '../components/LoadingSpinner'
 export default function Repository() {
     const { user, logout } = useAuth()
     const { t, localize, language } = useLanguage()
+    const localizedCourse = (course = {}) => {
+        const translations = course.title_translations || (course.title_ru || course.title_kk || course.title_en ? { ru: course.title_ru, kk: course.title_kk || course.title_kz, en: course.title_en } : null)
+        return localize(translations || course.title)
+    }
     const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const navigate = useNavigate()
     const [courses, setCourses] = useState([])
@@ -408,7 +412,7 @@ export default function Repository() {
                             {filteredCourses.map(course => (
                                 <tr key={course.id}>
                                     <td><code>{course.course_id}</code></td>
-                                    <td><strong>{localize(course.title_translations || course.title)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}</td>
+                                    <td><strong>{localizedCourse(course)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}</td>
                                     <td>{course.domain}</td>
                                     <td>{course.credits}</td>
                                     <td>{t(course.cycle_component) || course.cycle_component}</td>

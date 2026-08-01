@@ -1462,8 +1462,12 @@ def build_plan(
             project_version_id, stage="saving", progress=92,
             elapsed_seconds=round(time.perf_counter() - build_started, 1), timings=dict(timings),
         )
+        # A partial build (for example only A) must not destroy the variants
+        # that were intentionally kept (B/C). Replace only requested variants;
+        # this lets the user generate the remaining variants later in the UI.
         for old_plan in old_plans:
-            db.delete(old_plan)
+            if old_plan.variant_type in requested_variants:
+                db.delete(old_plan)
 
         def _variant_quality_key(item):
             variant_name, row = item
