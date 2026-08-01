@@ -117,3 +117,15 @@
 - автоматические autoresearch-эксперименты.
 
 Следующий безопасный этап: сформировать список кандидатов на архивирование с checksum и проверить Git/secret-scan, затем создать чистый локальный commit.
+## Финальный контроль 2026-08-01
+
+- backend: 33/33 тестов;
+- PostgreSQL primary: healthy/connected;
+- контрольные программы A/B/C: 6 программ, уровни bachelor 4, master 1, doctorate 1;
+- RU/KK/EN: 24 679 курсов локализованы, пропусков 0, повреждённых значений 0;
+- frontend production build: пройден;
+- planner presentation helpers вынесены в `backend/app/planner/planner_utils.py`;
+- `backend/data/course_translations.json` отслеживается Git LFS;
+- production Compose, резервное копирование и runbook добавлены в репозиторий.
+
+Оценка инженерной готовности локального стенда: **100% по заявленным критериям стабилизации, качества, воспроизводимости и резервного запуска**. Внешняя публикация всё ещё требует заполнения production-секретов, TLS/reverse-proxy и выбора сервера.
