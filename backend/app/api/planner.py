@@ -28,42 +28,22 @@ from app.services.content_localization import (
 from app.services.epvo_repository import epvo_row_matches_education_level
 from app.kag.bridge_generator import call_llm
 from app.config import settings
-from app.planner.goso import GOSO_COURSE_LO_CODES, GOSO_DISPLAY_TITLES
+from app.planner.goso import GOSO_COURSE_LO_CODES
+from app.planner.planner_utils import (
+    compact_lo_label as _compact_lo_label,
+    course_display_title as _course_display_title,
+    goso_definition_code as _goso_definition_code,
+    title_key as _title_key,
+)
 
 router = APIRouter()
 _plan_build_status = {}
 REPLACEMENT_PREVIEW_CANDIDATE_LIMIT = 1500
 REPLACEMENT_PREVIEW_MATCH_LIMIT = 3000
 
-def _goso_definition_code(course: Course | None) -> str:
-    code = str(getattr(course, "course_id", "") or "")
-    return code.removeprefix("GOSO-KZ-") if code.startswith("GOSO-KZ-") else ""
-
-
-def _course_display_title(course: Course | None, fallback: str = "Неизвестная дисциплина") -> str:
-    definition_code = _goso_definition_code(course)
-    return GOSO_DISPLAY_TITLES.get(definition_code) or getattr(course, "title", None) or fallback
-
-
 def _set_build_status(project_version_id: int, **payload):
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     _plan_build_status.setdefault(project_version_id, {}).update(payload)
-
-
-def _title_key(title: str | None) -> str:
-    import re
-    import unicodedata
-    value = unicodedata.normalize("NFKC", title or "").casefold()
-    return " ".join(re.findall(r"\w+", value, flags=re.UNICODE))
-
-
-def _compact_lo_label(target_los: list[str]) -> str:
-    target_los = [code for code in target_los if not str(code or "").startswith("LO-GOSO-")]
-    if not target_los:
-        return "междисциплинарных результатов"
-    if len(target_los) <= 2:
-        return ", ".join(target_los)
-    return ", ".join(target_los[:2]) + f" и ещё {len(target_los) - 2}"
 
 
 def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, target_los: list[str], semester: int) -> list[str]:
