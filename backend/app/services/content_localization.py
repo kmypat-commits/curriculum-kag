@@ -218,6 +218,13 @@ def course_localization_map(db, course_ids, include_descriptions=True):
             language: _repair_mojibake(value)
             for language, value in payload["description_translations"].items()
         }
+        # Do not present a Russian-only source as a completed multilingual
+        # record.  The UI can keep the source fallback, but the status makes
+        # the missing KK/EN translation explicit for review.
+        title_values = [str(payload["title_translations"].get(lang) or "").strip() for lang in ("ru", "kk", "en")]
+        if len(payload["title_translations"]) < 3 or (title_values[0] and title_values[0] == title_values[1] == title_values[2]):
+            if payload.get("translation_status") not in {"verified", "verified_epvo", "machine_reviewed"}:
+                payload["translation_status"] = "needs_translation"
     return result
 
 

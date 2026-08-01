@@ -412,7 +412,7 @@ export default function Repository() {
                             {filteredCourses.map(course => (
                                 <tr key={course.id}>
                                     <td><code>{course.course_id}</code></td>
-                                    <td><strong>{localizedCourse(course)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}</td>
+                                    <td><strong>{localizedCourse(course)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}{course.translation_status === 'needs_translation' && <small style={{display:'block',color:'#a15c00'}}>{localText('Нужен перевод KK/EN', 'KK/EN аудармасы қажет', 'KK/EN translation needed')}</small>}</td>
                                     <td>{course.domain}</td>
                                     <td>{course.credits}</td>
                                     <td>{localizeCycle(course.cycle_component || course.academic_component || course.type)}</td>
