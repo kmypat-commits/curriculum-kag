@@ -26,6 +26,13 @@ export const LanguageProvider = ({ children }) => {
     const localizeDomain = (value) => {
         const text = String(value || '').trim();
         const key = text.toLowerCase();
+        const cleanDomains = {
+            'информационно-коммуникационные технологии': { ru: 'Информационно-коммуникационные технологии', kk: 'Ақпараттық-коммуникациялық технологиялар', en: 'Information and Communication Technologies' },
+            'information and communication technologies': { ru: 'Информационно-коммуникационные технологии', kk: 'Ақпараттық-коммуникациялық технологиялар', en: 'Information and Communication Technologies' },
+            'стандартизация, сертификация и метрология (по отраслям)': { ru: 'Стандартизация, сертификация и метрология (по отраслям)', kk: 'Стандарттау, сертификаттау және метрология (салалар бойынша)', en: 'Standardization, Certification and Metrology (by industry)' },
+            'standardization, certification and metrology (by industry)': { ru: 'Стандартизация, сертификация и метрология (по отраслям)', kk: 'Стандарттау, сертификаттау және метрология (салалар бойынша)', en: 'Standardization, Certification and Metrology (by industry)' },
+        };
+        if (cleanDomains[key]?.[normalizedLanguage]) return cleanDomains[key][normalizedLanguage];
         const labels = {
             'информационно-коммуникационные технологии': { ru: 'Информационно-коммуникационные технологии', kk: 'Ақпараттық-коммуникациялық технологиялар', en: 'Information and Communication Technologies' },
             'information and communication technologies': { ru: 'Информационно-коммуникационные технологии', kk: 'Ақпараттық-коммуникациялық технологиялар', en: 'Information and Communication Technologies' },

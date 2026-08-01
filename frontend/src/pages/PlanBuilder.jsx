@@ -25,7 +25,7 @@ function CompactSection({ title, subtitle, accent = '#366092', defaultOpen = fal
 export default function PlanBuilder() {
     const { id } = useParams()
     const [searchParams] = useSearchParams()
-    const { t, localize, localizeCycle, language } = useLanguage()
+    const { t, localize, localizeCycle, localizeDomain, language } = useLanguage()
     const [project, setProject] = useState(null)
     const [loading, setLoading] = useState(true)
     const [building, setBuilding] = useState(false)
@@ -1124,7 +1124,7 @@ export default function PlanBuilder() {
                                     <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
                                         {Object.entries(currentPlan.domain_breakdown).filter(([, item]) => item.credits > 0 || item.min_percent > 0).map(([key, item]) => (
                                             <div key={key} style={{ padding: '8px 10px', borderRadius: 8, background: '#f6f9fc', border: '1px solid #e1e8f0' }}>
-                                                <div style={{ fontSize: 12, color: '#667' }}>{item.label || key}</div>
+                                                <div style={{ fontSize: 12, color: '#667' }}>{localizeDomain(item.label || key)}</div>
                                                 <strong>{item.credits} {t('credits')}</strong>
                                                 <span style={{ marginLeft: 6, color: '#666', fontSize: 12 }}>{item.percent}%</span>
                                                 {item.min_percent > 0 && <div style={{ fontSize: 11, color: item.percent + 0.01 >= item.min_percent ? '#2e7d32' : '#c62828' }}>{t('minimum')}: {item.min_percent}%</div>}
