@@ -1177,7 +1177,7 @@ export default function PlanBuilder() {
                                                 <div style={{ fontSize: 12, color: '#566', marginBottom: 8 }}>
                                                     {localText('\u041f\u043e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0433\u0430\u043b\u043e\u0447\u043a\u0443 \u043d\u0430\u043f\u0440\u043e\u0442\u0438\u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430 \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f, \u0447\u0442\u043e\u0431\u044b \u0443\u0432\u0438\u0434\u0435\u0442\u044c \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u043f\u043b\u0430\u043d\u0430, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044e\u0442 \u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0438\u0436\u0435\u043d\u0438\u0435.', '\u041e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u0441\u0456\u043d\u0456\u04a3 \u049b\u0430\u0441\u044b\u043d\u0430 \u0431\u0435\u043b\u0433\u0456 \u049b\u043e\u0439\u0441\u0430\u04a3\u044b\u0437, \u043e\u043d\u044b \u0440\u0430\u0441\u0442\u0430\u0439\u0442\u044b\u043d \u0436\u043e\u0441\u043f\u0430\u0440 \u043f\u04d9\u043d\u0434\u0435\u0440\u0456 \u043a\u04e9\u0440\u0441\u0435\u0442\u0456\u043b\u0435\u0434\u0456.', 'Tick a learning outcome to see the plan courses that support it.')}
                                                 </div>
-                                                <div style={{ display: 'grid', gap: 7 }}>
+                                                {false && <div style={{ display: 'grid', gap: 7 }}>
                                                     {(loCoverageSources.items || []).map(row => {
                                                         const loKey = `${activeVariant}:${row.lo_code}`
                                                         const checked = Boolean(expandedLoCourses[loKey])
@@ -1213,7 +1213,7 @@ export default function PlanBuilder() {
                                                             </div>}
                                                         </div>
                                                     })}
-                                                </div>
+                                                </div>}
                                             </div>
                                             <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                                                 {(loCoverageSources.items || []).map(row => (
