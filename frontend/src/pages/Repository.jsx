@@ -107,7 +107,7 @@ export default function Repository() {
             setImportFile(null)
             fetchCourses()
         } catch (error) {
-            alert(t('Import error') + ': ' + (error.response?.data?.detail || error.message))
+            alert(localText('Ошибка импорта', 'Импорт қатесі', 'Import error') + ': ' + (error.response?.data?.detail || error.message))
         }
     }
 
@@ -143,7 +143,7 @@ export default function Repository() {
             setAddForm({ course_id: '', title: '', domain: '', credits: 4, cycle_component: 'elective', recommended_semester: 1, description: '' })
             fetchCourses()
         } catch (err) {
-            alert(t('Error') + ': ' + (err.response?.data?.detail || err.message))
+            alert(localText('Ошибка', 'Қате', 'Error') + ': ' + (err.response?.data?.detail || err.message))
         } finally {
             setAddSaving(false)
         }
