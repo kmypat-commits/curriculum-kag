@@ -441,7 +441,7 @@ export default function LOCoverageDashboard() {
                                     : 'The graph connects courses, prerequisites, and outcomes. Clicking rebuild recalculates links for search, explanations, and recommendations; it does not automatically change the curriculum.'}
                         </div>
                         <Link to={`/projects/${id}/graph`} className="btn btn-secondary" style={{ display: 'inline-block', marginTop: 10, textDecoration: 'none' }}>
-                            {language === 'ru' ? `Открыть красивый граф плана ${selectedVariant}` : language === 'kk' ? `${selectedVariant} жоспарының графын ашу` : `Open visual graph for plan ${selectedVariant}`}
+                            {t('open_prerequisite_graph')} · {t('variant')} {selectedVariant}
                         </Link>
                     </div>
                     {systemStatus && (
