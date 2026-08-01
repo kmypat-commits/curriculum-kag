@@ -2,7 +2,7 @@
 
 Продакшен-шаблон использует PostgreSQL/pgvector на `5433` и backend без `--reload`.
 
-1. Создайте отдельный `.env.production` (секреты не коммитить): `DOMAIN`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `SECRET_KEY`.
+1. Скопируйте `.env.production.example` в `.env.production` и замените все тестовые значения. Заполненный файл не коммитить.
 2. Запустите `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build`.
 3. Caddy автоматически получает HTTPS-сертификат для `DOMAIN`, если DNS уже указывает на сервер. Проверьте `https://DOMAIN/health` и статус `docker compose ... ps`.
 4. Делайте резервную копию: `powershell -File .\scripts\backup-postgres-production.ps1`.
