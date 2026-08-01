@@ -42,6 +42,22 @@ export const LanguageProvider = ({ children }) => {
     };
     const localizeCycle = (value) => {
         const key = String(value || '').trim().toUpperCase();
+        const aliases = {
+            'БД': 'BD', BD: 'BD', 'БАЗОВЫЕ ДИСЦИПЛИНЫ': 'BD', 'BASIC DISCIPLINES': 'BD',
+            'ПД': 'PD', PD: 'PD', 'ПРОФИЛЬНЫЕ ДИСЦИПЛИНЫ': 'PD', 'PROFILE DISCIPLINES': 'PD',
+            'ООД': 'GED', OOD: 'GED', 'ОБЩЕОБРАЗОВАТЕЛЬНЫЕ ДИСЦИПЛИНЫ': 'GED', 'GENERAL EDUCATION DISCIPLINES': 'GED',
+            'КВ': 'EC', EC: 'EC', 'КОМПОНЕНТ ПО ВЫБОРУ': 'EC', 'ELECTIVE COMPONENT': 'EC',
+            'ВК': 'UC', UC: 'UC', 'ВУЗОВСКИЙ КОМПОНЕНТ': 'UC', 'UNIVERSITY COMPONENT': 'UC',
+        };
+        const code = aliases[key];
+        if (code) {
+            const labels = {
+                ru: { BD: 'БД — базовые дисциплины', PD: 'ПД — профильные дисциплины', GED: 'ООД — общеобразовательные дисциплины', EC: 'КВ — компонент по выбору', UC: 'ВК — вузовский компонент' },
+                kk: { BD: 'БД — базалық пәндер', PD: 'ПД — бейіндік пәндер', GED: 'ЖББ — жалпы білім беретін пәндер', EC: 'ТК — таңдау компоненті', UC: 'ЖК — жоғары оқу орны компоненті' },
+                en: { BD: 'BD — basic disciplines', PD: 'PD — profile disciplines', GED: 'GED — general education disciplines', EC: 'EC — elective component', UC: 'UC — university component' },
+            };
+            return labels[normalizedLanguage]?.[code] || value || '';
+        }
         const labels = {
             ru: { БД: 'БД — базовые дисциплины', BD: 'БД — базовые дисциплины', БАЗОВЫЕ: 'БД — базовые дисциплины', ПД: 'ПД — профильные дисциплины', PD: 'ПД — профильные дисциплины', ООД: 'ООД — общеобразовательные дисциплины', OOD: 'ООД — общеобразовательные дисциплины', КВ: 'КВ — компонент по выбору', 'КОМПОНЕНТ ПО ВЫБОРУ': 'КВ — компонент по выбору', ВК: 'ВК — вузовский компонент', 'ВУЗОВСКИЙ КОМПОНЕНТ': 'ВК — вузовский компонент' },
             kk: { БД: 'БД — базалық пәндер', BD: 'БД — базалық пәндер', ПД: 'ПД — бейіндік пәндер', PD: 'ПД — бейіндік пәндер', ООД: 'ООД — жалпы білім беретін пәндер', OOD: 'ООД — жалпы білім беретін пәндер', КВ: 'КВ — таңдау компоненті', ВК: 'ВК — жоғары оқу орны компоненті' },

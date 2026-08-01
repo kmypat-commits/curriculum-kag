@@ -2032,6 +2032,26 @@ async def get_variants(
                             f"ЕПВО {round(float(expert_score or 0) * 100)}% — похожая экспертная разметка из ЕПВО. "
                             f"Эти проценты не складываются; система берёт наиболее надёжный сигнал: {evidence_label}."
                         ),
+                        "explanation_translations": {
+                            "ru": (
+                                f"Итог {round(effective_score * 100)}% — сила связи «{title} → {lo.lo_code}». "
+                                f"ИИ {round(ai_score * 100)}% — прогноз модели по описанию дисциплины и текста LO. "
+                                f"ЕПВО {round(float(expert_score or 0) * 100)}% — похожая экспертная разметка из ЕПВО. "
+                                f"Эти проценты не складываются; система берёт наиболее надёжный сигнал: {evidence_label}."
+                            ),
+                            "kk": (
+                                f"Қорытынды {round(effective_score * 100)}% — «{title} → {lo.lo_code}» байланысының күші. "
+                                f"ЖИ {round(ai_score * 100)}% — пән сипаттамасы мен LO мәтініне негізделген модель болжамы. "
+                                f"ЕПВО {round(float(expert_score or 0) * 100)}% — ЕПВО деректеріндегі ұқсас сараптамалық белгі. "
+                                "Бұл пайыздар қосылмайды; жүйе ең сенімді сигналды пайдаланады."
+                            ),
+                            "en": (
+                                f"Final {round(effective_score * 100)}% — strength of the «{title} → {lo.lo_code}» link. "
+                                f"AI {round(ai_score * 100)}% — model prediction from the course description and LO text. "
+                                f"EPVO {round(float(expert_score or 0) * 100)}% — similar expert annotation from EPVO. "
+                                "These percentages are not added; the system uses the most reliable signal."
+                            ),
+                        },
                         "weak_evidence": row not in trustworthy_matches,
                         "source": evidence.get("source") or evidence.get("label") or row.model_name,
                         "expert_feedback": (

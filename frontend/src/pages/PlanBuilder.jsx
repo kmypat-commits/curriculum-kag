@@ -1663,7 +1663,7 @@ export default function PlanBuilder() {
                                                                                         </div>
                                                                                         {lo.explanation && (
                                                                                             <div style={{ marginTop: 3, maxWidth: 360, color: '#37474f', fontSize: 11, background: '#fffde7', border: '1px solid #fff59d', borderRadius: 6, padding: '5px 7px' }}>
-                                                                                                {lo.explanation}
+                                                                                                {localize(lo.explanation_translations || lo.explanation)}
                                                                                             </div>
                                                                                         )}
                                                                                         {lo.lo_id && c.course_id && (
