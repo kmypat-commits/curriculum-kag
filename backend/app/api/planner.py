@@ -2011,6 +2011,9 @@ async def get_variants(
                     expert_score = evidence.get("epvo_expert_score")
                     corrected_score = float(feedback.corrected_score or 0) if feedback and feedback.verdict == "corrected" else 0.0
                     effective_score = round(max(ai_score, float(expert_score or 0), corrected_score), 3)
+                    course_titles = (all_localizations_by_course.get(item.course_id, {}) or {}).get("title_translations", {})
+                    title_kk = course_titles.get("kk") or title
+                    title_en = course_titles.get("en") or title
                     evidence_label = (
                         "экспертная правка" if corrected_score > 0
                         else "экспертная оценка ЕПВО" if float(expert_score or 0) > 0
@@ -2040,13 +2043,13 @@ async def get_variants(
                                 f"Эти проценты не складываются; система берёт наиболее надёжный сигнал: {evidence_label}."
                             ),
                             "kk": (
-                                f"Қорытынды {round(effective_score * 100)}% — «{title} → {lo.lo_code}» байланысының күші. "
+                                f"Қорытынды {round(effective_score * 100)}% — «{title_kk} → {lo.lo_code}» байланысының күші. "
                                 f"ЖИ {round(ai_score * 100)}% — пән сипаттамасы мен LO мәтініне негізделген модель болжамы. "
                                 f"ЕПВО {round(float(expert_score or 0) * 100)}% — ЕПВО деректеріндегі ұқсас сараптамалық белгі. "
                                 "Бұл пайыздар қосылмайды; жүйе ең сенімді сигналды пайдаланады."
                             ),
                             "en": (
-                                f"Final {round(effective_score * 100)}% — strength of the «{title} → {lo.lo_code}» link. "
+                                f"Final {round(effective_score * 100)}% — strength of the «{title_en} → {lo.lo_code}» link. "
                                 f"AI {round(ai_score * 100)}% — model prediction from the course description and LO text. "
                                 f"EPVO {round(float(expert_score or 0) * 100)}% — similar expert annotation from EPVO. "
                                 "These percentages are not added; the system uses the most reliable signal."
