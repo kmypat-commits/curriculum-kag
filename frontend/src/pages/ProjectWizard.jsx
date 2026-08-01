@@ -153,18 +153,28 @@ export default function ProjectWizard() {
         axios.get('/api/epvo/groups', { params: { direction_code: code, language } }).then(response => setSecondaryGroups(response.data)).catch(() => setSecondaryGroups([]))
     }, [formData.constraints.secondary_direction_code, language])
 
-    const suggestGoals = () => {
+    const suggestGoals = async () => {
         const { name, domain1, domain2 } = context()
-        setGoalSuggestions(['goal_template_recommended', 'goal_template_practical', 'goal_template_research'].map(key =>
-            t(key).replace('{name}', name).replaceAll('{domain1}', domain1).replaceAll('{domain2}', domain2)
-        ))
+        try {
+            const response = await axios.post('/api/projects/suggestions', { name, domain1, domain2, language })
+            setGoalSuggestions(response.data.goals || [])
+        } catch (_) {
+            setGoalSuggestions(['goal_template_recommended', 'goal_template_practical', 'goal_template_research'].map(key =>
+                t(key).replace('{name}', name).replaceAll('{domain1}', domain1).replaceAll('{domain2}', domain2)
+            ))
+        }
     }
 
-    const suggestLOs = () => {
+    const suggestLOs = async () => {
         const { domain1, domain2 } = context()
-        setLoSuggestions([1, 2, 3, 4, 5, 6].map(number =>
-            t(`lo_template_${number}`).replaceAll('{domain1}', domain1).replaceAll('{domain2}', domain2)
-        ))
+        try {
+            const response = await axios.post('/api/projects/suggestions', { name: formData.name, domain1, domain2, language })
+            setLoSuggestions(response.data.learning_outcomes || [])
+        } catch (_) {
+            setLoSuggestions([1, 2, 3, 4, 5, 6].map(number =>
+                t(`lo_template_${number}`).replaceAll('{domain1}', domain1).replaceAll('{domain2}', domain2)
+            ))
+        }
     }
 
     const addSuggestedLO = (suggestion) => {

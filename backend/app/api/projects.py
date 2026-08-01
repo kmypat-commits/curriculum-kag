@@ -131,6 +131,70 @@ class ProjectConstraintsUpdate(BaseModel):
         return self
 
 
+class SuggestionRequest(BaseModel):
+    name: str = ""
+    domain1: str = ""
+    domain2: str = ""
+    language: str = "ru"
+
+
+@router.post("/suggestions")
+async def suggest_program_content(payload: SuggestionRequest, current_user: User = Depends(get_current_user)):
+    """Return localized starter goals and LOs for the wizard.
+
+    This endpoint is deliberately deterministic: it remains available when an
+    external LLM is unavailable, while keeping the response contract ready for
+    a future reviewed AI provider.
+    """
+    lang = (payload.language or "ru").lower()
+    name = payload.name.strip() or ("образовательной программы" if lang == "ru" else "білім беру бағдарламасы" if lang == "kk" else "the programme")
+    d1 = payload.domain1.strip() or ("выбранной области" if lang == "ru" else "таңдалған сала" if lang == "kk" else "the selected domain")
+    d2 = payload.domain2.strip()
+    if lang == "kk":
+        goals = [
+            f"{name} бойынша {d1} саласында теория мен практиканы біріктіретін құзыретті мамандар даярлау.",
+            f"{d1} және {d2 or 'іргелес салалар'} үшін цифрлық шешімдерді жобалау және енгізу дағдыларын қалыптастыру.",
+            f"{name} түлектерінің зерттеу, инновация және жауапты кәсіби қызметке дайындығын қамтамасыз ету.",
+        ]
+        los = [
+            f"{d1} саласының негізгі теориялары мен әдістерін түсіндіру.",
+            "Кәсіби міндеттерді шешу үшін деректер мен цифрлық құралдарды қолдану.",
+            "Кәсіби шешімдерді жобалау, іске асыру және нәтижесін бағалау.",
+            "Зерттеу әдістерін қолданып, дәлелді қорытынды жасау.",
+            "Кәсіби нәтижелерді қазақ, орыс және шетел тілдерінде ұсыну.",
+            "Этикалық, қауіпсіз және тұрақты кәсіби қызмет қағидаларын сақтау.",
+        ]
+    elif lang == "en":
+        goals = [
+            f"Prepare competent graduates for {name} by integrating theory and practice in {d1}.",
+            f"Develop the ability to design and implement digital solutions for {d1} and {d2 or 'related fields'}.",
+            f"Enable graduates of {name} to conduct research, innovate, and work responsibly in professional settings.",
+        ]
+        los = [
+            f"Explain the key theories and methods of {d1}.",
+            "Use data and digital tools to solve professional problems.",
+            "Design, implement, and evaluate professional solutions.",
+            "Apply research methods and draw evidence-based conclusions.",
+            "Present professional results in Kazakh, Russian, and a foreign language.",
+            "Follow ethical, safe, and sustainable professional practice principles.",
+        ]
+    else:
+        goals = [
+            f"Подготовить компетентных выпускников программы «{name}», объединяя теорию и практику в области {d1}.",
+            f"Сформировать навыки проектирования и внедрения цифровых решений для области {d1}{(' и ' + d2) if d2 else ''}.",
+            f"Обеспечить готовность выпускников программы «{name}» к исследованиям, инновациям и ответственной профессиональной деятельности.",
+        ]
+        los = [
+            f"Объяснять основные теории и методы области {d1}.",
+            "Применять данные и цифровые инструменты для решения профессиональных задач.",
+            "Проектировать, реализовывать и оценивать профессиональные решения.",
+            "Применять методы исследования и формулировать обоснованные выводы.",
+            "Представлять профессиональные результаты на казахском, русском и иностранном языках.",
+            "Соблюдать принципы этичной, безопасной и устойчивой профессиональной деятельности.",
+        ]
+    return {"goals": goals, "learning_outcomes": los, "source": "template_api", "ai_generated": False}
+
+
 @router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,

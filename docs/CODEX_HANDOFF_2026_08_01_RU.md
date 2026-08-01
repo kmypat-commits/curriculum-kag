@@ -196,3 +196,5 @@
 - Postgres-дамп: `backups/postgres/curriculum_kag_postgres_2026-07-29_16-55-40.dump` (2.26 GB), SHA-256 `dd7595714f29921029adf068d0101d4deedb41721446a5bb150042a62cf305a4`, restore verified 2026-07-29T12:36:34Z.
 - SBERT-модели и датасеты (`backend/models/`, `backend/experiment-results/`) в gitignore — не в git.
 - `.env` файлы (корень и `backend/`) не в git (в gitignore), содержат реальный `DATABASE_URL`, `ENABLE_SBERT=true`, `EPVO_AI_ENABLED=true`, `EPVO_AI_THRESHOLD=0.3449310730397701`.
+- 2026-08-01: граф пререквизитов получил резервную раскладку Cytoscape `breadthfirst`: если необязательный chunk `cytoscape-dagre` не загрузился, граф всё равно отображается.
+- 2026-08-01: мастер создания программы использует `POST /projects/suggestions` для локализованных заготовок цели и LO. Это детерминированный API-шаблон (`ai_generated=false`), поэтому отсутствие внешней LLM не блокирует мастер; позже его можно заменить проверенным провайдером.
