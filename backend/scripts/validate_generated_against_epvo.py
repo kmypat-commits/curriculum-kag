@@ -85,6 +85,9 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     comparisons.sort(key=lambda row: (row["jaccard"], row["shared_courses"]), reverse=True)
     top = comparisons[:5]
     real_items = [item for item in items if item.course_id]
+    metrics = plan.metrics_json or {}
+    quality = metrics.get("international_quality") or {}
+    hard_violations = int(metrics.get("prerequisite_violations") or 0) + int(metrics.get("semester_load_violations") or 0)
     return {
         "project_id": project_id,
         "title": project.title,
@@ -99,6 +102,13 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         "best_reference": top[0] if top else None,
         "top5_mean_jaccard": round(mean(row["jaccard"] for row in top), 4) if top else None,
         "top5": top,
+        "feasible": bool(metrics.get("feasible")),
+        "hard_violations": hard_violations,
+        "international_score": quality.get("score"),
+        # Atlas-inspired stress cases are intentionally retained as negative
+        # controls.  They must be reported, but not averaged with admissible
+        # curricula when estimating production quality.
+        "quality_eligible": bool(metrics.get("feasible")) and hard_violations == 0 and bool(quality.get("passed")),
     }
 
 
@@ -115,12 +125,16 @@ def main() -> None:
     finally:
         db.close()
     valid = [row for row in projects if row.get("status") == "ok"]
+    eligible = [row for row in valid if row.get("quality_eligible")]
+    rejected = [row for row in valid if not row.get("quality_eligible")]
     provenance_values = [row["epvo_provenance"] for row in valid]
     semester_values = [row["semester_alignment_pm1"] for row in valid if row["semester_alignment_pm1"] is not None]
     jaccard_values = [row["best_reference"]["jaccard"] for row in valid if row["best_reference"]]
     containment_values = [row["best_reference"]["generated_containment"] for row in valid if row["best_reference"]]
     summary = {
         "project_count": len(valid),
+        "quality_eligible_project_count": len(eligible),
+        "negative_control_count": len(rejected),
         "mean_epvo_provenance": round(mean(provenance_values), 4) if provenance_values else None,
         "epvo_provenance_bootstrap_95ci": _bootstrap_ci(provenance_values),
         "mean_semester_alignment_pm1": round(mean(semester_values), 4) if semester_values else None,
@@ -129,6 +143,10 @@ def main() -> None:
         "best_jaccard_bootstrap_95ci": _bootstrap_ci(jaccard_values),
         "mean_best_generated_containment": round(mean(containment_values), 4) if containment_values else None,
         "generated_containment_bootstrap_95ci": _bootstrap_ci(containment_values),
+        "quality_eligible_mean_epvo_provenance": round(mean([row["epvo_provenance"] for row in eligible]), 4) if eligible else None,
+        "quality_eligible_mean_semester_alignment_pm1": round(mean([row["semester_alignment_pm1"] for row in eligible if row["semester_alignment_pm1"] is not None]), 4) if eligible else None,
+        "quality_eligible_mean_best_jaccard": round(mean([row["best_reference"]["jaccard"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
+        "quality_eligible_mean_generated_containment": round(mean([row["best_reference"]["generated_containment"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "interpretation": "Structural comparison with complete EPVO reference curricula; not blinded expert evaluation.",
     }
     output = Path(args.output)
