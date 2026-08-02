@@ -308,7 +308,7 @@ export default function ProjectWizard() {
                             </div>
                             <div style={{ margin: '-4px 0 18px' }}>
                                 <button type="button" className="btn btn-secondary" onClick={suggestGoals} disabled={!formData.name.trim()}>
-                                    ✨ {t('suggest_three_goals')}
+                                    ✨ {language === 'ru' ? 'Предложить 3 цели с AI' : language === 'kk' ? 'AI арқылы 3 мақсат ұсыну' : 'Suggest 3 goals with AI'}
                                 </button>
                                 {!formData.name.trim() && <div style={{ color: '#777', fontSize: '13px', marginTop: '6px' }}>{t('enter_name_first')}</div>}
                             </div>
@@ -349,7 +349,7 @@ export default function ProjectWizard() {
                             <p style={{ color: '#666', marginBottom: '20px' }}>
                                 {t('add_lo_description')}
                             </p>
-                            <div style={{ marginBottom: '18px' }}><button type="button" className="btn btn-secondary" onClick={suggestLOs}>✨ {t('suggest_learning_outcomes')}</button></div>
+                            <div style={{ marginBottom: '18px' }}><button type="button" className="btn btn-secondary" onClick={suggestLOs}>✨ {language === 'ru' ? 'Предложить результаты обучения с AI' : language === 'kk' ? 'AI арқылы оқу нәтижелерін ұсыну' : 'Suggest learning outcomes with AI'}</button></div>
                             {loSuggestions.length > 0 && <div style={{ background: '#f6f9fc', border: '1px solid #d9e3ef', borderRadius: '8px', padding: '14px', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '10px' }}><strong>{t('suggested_learning_outcomes')}</strong><button type="button" className="btn btn-primary" onClick={addAllSuggestedLOs}>{t('add_all')}</button></div>
                                 {loSuggestions.map((suggestion, index) => {
