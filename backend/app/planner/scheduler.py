@@ -4,6 +4,7 @@ from typing import Dict, List
 from itertools import combinations
 import math
 import re
+from statistics import median
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
@@ -6102,6 +6103,31 @@ def ensure_credit_bridge_modules(
 
 def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int, db: Session) -> Dict[int, List[Dict]]:
     courses = _unique_items_by_title(courses)
+    # EPVO may contain several historical rows for one canonical course.  A
+    # single row's recommended semester is therefore unstable.  Before
+    # placement, use the median of available EPVO semesters for each real
+    # course.  Regulatory GOSO and bridge items keep their explicit semester.
+    epvo_course_ids = {
+        int(item["course_id"])
+        for item in courses
+        if item.get("course_id") is not None
+        and not item.get("regulatory_required")
+        and item.get("bridge_module_id") is None
+    }
+    semester_values: Dict[int, List[int]] = {}
+    if epvo_course_ids:
+        rows = db.query(EpvoDisciplineNormalized).filter(
+            EpvoDisciplineNormalized.approved_course_id.in_(epvo_course_ids)
+        ).all()
+        for row in rows:
+            value = int(row.recommended_semester or 0)
+            if value > 0:
+                semester_values.setdefault(int(row.approved_course_id), []).append(value)
+    for item in courses:
+        course_id = item.get("course_id")
+        values = semester_values.get(int(course_id), []) if course_id is not None else []
+        if values:
+            item["recommended_semester"] = int(round(median(values)))
     schedule = {semester: [] for semester in range(1, num_semesters + 1)}
     loads = {semester: 0 for semester in schedule}
     lower, upper = max(0, nominal_load - 3), nominal_load + 3
