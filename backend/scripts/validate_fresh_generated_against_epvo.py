@@ -1,0 +1,82 @@
+"""Compare freshly generated plans with EPVO references without persisting them.
+
+Every temporary Plan/PlanItem is rolled back after evaluation.  This separates
+the current planner from historical saved plans in the external audit.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from app.database import SessionLocal
+from app.models.course import Course
+from app.models.epvo import EpvoDisciplineNormalized
+from app.models.plan import Plan, PlanItem
+from app.models.project import Project
+from app.planner.scheduler import build_curriculum_plan
+from validate_generated_against_epvo import evaluate
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--projects", nargs="+", type=int, default=[13, 15, 16, 19, 135, 136, 137])
+    parser.add_argument("--variants", nargs="+", default=["A"])
+    parser.add_argument("--output", type=Path, default=Path("experiment-results/external-epvo-plan-validation/fresh-report.json"))
+    args = parser.parse_args()
+    db = SessionLocal()
+    try:
+        rows = db.query(EpvoDisciplineNormalized).filter(
+            EpvoDisciplineNormalized.approved_course_id.isnot(None)
+        ).all()
+        by_id = {int(row.id): row for row in rows}
+        results = []
+        for project_id in args.projects:
+            project = db.query(Project).filter(Project.id == project_id).first()
+            if not project or not project.versions:
+                results.append({"project_id": project_id, "status": "missing_project_or_version"})
+                continue
+            version = max(project.versions, key=lambda value: value.version_number)
+            for variant in args.variants:
+                generated = build_curriculum_plan(version.id, db, variant, commit=False)
+                temporary = Plan(
+                    project_version_id=version.id,
+                    variant_type=variant,
+                    metrics_json=generated.get("metrics") or {},
+                    is_active=1,
+                )
+                db.add(temporary)
+                db.flush()
+                for semester, items in (generated.get("schedule") or {}).items():
+                    for item in items:
+                        db.add(PlanItem(
+                            plan_id=temporary.id,
+                            semester=int(semester),
+                            course_id=item.get("course_id"),
+                            bridge_module_id=item.get("bridge_module_id"),
+                            credits=int(item.get("credits") or 0),
+                            course_type=item.get("type") or "mandatory",
+                            prerequisites_snapshot=item.get("prerequisites") or [],
+                        ))
+                db.flush()
+                results.append(evaluate(project_id, db, rows, by_id) | {"variant_fresh": variant})
+                db.rollback()
+        summary_rows = [row for row in results if row.get("quality_eligible")]
+        summary = {
+            "project_count": len(results),
+            "quality_eligible_project_count": len(summary_rows),
+            "mean_epvo_provenance": round(sum(float(row.get("epvo_provenance") or 0) for row in summary_rows) / max(1, len(summary_rows)), 4),
+            "mean_epvo_provenance_excluding_regulatory": round(sum(float(row.get("epvo_provenance_excluding_regulatory") or 0) for row in summary_rows) / max(1, len(summary_rows)), 4),
+            "mean_semester_alignment_pm1": round(sum(float(row.get("semester_alignment_pm1") or 0) for row in summary_rows) / max(1, len(summary_rows)), 4),
+            "interpretation": "Fresh transactional planner output; structural comparison, not blinded expert evaluation.",
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps({"summary": summary, "projects": results}, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps(summary, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
