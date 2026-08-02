@@ -20,6 +20,7 @@ from app.config import settings
 from app.models.plan import Plan, PlanItem
 from app.planner.verifier import verify_curriculum_plan
 from app.services.ai_contracts import validate_achievability
+from app.services.pydantic_ai_adapter import run_achievability as run_pydantic_ai_achievability
 import json
 from typing import Optional
 
@@ -398,6 +399,14 @@ Respond with a valid JSON object (no markdown) with this structure:
 
 Only include LOs with issues in the recommendations array. If all LOs are on track, return an empty array.
 Write summary, issue, and suggestion in {response_language}. Keep verdict and status values exactly as specified in English."""
+
+        pydantic_result = run_pydantic_ai_achievability(prompt)
+        if pydantic_result:
+            pydantic_result["analysis_source"] = "pydantic_ai"
+            pydantic_result["api_completed"] = True
+            if plan_coverage:
+                pydantic_result["coverage_source"] = f"plan_{plan_coverage['variant_type']}"
+            return pydantic_result
 
         api_key = settings.LLM_API_KEY
         has_real_key = api_key and not api_key.startswith("sk-placeholder")

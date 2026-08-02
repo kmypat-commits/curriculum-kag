@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_MODEL_NAME: str = "gpt-4"
     LLM_BASE_URL: str = ""  # For local models
+    # Optional typed LLM orchestration. Disabled by default so the production
+    # environment does not need an additional dependency.
+    PYDANTIC_AI_ENABLED: bool = False
+    PYDANTIC_AI_MODEL_NAME: str = ""
     
     # KAG Configuration
     SIMILARITY_THRESHOLD: float = 0.82

@@ -9,6 +9,7 @@ from app.models.project import Project, ProjectVersion, LearningOutcome
 from app.services.auth import get_current_user
 from app.config import settings
 from app.services.ai_contracts import validate_suggestions
+from app.services.pydantic_ai_adapter import run_suggestions as run_pydantic_ai_suggestions
 import json
 
 router = APIRouter()
@@ -161,6 +162,9 @@ async def suggest_program_content(payload: SuggestionRequest, current_user: User
 Return ONLY JSON with exactly two arrays: goals (exactly 3 concise goals) and learning_outcomes (exactly 6 measurable outcomes). Write all text in { {'ru':'Russian','kk':'Kazakh','en':'English'}.get(lang, 'Russian') }. Goals must describe the programme purpose; outcomes must start with an observable verb and be aligned with the domain(s). Do not mention AI or that you are generating suggestions unless it is part of the programme name."""
                 )
     api_key = settings.LLM_API_KEY
+    pydantic_result = run_pydantic_ai_suggestions(ai_prompt, required_terms=(d1, d2))
+    if pydantic_result:
+        return {**pydantic_result, "source": "pydantic_ai", "ai_generated": True, "language": lang}
     if api_key and not api_key.startswith("sk-placeholder"):
         try:
             from openai import OpenAI
