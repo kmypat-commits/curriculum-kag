@@ -248,7 +248,7 @@ export default function PrerequisiteGraph() {
                         {selected && <SelectedCard selected={selected} graph={graph} t={t} id={id} onClose={() => setSelected(null)} />}
                         {selectedEdge && <EdgeCard edge={selectedEdge} graph={graph} language={language} localize={localize} onClose={() => setSelectedEdge(null)} />}
                     </div>
-                    <div className="right-rail">{competencies.semesters.map(record => <ResultStage key={record.semester} record={record} active={activeSemester} t={t} language={language} insight={semesterInsights[record.semester]} loading={insightLoading === record.semester} onAnalyze={() => analyzeSemester(record.semester)} />)}</div>
+                    <div className="right-rail">{competencies.semesters.map(record => <ResultStage key={record.semester} record={record} active={activeSemester} t={t} language={language} localize={localize} insight={semesterInsights[record.semester]} loading={insightLoading === record.semester} onAnalyze={() => analyzeSemester(record.semester)} />)}</div>
                 </div>
             </>}
         </main>
@@ -329,7 +329,7 @@ function CourseStage({ record, graph, active, t, onCourse, localize }) {
     </section>
 }
 
-function ResultStage({ record, active, t, language, insight, loading, onAnalyze }) {
+function ResultStage({ record, active, t, language, localize, insight, loading, onAnalyze }) {
     const color = neon[(record.semester - 1) % neon.length]
     return <section className={'semester-stage stage-card ' + (active === record.semester ? 'active' : '')} style={{ '--neon': color, minHeight: stageHeight, padding: 16, marginBottom: 16 }}>
         <div style={{ color, fontSize: 11 }}>{t('result_of_stage')}</div><h3 style={{ margin: '5px 0 12px' }}>{t('student_can_now')}</h3>
