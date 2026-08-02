@@ -3555,6 +3555,7 @@ def build_curriculum_plan(
 
     selected_courses = sanitize_selected_courses(selected_courses)
     selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
+    selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
 
     for _ in range(12):
         schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
@@ -3791,6 +3792,7 @@ def build_curriculum_plan(
             real_fill["selection_method"] = "final_real_credit_fill"
             selected_courses.append(real_fill)
 
+    selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
     schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
     schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
     provisional = verify_curriculum_plan(schedule, project_version, db)
@@ -6099,6 +6101,48 @@ def ensure_credit_bridge_modules(
 
     db.flush()
     return modules
+
+
+def _apply_scoped_epvo_semesters(
+    items: List[Dict], project_version: ProjectVersion, db: Session
+) -> List[Dict]:
+    """Attach the typical semester from the selected EPVO scope when known."""
+    constraints = project_version.project.constraints_json or {}
+    groups = {
+        str(value).strip()
+        for value in (constraints.get("group_code"), constraints.get("secondary_group_code"))
+        if str(value or "").strip()
+    }
+    directions = {
+        str(value).strip()
+        for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code"))
+        if str(value or "").strip()
+    }
+    course_ids = {
+        int(item["course_id"])
+        for item in items
+        if item.get("course_id") is not None
+        and not item.get("regulatory_required")
+        and item.get("bridge_module_id") is None
+    }
+    scoped_values: Dict[int, List[int]] = {}
+    if course_ids and (groups or directions):
+        rows = db.query(EpvoDisciplineNormalized).filter(
+            EpvoDisciplineNormalized.approved_course_id.in_(course_ids)
+        ).all()
+        for row in rows:
+            if not epvo_row_matches_education_level(row, constraints.get("education_level")):
+                continue
+            if not (groups.intersection(row.group_codes or []) or directions.intersection(row.direction_codes or [])):
+                continue
+            value = int(row.typical_semester or 0)
+            if value > 0:
+                scoped_values.setdefault(int(row.approved_course_id), []).append(value)
+    for item in items:
+        values = scoped_values.get(int(item["course_id"]), []) if item.get("course_id") is not None else []
+        if values:
+            item["recommended_semester"] = int(round(median(values)))
+    return items
 
 
 def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int, db: Session) -> Dict[int, List[Dict]]:
