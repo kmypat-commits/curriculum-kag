@@ -6205,7 +6205,11 @@ def _apply_scoped_epvo_semesters(
                 scoped_values.setdefault(int(row.approved_course_id), []).append(value)
     for item in items:
         values = scoped_values.get(int(item["course_id"]), []) if item.get("course_id") is not None else []
-        if values:
+        # A scoped EPVO median (selected direction/group and education level)
+        # is more informative than the global catalogue median.  Preserve it
+        # when the caller has already attached one; use the global value only
+        # as a fallback for unscoped candidates.
+        if values and not item.get("recommended_semester"):
             item["recommended_semester"] = int(round(median(values)))
     return items
 

@@ -82,7 +82,9 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
             continue
         generated_epvo.add(discipline_id)
         row = scope_by_id.get(discipline_id) or all_epvo_by_id.get(discipline_id)
-        typical_values = typical_by_course.get(int(course.id), []) if course else []
+        # The aggregation key is the EPVO approved-course id (the numeric
+        # suffix of ``EPVO-<id>``), not the local Course primary key.
+        typical_values = typical_by_course.get(int(discipline_id), [])
         fallback = int(row.typical_semester) if row and row.typical_semester else None
         if fallback is not None and not (1 <= fallback and (not max_semesters or fallback <= max_semesters)):
             fallback = None
