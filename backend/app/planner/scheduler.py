@@ -4627,6 +4627,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_scope_by_id: Dict[int, int] = {}
     epvo_priority_by_id: Dict[int, int] = {}
     epvo_domain_evidence: Dict[int, List[int]] = {}
+    epvo_semester_values: Dict[int, List[int]] = {}
     if group_codes or direction_codes:
         scope_conditions = [
             cast(EpvoDisciplineNormalized.group_codes, String).like(f'%"{code}"%')
@@ -4665,6 +4666,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if relevance_value < 0.52 and rank_value < 3 and not strong_program_evidence:
                 continue
             epvo_level_scope_allowed_ids.add(int(row.approved_course_id))
+            typical_semester = int(row.typical_semester or 0)
+            if 1 <= typical_semester <= int(constraints.get("total_semesters") or 8):
+                epvo_semester_values.setdefault(int(row.approved_course_id), []).append(typical_semester)
             # Project-specific expert evidence is already present in
             # MatchScore. Avoid aggregating the entire multi-million-link EPVO
             # table for every A/B/C variant merely as a tie-breaker.
@@ -4716,6 +4720,26 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         if course is None:
             return 0
         return epvo_priority_by_id.get(course.id, epvo_priority.get(_title_key(course.title), 0))
+    def semester_stability_rank(course: Course | None) -> float:
+        """Prefer candidates whose scoped EPVO semester evidence is stable.
+
+        This is deliberately a secondary rank component: LO evidence, expert
+        support, scope and domain relevance remain dominant. A zero value means
+        that no scoped semester evidence is available and therefore never
+        penalizes a candidate by itself.
+        """
+        if course is None:
+            return 0.0
+        values = []
+        course_code = str(course.course_id or "")
+        if course_code.startswith("EPVO-"):
+            try:
+                values = epvo_semester_values.get(int(course_code.split("-", 1)[1]), [])
+            except (TypeError, ValueError):
+                values = []
+        if not values:
+            return 0.0
+        return -float(max(values) - min(values)) + min(0.25, len(values) / 100.0)
     def role_rank(course: Course | None) -> int:
         return _course_role_rank(course, project_domains)
 
@@ -4893,6 +4917,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 role_rank(course),
                 scope_rank(course),
                 priority_rank(course),
+                semester_stability_rank(course),
                 -(course.recommended_semester or 99),
                 -course_depth(cid),
                 -len(prereq_ids_by_course.get(cid, [])),
@@ -4903,8 +4928,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         if variant_type == "C":
             domains = {(version.project.domain1 or "").lower(), (version.project.domain2 or "").lower()}
             domain_bonus = 1 if course and any(d and (d in (course.domain or "").lower() or (course.domain or "").lower() in d) for d in domains) else 0
-            return (role_rank(course), scope_rank(course), priority_rank(course), -len(prereq_ids_by_course.get(cid, [])), domain_bonus, data["sum"] / credits, -course_depth(cid), -course.id)
-        return (role_rank(course), scope_rank(course), priority_rank(course), len(data["los"]), data["sum"], data["max"], -course_depth(cid), -course.id)
+            return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), -len(prereq_ids_by_course.get(cid, [])), domain_bonus, data["sum"] / credits, -course_depth(cid), -course.id)
+        return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), len(data["los"]), data["sum"], data["max"], -course_depth(cid), -course.id)
     candidate_ids = sorted(
         (cid for cid in aggregates if cid in courses and is_project_domain(courses[cid]) and course_depth(cid) < num_semesters),
         key=rank,
