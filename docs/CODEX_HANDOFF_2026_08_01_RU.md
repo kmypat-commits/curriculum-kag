@@ -9,6 +9,14 @@
 
 ## 1. Что уже проверено и работает (green gate)
 
+### Дополнение 2026-08-02
+
+- В PostgreSQL восстановлены RU/KK/EN локализации дисциплин из нормализованного и сырого слоя ЕПВО; 26\,696 дисциплин имеют все три языка, повреждённых значений — 0.
+- Проверены и включены в единый аудит 125 направлений и 483 групп ОП: пропусков и повреждённых переводов нет.
+- API `/api/epvo/directions` возвращает локализованные названия для `ru`, `kk` и `en`; пример `6B011`: «Педагогика и психология», «Педагогика және психология», «Pedagogy and Psychology».
+- Acceptance после восстановления: backend 33/33, PostgreSQL smoke, контрольные A/B/C 6/6 и frontend production build — успешно.
+- Повторяемые инструменты: `backend/scripts/repair_epvo_localizations.py` и расширенный `backend/scripts/audit_course_localizations.py`.
+
 | Проверка | Результат |
 |---|---|
 | Юнит-тесты `run_tests.py` | 33/33 PASS (плюс 2 файла: `test_curriculum_kag.py`, `test_goso_components.py`) |
