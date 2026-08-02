@@ -42,6 +42,7 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         return {"project_id": project_id, "title": project.title, "status": "missing_plan"}
 
     constraints = project.constraints_json or {}
+    max_semesters = int(constraints.get("total_semesters") or 0)
     groups = {str(value) for value in (constraints.get("group_code"), constraints.get("secondary_group_code")) if value}
     directions = {str(value) for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code")) if value}
     scope_rows = [row for row in all_epvo_rows if _scope_match(row, groups, directions)]
@@ -51,9 +52,14 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     # arbitrary row makes the external metric noisy.  Use the median of the
     # matching scope rows, which is robust to one exceptional programme.
     typical_by_course: dict[int, list[int]] = defaultdict(list)
+    invalid_typical_rows = 0
     for row in scope_rows:
         if row.approved_course_id and row.typical_semester:
-            typical_by_course[int(row.approved_course_id)].append(int(row.typical_semester))
+            value = int(row.typical_semester)
+            if 1 <= value and (not max_semesters or value <= max_semesters):
+                typical_by_course[int(row.approved_course_id)].append(value)
+            else:
+                invalid_typical_rows += 1
 
     programme_sets: dict[str, set[int]] = {}
     for row in scope_rows:
@@ -77,7 +83,10 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         generated_epvo.add(discipline_id)
         row = scope_by_id.get(discipline_id) or all_epvo_by_id.get(discipline_id)
         typical_values = typical_by_course.get(int(course.id), []) if course else []
-        typical_semester = median(typical_values) if typical_values else (row.typical_semester if row else None)
+        fallback = int(row.typical_semester) if row and row.typical_semester else None
+        if fallback is not None and not (1 <= fallback and (not max_semesters or fallback <= max_semesters)):
+            fallback = None
+        typical_semester = median(typical_values) if typical_values else fallback
         if typical_semester:
             semester_checks.append(abs(int(item.semester) - int(typical_semester)) <= 1)
 
@@ -117,6 +126,7 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
             len(generated_epvo) / max(1, len(real_items) - len(regulatory_items)), 4
         ),
         "semester_alignment_pm1": round(mean(semester_checks), 4) if semester_checks else None,
+        "invalid_typical_semester_rows": invalid_typical_rows,
         "reference_programmes": len(programme_sets),
         "best_reference": top[0] if top else None,
         "top5_mean_jaccard": round(mean(row["jaccard"] for row in top), 4) if top else None,
@@ -167,6 +177,7 @@ def main() -> None:
         "quality_eligible_mean_epvo_provenance": round(mean([row["epvo_provenance"] for row in eligible]), 4) if eligible else None,
         "quality_eligible_mean_epvo_provenance_excluding_regulatory": round(mean([row["epvo_provenance_excluding_regulatory"] for row in eligible]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_pm1": round(mean([row["semester_alignment_pm1"] for row in eligible if row["semester_alignment_pm1"] is not None]), 4) if eligible else None,
+        "quality_eligible_invalid_typical_semester_rows": sum(int(row.get("invalid_typical_semester_rows") or 0) for row in eligible),
         "quality_eligible_mean_best_jaccard": round(mean([row["best_reference"]["jaccard"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "quality_eligible_mean_generated_containment": round(mean([row["best_reference"]["generated_containment"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "interpretation": "Structural comparison with complete EPVO reference curricula; not blinded expert evaluation.",

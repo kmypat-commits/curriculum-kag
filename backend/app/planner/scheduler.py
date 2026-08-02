@@ -6118,6 +6118,7 @@ def _apply_scoped_epvo_semesters(
         for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code"))
         if str(value or "").strip()
     }
+    max_semesters = int(constraints.get("total_semesters") or 0)
     course_ids = {
         int(item["course_id"])
         for item in items
@@ -6136,7 +6137,7 @@ def _apply_scoped_epvo_semesters(
             if not (groups.intersection(row.group_codes or []) or directions.intersection(row.direction_codes or [])):
                 continue
             value = int(row.typical_semester or 0)
-            if value > 0:
+            if 1 <= value and (not max_semesters or value <= max_semesters):
                 scoped_values.setdefault(int(row.approved_course_id), []).append(value)
     for item in items:
         values = scoped_values.get(int(item["course_id"]), []) if item.get("course_id") is not None else []
@@ -6165,7 +6166,7 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
         ).all()
         for row in rows:
             value = int(row.typical_semester or 0)
-            if value > 0:
+            if 1 <= value <= num_semesters:
                 semester_values.setdefault(int(row.approved_course_id), []).append(value)
     for item in courses:
         course_id = item.get("course_id")
