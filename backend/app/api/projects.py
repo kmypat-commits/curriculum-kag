@@ -7,6 +7,8 @@ from app.database import get_db
 from app.models.user import User
 from app.models.project import Project, ProjectVersion, LearningOutcome
 from app.services.auth import get_current_user
+from app.config import settings
+import json
 
 router = APIRouter()
 
@@ -150,6 +152,33 @@ async def suggest_program_content(payload: SuggestionRequest, current_user: User
     name = payload.name.strip() or ("образовательной программы" if lang == "ru" else "білім беру бағдарламасы" if lang == "kk" else "the programme")
     d1 = payload.domain1.strip() or ("выбранной области" if lang == "ru" else "таңдалған сала" if lang == "kk" else "the selected domain")
     d2 = payload.domain2.strip()
+    # Ask the configured provider on every click when credentials are present.
+    # The deterministic catalog below remains the auditable fallback.
+    ai_prompt = (f"Create content for an educational programme named '{name}' in '{d1}'"
+                 + (f" and '{d2}'" if d2 else "")
+                 + f""".
+Return ONLY JSON with exactly two arrays: goals (exactly 3 concise goals) and learning_outcomes (exactly 6 measurable outcomes). Write all text in { {'ru':'Russian','kk':'Kazakh','en':'English'}.get(lang, 'Russian') }. Goals must describe the programme purpose; outcomes must start with an observable verb and be aligned with the domain(s). Do not mention AI or that you are generating suggestions unless it is part of the programme name."""
+                )
+    api_key = settings.LLM_API_KEY
+    if api_key and not api_key.startswith("sk-placeholder"):
+        try:
+            from openai import OpenAI
+            kwargs = {"api_key": api_key, "timeout": 20.0, "max_retries": 0}
+            if settings.LLM_BASE_URL:
+                kwargs["base_url"] = settings.LLM_BASE_URL
+            response = OpenAI(**kwargs).chat.completions.create(
+                model=settings.LLM_MODEL_NAME,
+                messages=[{"role": "system", "content": "Return valid JSON only."}, {"role": "user", "content": ai_prompt}],
+                temperature=0.4, max_tokens=1800, response_format={"type": "json_object"},
+            )
+            data = json.loads(response.choices[0].message.content or "{}")
+            goals = [str(x).strip() for x in data.get("goals", []) if str(x).strip()][:3]
+            los = [str(x).strip() for x in data.get("learning_outcomes", []) if str(x).strip()][:6]
+            if len(goals) == 3 and len(los) >= 3:
+                return {"goals": goals, "learning_outcomes": los, "source": "openai_api", "ai_generated": True, "language": lang}
+        except Exception:
+            pass
+
     if lang == "kk":
         goals = [
             f"{name} бойынша {d1} саласында теория мен практиканы біріктіретін құзыретті мамандар даярлау.",
@@ -192,7 +221,7 @@ async def suggest_program_content(payload: SuggestionRequest, current_user: User
             "Представлять профессиональные результаты на казахском, русском и иностранном языках.",
             "Соблюдать принципы этичной, безопасной и устойчивой профессиональной деятельности.",
         ]
-    return {"goals": goals, "learning_outcomes": los, "source": "template_api", "ai_generated": False}
+    return {"goals": goals, "learning_outcomes": los, "source": "deterministic_template", "ai_generated": False, "language": lang}
 
 
 @router.post("", response_model=ProjectResponse)
