@@ -704,6 +704,15 @@ async def get_semester_competencies(
         raise HTTPException(status_code=404, detail="Сначала сформируйте варианты учебного плана")
 
     items = db.query(PlanItem).filter(PlanItem.plan_id == plan.id).order_by(PlanItem.semester).all()
+    # Resolve all course rows once.  The unlock calculation below used to
+    # reference the graph endpoint's local maps, which do not exist in this
+    # endpoint and caused every graph page to fail with HTTP 500.
+    course_ids = {int(item.course_id) for item in items if item.course_id is not None}
+    course_by_id = {
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_(course_ids or {-1})).all()
+    }
+    localization_by_course = course_localization_map(db, course_by_id.keys())
     program_los = {
         lo.id: lo for lo in db.query(LearningOutcome).filter(
             LearningOutcome.project_version_id == project_version_id
