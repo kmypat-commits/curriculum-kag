@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.project import Project, ProjectVersion, LearningOutcome
 from app.services.auth import get_current_user
 from app.config import settings
+from app.services.ai_contracts import validate_suggestions
 import json
 
 router = APIRouter()
@@ -175,7 +176,8 @@ Return ONLY JSON with exactly two arrays: goals (exactly 3 concise goals) and le
             goals = [str(x).strip() for x in data.get("goals", []) if str(x).strip()][:3]
             los = [str(x).strip() for x in data.get("learning_outcomes", []) if str(x).strip()][:6]
             if len(goals) == 3 and len(los) >= 3:
-                return {"goals": goals, "learning_outcomes": los, "source": "openai_api", "ai_generated": True, "language": lang}
+                validated = validate_suggestions({"goals": goals, "learning_outcomes": los}, required_terms=(d1, d2))
+                return {**validated.model_dump(), "source": "openai_api", "ai_generated": True, "language": lang}
         except Exception:
             pass
 
@@ -221,7 +223,8 @@ Return ONLY JSON with exactly two arrays: goals (exactly 3 concise goals) and le
             "Представлять профессиональные результаты на казахском, русском и иностранном языках.",
             "Соблюдать принципы этичной, безопасной и устойчивой профессиональной деятельности.",
         ]
-    return {"goals": goals, "learning_outcomes": los, "source": "deterministic_template", "ai_generated": False, "language": lang}
+    validated = validate_suggestions({"goals": goals, "learning_outcomes": los}, required_terms=(d1, d2))
+    return {**validated.model_dump(), "source": "deterministic_template", "ai_generated": False, "language": lang}
 
 
 @router.post("", response_model=ProjectResponse)

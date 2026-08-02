@@ -19,6 +19,7 @@ from app.kag.feedback import promote_bridge_to_course, record_plan_feedback
 from app.config import settings
 from app.models.plan import Plan, PlanItem
 from app.planner.verifier import verify_curriculum_plan
+from app.services.ai_contracts import validate_achievability
 import json
 from typing import Optional
 
@@ -481,6 +482,22 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
             })
 
         result = json.loads(raw)
+        # Validate both provider and deterministic responses against the same
+        # typed contract.  Invalid provider JSON becomes an explicit review
+        # state instead of leaking a 500 or malformed UI payload.
+        try:
+            result = validate_achievability(result).model_dump()
+        except Exception:
+            result = {
+                "verdict": "Needs Improvement",
+                "score": 0,
+                "summary": {
+                    "ru": "Ответ AI не прошёл проверку схемы; требуется ручная проверка покрытия LO.",
+                    "kk": "ЖИ жауабы схема тексеруінен өтпеді; LO қамтуын қолмен тексеру қажет.",
+                    "en": "The AI response failed schema validation; LO coverage requires manual review.",
+                }.get(language, "Ответ AI не прошёл проверку схемы; требуется ручная проверка покрытия LO."),
+                "recommendations": [],
+            }
         # Explicit provenance lets the UI distinguish a real provider response
         # from the deterministic offline fallback.
         result.setdefault("analysis_source", "openai_api" if has_real_key and settings.LLM_PROVIDER == "openai" else "deterministic_evidence")
