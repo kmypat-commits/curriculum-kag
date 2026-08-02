@@ -85,6 +85,10 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     comparisons.sort(key=lambda row: (row["jaccard"], row["shared_courses"]), reverse=True)
     top = comparisons[:5]
     real_items = [item for item in items if item.course_id]
+    regulatory_items = [
+        item for item in real_items
+        if (courses.get(item.course_id).cycle_component or "").lower().startswith("goso_")
+    ]
     metrics = plan.metrics_json or {}
     quality = metrics.get("international_quality") or {}
     hard_violations = int(metrics.get("prerequisite_violations") or 0) + int(metrics.get("semester_load_violations") or 0)
@@ -97,6 +101,10 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         "plan_courses": len(real_items),
         "epvo_courses": len(generated_epvo),
         "epvo_provenance": round(len(generated_epvo) / max(1, len(real_items)), 4),
+        "regulatory_real_courses_excluded": len(regulatory_items),
+        "epvo_provenance_excluding_regulatory": round(
+            len(generated_epvo) / max(1, len(real_items) - len(regulatory_items)), 4
+        ),
         "semester_alignment_pm1": round(mean(semester_checks), 4) if semester_checks else None,
         "reference_programmes": len(programme_sets),
         "best_reference": top[0] if top else None,
@@ -128,6 +136,7 @@ def main() -> None:
     eligible = [row for row in valid if row.get("quality_eligible")]
     rejected = [row for row in valid if not row.get("quality_eligible")]
     provenance_values = [row["epvo_provenance"] for row in valid]
+    adjusted_provenance_values = [row["epvo_provenance_excluding_regulatory"] for row in valid]
     semester_values = [row["semester_alignment_pm1"] for row in valid if row["semester_alignment_pm1"] is not None]
     jaccard_values = [row["best_reference"]["jaccard"] for row in valid if row["best_reference"]]
     containment_values = [row["best_reference"]["generated_containment"] for row in valid if row["best_reference"]]
@@ -136,6 +145,7 @@ def main() -> None:
         "quality_eligible_project_count": len(eligible),
         "negative_control_count": len(rejected),
         "mean_epvo_provenance": round(mean(provenance_values), 4) if provenance_values else None,
+        "mean_epvo_provenance_excluding_regulatory": round(mean(adjusted_provenance_values), 4) if adjusted_provenance_values else None,
         "epvo_provenance_bootstrap_95ci": _bootstrap_ci(provenance_values),
         "mean_semester_alignment_pm1": round(mean(semester_values), 4) if semester_values else None,
         "semester_alignment_bootstrap_95ci": _bootstrap_ci(semester_values),
@@ -144,6 +154,7 @@ def main() -> None:
         "mean_best_generated_containment": round(mean(containment_values), 4) if containment_values else None,
         "generated_containment_bootstrap_95ci": _bootstrap_ci(containment_values),
         "quality_eligible_mean_epvo_provenance": round(mean([row["epvo_provenance"] for row in eligible]), 4) if eligible else None,
+        "quality_eligible_mean_epvo_provenance_excluding_regulatory": round(mean([row["epvo_provenance_excluding_regulatory"] for row in eligible]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_pm1": round(mean([row["semester_alignment_pm1"] for row in eligible if row["semester_alignment_pm1"] is not None]), 4) if eligible else None,
         "quality_eligible_mean_best_jaccard": round(mean([row["best_reference"]["jaccard"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "quality_eligible_mean_generated_containment": round(mean([row["best_reference"]["generated_containment"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
