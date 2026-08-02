@@ -2497,6 +2497,13 @@ def _diversify_variant_items(
             if 1.0 - product + 1e-9 < float(settings.COVERAGE_THRESHOLD):
                 return False
         return True
+
+    def preserves_core_competencies(course_ids: set[int]) -> bool:
+        """Do not diversify by removing the only RK/ICT competency block."""
+        from app.planner.verifier import _ict_competency_audit
+        courses = [course for course in db.query(Course).filter(Course.id.in_(course_ids)).all()]
+        audit = _ict_competency_audit(courses, project_version.project.constraints_json or {})
+        return bool(audit.get("passed"))
     alternatives_by_credit: Dict[int, List[Course]] = {}
     for course in db.query(Course).all():
         key = _title_key(course.title)
@@ -2559,6 +2566,7 @@ def _diversify_variant_items(
                     (project_version.project.constraints_json or {}).get("education_level"),
                 )
                 and preserves_professional_coverage(trial_ids)
+                and preserves_core_competencies(trial_ids)
             ):
                 candidate = possible
                 break
@@ -2617,7 +2625,7 @@ def _diversify_variant_items(
                     int(value) for value in selected_ids
                     if value is not None and int(value) not in old_ids
                 } | {int(course.id) for course in new_pair}
-                if not preserves_professional_coverage(trial_ids):
+                if not preserves_professional_coverage(trial_ids) or not preserves_core_competencies(trial_ids):
                     continue
                 for (item_index, old_item), course in zip(old_pair, new_pair):
                     normalized[item_index] = {
