@@ -49,6 +49,16 @@ export const LanguageProvider = ({ children }) => {
     };
     const localizeCycle = (value) => {
         const key = String(value || '').trim().toUpperCase();
+        const cleanCycle = { '\u0411\u0414': 'BD', 'BD': 'BD', '\u041f\u0414': 'PD', 'PD': 'PD', '\u041e\u041e\u0414': 'GED', 'OOD': 'GED', '\u041a\u0412': 'EC', 'EC': 'EC', '\u0412\u041a': 'UC', 'UC': 'UC' };
+        const cleanCode = cleanCycle[key];
+        if (cleanCode) {
+            const cleanLabels = {
+                ru: { BD: '\u0411\u0414 — \u0431\u0430\u0437\u043e\u0432\u044b\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b', PD: '\u041f\u0414 — \u043f\u0440\u043e\u0444\u0438\u043b\u044c\u043d\u044b\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b', GED: '\u041e\u041e\u0414 — \u043e\u0431\u0449\u0435\u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b', EC: '\u041a\u0412 — \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442 \u043f\u043e \u0432\u044b\u0431\u043e\u0440\u0443', UC: '\u0412\u041a — \u0432\u0443\u0437\u043e\u0432\u0441\u043a\u043e\u0439 \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442' },
+                kk: { BD: '\u0411\u0414 — \u0431\u0430\u0437\u0430\u043b\u044b\u049b \u043f\u04d9\u043d\u0434\u0435\u0440', PD: '\u041f\u0414 — \u0431\u0435\u0439\u0456\u043d\u0434\u0456\u043a \u043f\u04d9\u043d\u0434\u0435\u0440', GED: '\u0416\u0411\u0411 — \u0436\u0430\u043b\u043f\u044b \u0431\u0456\u043b\u0456\u043c \u0431\u0435\u0440\u0435\u0442\u0456\u043d \u043f\u04d9\u043d\u0434\u0435\u0440', EC: '\u0422\u041a — \u0442\u0430\u04a3\u0434\u0430\u0443 \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442\u0456', UC: '\u0416\u041a — \u0436\u043e\u0493\u0430\u0440\u044b \u043e\u049b\u0443 \u043e\u0440\u043d\u044b \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442\u0456' },
+                en: { BD: 'BD — basic disciplines', PD: 'PD — profile disciplines', GED: 'GED — general education disciplines', EC: 'EC — elective component', UC: 'UC — university component' },
+            };
+            return cleanLabels[normalizedLanguage]?.[cleanCode] || cleanCode;
+        }
         const aliases = {
             'БД': 'BD', BD: 'BD', 'БАЗОВЫЕ ДИСЦИПЛИНЫ': 'BD', 'BASIC DISCIPLINES': 'BD',
             'ПД': 'PD', PD: 'PD', 'ПРОФИЛЬНЫЕ ДИСЦИПЛИНЫ': 'PD', 'PROFILE DISCIPLINES': 'PD',
