@@ -1567,7 +1567,7 @@ export default function PlanBuilder() {
                                                                 </div>
                                                             )}
                                                             <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
-                                                                {c.academic_cycle && <>{localText('Цикл', 'Цикл', 'Cycle')}: <b>{c.academic_cycle}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('расчёт системы', 'жүйе есебі', 'system estimate')})` : ''}{' · '}</>}
+                                                                {c.academic_cycle && <>{localText('Цикл', 'Цикл', 'Cycle')}: <b>{localizeCycle(c.academic_cycle)}</b>{c.academic_cycle_source === 'inferred' ? ` (${localText('расчёт системы', 'жүйе есебі', 'system estimate')})` : ''}{' · '}</>}
                                                                 {localText('Компонент', 'Компонент', 'Component')}: {componentLabel(c.academic_component || c.cycle_component || c.type)}
                                                                 {' · '}{localText('Источник', 'Дереккөз', 'Source')}: {
                                                                     c.course_source === 'rk_mandatory' ? localText('обязательная дисциплина РК', 'ҚР міндетті пәні', 'RK mandatory course')
