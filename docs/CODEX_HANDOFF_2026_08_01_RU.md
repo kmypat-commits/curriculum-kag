@@ -34,17 +34,11 @@
 
 ## 2. КРИТИЧЕСКИЕ проблемы (решать в первую очередь)
 
-### 2.1 Расхождение БД: `.env` указывает на несуществующие данные
-- Оба `.env` (корень и `backend/`) → `DATABASE_URL=postgresql://curriculum_user:...@localhost:5432/curriculum_kag` (primary).
-- **primary-база на 5432 никогда не была засеяна** — `docker-compose.yml` создаёт контейнер `curriculum-kag-db` с пустой БД, а `backend/init_db.sql` содержит только `CREATE EXTENSION IF NOT EXISTS vector;`.
-- Все проверенные данные живут в **shadow** `5433/curriculum_kag_shadow` (эту базу переносил cutover 2026-07-25/29).
-- `start.ps1` для `-Database postgres` и `postgres-shadow` ставит именно 5433 (`start.ps1:269-277`).
-
-**Решение (выбрать одно и зафиксировать):**
-- (A) Обновить оба `.env` на `localhost:5433/curriculum_kag_shadow` (рекомендуется — данные уже там и верифицированы), либо
-- (B) Документировать, что primary 5432 — пустой контейнер, и явно запретить `-Database postgres` без миграции данных.
-
-**Кто делал:** Codex — поправить `.env` + комментарий, перепроверить `start.ps1`.
+### 2.1 Единый локальный PostgreSQL-режим зафиксирован
+- Оба локальных `.env` теперь указывают на заполненную и проверенную базу `localhost:5433/curriculum_kag_shadow`.
+- `start.ps1` для `-Database postgres` и `postgres-shadow` также использует 5433 (`start.ps1:269-277`).
+- Пустая база на 5432 не используется приложением; данные не удалялись и не перезаписывались.
+- Для запуска с актуальным EPVO: `.\start.ps1 -Database postgres`.
 
 ### 2.2 PostgreSQL/Docker сейчас выключен; auto-режим тихо падает в SQLite
 - Порты 5432/5433 не слушают, docker daemon не запущен (`docker version` → connection error).
