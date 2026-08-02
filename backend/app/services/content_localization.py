@@ -8,7 +8,7 @@ TRANSLATIONS_FILE = Path(__file__).resolve().parents[2] / "data" / "course_trans
 
 def _repair_mojibake(value):
     """Repair legacy UTF-8-as-CP1251 text at the presentation boundary."""
-    if not isinstance(value, str) or not value or ("Р" not in value and "С" not in value):
+    if not isinstance(value, str) or not value or not any(marker in value for marker in ("\u0420", "\u0421", "\u00d0", "\u00d1", "\u00c2")):
         return value
     try:
         repaired = value.encode("cp1251").decode("utf-8")
