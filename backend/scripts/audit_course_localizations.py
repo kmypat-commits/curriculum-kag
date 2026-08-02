@@ -37,6 +37,7 @@ def main() -> int:
     engine = create_engine(args.database_url, pool_pre_ping=True)
     missing: dict[str, int] = {}
     samples: dict[str, list[dict]] = {}
+    catalogue_layers: dict[str, dict] = {}
     with engine.connect() as connection:
         total_courses = int(connection.execute(text("SELECT count(*) FROM courses")).scalar() or 0)
         by_language = {
@@ -91,6 +92,33 @@ def main() -> int:
             ).mappings()
             samples[language] = [dict(row) for row in rows]
 
+        # Directions and programme groups are also user-visible multilingual
+        # catalogue data.  Keep this check in the same audit so a complete
+        # course report cannot hide an untranslated wizard dropdown.
+        for table in ("epvo_directions", "epvo_groups"):
+            try:
+                total = int(connection.execute(text(f"SELECT count(*) FROM {table}")).scalar() or 0)
+                missing_count = int(connection.execute(text(
+                    f"SELECT count(*) FROM {table} WHERE "
+                    "title_ru IS NULL OR trim(title_ru)='' OR "
+                    "title_kk IS NULL OR trim(title_kk)='' OR "
+                    "title_en IS NULL OR trim(title_en)=''"
+                )).scalar() or 0)
+                corrupt_count = int(connection.execute(text(
+                    f"SELECT count(*) FROM {table} WHERE "
+                    "title_ru LIKE :marker OR title_kk LIKE :marker OR title_en LIKE :marker"
+                ), {"marker": "%�%"}).scalar() or 0)
+                catalogue_layers[table] = {
+                    "total": total,
+                    "missing_translations": missing_count,
+                    "corrupt_values": corrupt_count,
+                    "complete": total > 0 and missing_count == 0 and corrupt_count == 0,
+                }
+            except Exception:
+                # Older SQLite snapshots do not contain the layered EPVO
+                # catalogue; the course audit remains useful there.
+                catalogue_layers[table] = {"available": False}
+
     report = {
         "database": safe_database_name(args.database_url),
         "database_dialect": engine.dialect.name,
@@ -104,8 +132,13 @@ def main() -> int:
             total_courses > 0
             and all(value == 0 for value in missing.values())
             and corrupt_values == 0
+            and all(
+                not layer.get("available", True) or layer.get("complete", False)
+                for layer in catalogue_layers.values()
+            )
         ),
         "samples": samples,
+        "catalogue_layers": catalogue_layers,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
@@ -120,6 +153,8 @@ def main() -> int:
         "statuses": by_status,
         "missing": missing,
         "corrupt_values": corrupt_values,
+        "directions": catalogue_layers.get("epvo_directions"),
+        "groups": catalogue_layers.get("epvo_groups"),
         "output": str(args.output),
     }, ensure_ascii=False))
     return 0 if report["complete"] else 1
