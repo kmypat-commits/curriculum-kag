@@ -356,16 +356,6 @@ async def analyze_lo_achievability(
                 if item["coverage"] < threshold
             }
 
-        if plan_coverage and not gap_los:
-            summaries = {
-                "ru": "Все результаты обучения подтверждены дисциплинами или bridge-модулями выбранного плана.",
-                "kk": "Таңдалған жоспардағы барлық оқу нәтижелері пәндермен немесе bridge-модульдермен расталған.",
-                "en": "All learning outcomes are supported by courses or bridge modules in the selected plan.",
-            }
-            language = payload.get("language", "ru") if isinstance(payload, dict) else "ru"
-            return {"verdict": "Ready", "score": 100, "summary": summaries.get(language, summaries["ru"]),
-                    "recommendations": [], "coverage_source": f"plan_{plan_coverage['variant_type']}"}
-
         # Build LO summary for prompt
         lo_lines = []
         for lo in los:
@@ -491,6 +481,12 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
             })
 
         result = json.loads(raw)
+        # Explicit provenance lets the UI distinguish a real provider response
+        # from the deterministic offline fallback.
+        result.setdefault("analysis_source", "openai_api" if has_real_key and settings.LLM_PROVIDER == "openai" else "deterministic_evidence")
+        result.setdefault("api_completed", True)
+        if plan_coverage:
+            result.setdefault("coverage_source", f"plan_{plan_coverage['variant_type']}")
         return result
 
     except HTTPException:
