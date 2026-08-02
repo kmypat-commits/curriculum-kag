@@ -496,7 +496,24 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # The analysis button must always produce a usable, auditable result.
+        # If a legacy project has incomplete match rows or the optional AI
+        # provider fails before the normal fallback is reached, return an
+        # explicit deterministic status instead of leaking a generic HTTP 500.
+        language = payload.get("language", "ru") if isinstance(payload, dict) else "ru"
+        messages = {
+            "ru": "Автоматическая проверка не смогла завершить полный расчёт для этой версии. Сохранён честный результат: требуется проверка покрытия LO и связей дисциплина–LO.",
+            "kk": "Бұл нұсқа үшін автоматты тексеру толық есепті аяқтай алмады. Адал нәтиже сақталды: LO қамтуы мен пән–LO байланыстарын тексеру қажет.",
+            "en": "The automatic check could not complete the full calculation for this version. An honest result was preserved: LO coverage and course–LO links require review.",
+        }
+        return {
+            "verdict": "Needs Improvement",
+            "score": 0,
+            "summary": messages.get(language, messages["ru"]),
+            "recommendations": [],
+            "analysis_source": "deterministic_fallback",
+            "api_completed": True,
+        }
 
 
 
