@@ -6120,7 +6120,7 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
             EpvoDisciplineNormalized.approved_course_id.in_(epvo_course_ids)
         ).all()
         for row in rows:
-            value = int(row.recommended_semester or 0)
+            value = int(row.typical_semester or 0)
             if value > 0:
                 semester_values.setdefault(int(row.approved_course_id), []).append(value)
     for item in courses:
