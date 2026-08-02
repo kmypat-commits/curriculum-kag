@@ -29,7 +29,11 @@ def main() -> int:
         rows = db.query(EpvoDisciplineNormalized).filter(
             EpvoDisciplineNormalized.approved_course_id.isnot(None)
         ).all()
-        by_id = {int(row.id): row for row in rows}
+        by_id = {
+            int(row.approved_course_id): row
+            for row in rows
+            if row.approved_course_id is not None
+        }
         results = []
         for project_id in args.projects:
             project = db.query(Project).filter(Project.id == project_id).first()
@@ -62,12 +66,17 @@ def main() -> int:
                 results.append(evaluate(project_id, db, rows, by_id) | {"variant_fresh": variant})
                 db.rollback()
         summary_rows = [row for row in results if row.get("quality_eligible")]
+        def mean_metric(key: str):
+            values = [float(row[key]) for row in summary_rows if row.get(key) is not None]
+            return round(sum(values) / len(values), 4) if values else None
         summary = {
             "project_count": len(results),
             "quality_eligible_project_count": len(summary_rows),
             "mean_epvo_provenance": round(sum(float(row.get("epvo_provenance") or 0) for row in summary_rows) / max(1, len(summary_rows)), 4),
             "mean_epvo_provenance_excluding_regulatory": round(sum(float(row.get("epvo_provenance_excluding_regulatory") or 0) for row in summary_rows) / max(1, len(summary_rows)), 4),
-            "mean_semester_alignment_pm1": round(sum(float(row.get("semester_alignment_pm1") or 0) for row in summary_rows) / max(1, len(summary_rows)), 4),
+            "mean_semester_alignment_pm1": mean_metric("semester_alignment_pm1"),
+            "mean_semester_alignment_scoped_median_pm1": mean_metric("semester_alignment_scoped_median_pm1"),
+            "mean_semester_alignment_any_source_pm1": mean_metric("semester_alignment_any_source_pm1"),
             "interpretation": "Fresh transactional planner output; structural comparison, not blinded expert evaluation.",
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -46,7 +46,11 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     groups = {str(value) for value in (constraints.get("group_code"), constraints.get("secondary_group_code")) if value}
     directions = {str(value) for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code")) if value}
     scope_rows = [row for row in all_epvo_rows if _scope_match(row, groups, directions)]
-    scope_by_id = {row.id: row for row in scope_rows}
+    scope_by_id = {
+        int(row.approved_course_id): row
+        for row in scope_rows
+        if row.approved_course_id is not None
+    }
     # A canonical approved course may aggregate several EPVO source cards,
     # each with a different recommended semester.  Comparing against one
     # arbitrary row makes the external metric noisy.  Use the median of the
@@ -71,6 +75,8 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     courses = {row.id: row for row in db.query(Course).filter(Course.id.in_(course_ids or [-1])).all()}
     generated_epvo: set[int] = set()
     semester_checks: list[bool] = []
+    semester_checks_scoped_median: list[bool] = []
+    semester_checks_any_source: list[bool] = []
     for item in items:
         course = courses.get(item.course_id)
         code = str(course.course_id or "") if course else ""
@@ -91,6 +97,13 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         typical_semester = median(typical_values) if typical_values else fallback
         if typical_semester:
             semester_checks.append(abs(int(item.semester) - int(typical_semester)) <= 1)
+        if typical_values:
+            semester_checks_scoped_median.append(
+                abs(int(item.semester) - int(median(typical_values))) <= 1
+            )
+            semester_checks_any_source.append(
+                min(abs(int(item.semester) - int(value)) for value in typical_values) <= 1
+            )
 
     comparisons = []
     for source_id, reference in programme_sets.items():
@@ -128,6 +141,8 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
             len(generated_epvo) / max(1, len(real_items) - len(regulatory_items)), 4
         ),
         "semester_alignment_pm1": round(mean(semester_checks), 4) if semester_checks else None,
+        "semester_alignment_scoped_median_pm1": round(mean(semester_checks_scoped_median), 4) if semester_checks_scoped_median else None,
+        "semester_alignment_any_source_pm1": round(mean(semester_checks_any_source), 4) if semester_checks_any_source else None,
         "invalid_typical_semester_rows": invalid_typical_rows,
         "reference_programmes": len(programme_sets),
         "best_reference": top[0] if top else None,
@@ -161,6 +176,8 @@ def main() -> None:
     provenance_values = [row["epvo_provenance"] for row in valid]
     adjusted_provenance_values = [row["epvo_provenance_excluding_regulatory"] for row in valid]
     semester_values = [row["semester_alignment_pm1"] for row in valid if row["semester_alignment_pm1"] is not None]
+    semester_scoped_values = [row["semester_alignment_scoped_median_pm1"] for row in valid if row.get("semester_alignment_scoped_median_pm1") is not None]
+    semester_any_values = [row["semester_alignment_any_source_pm1"] for row in valid if row.get("semester_alignment_any_source_pm1") is not None]
     jaccard_values = [row["best_reference"]["jaccard"] for row in valid if row["best_reference"]]
     containment_values = [row["best_reference"]["generated_containment"] for row in valid if row["best_reference"]]
     summary = {
@@ -171,6 +188,8 @@ def main() -> None:
         "mean_epvo_provenance_excluding_regulatory": round(mean(adjusted_provenance_values), 4) if adjusted_provenance_values else None,
         "epvo_provenance_bootstrap_95ci": _bootstrap_ci(provenance_values),
         "mean_semester_alignment_pm1": round(mean(semester_values), 4) if semester_values else None,
+        "mean_semester_alignment_scoped_median_pm1": round(mean(semester_scoped_values), 4) if semester_scoped_values else None,
+        "mean_semester_alignment_any_source_pm1": round(mean(semester_any_values), 4) if semester_any_values else None,
         "semester_alignment_bootstrap_95ci": _bootstrap_ci(semester_values),
         "mean_best_jaccard": round(mean(jaccard_values), 4) if jaccard_values else None,
         "best_jaccard_bootstrap_95ci": _bootstrap_ci(jaccard_values),
@@ -179,6 +198,8 @@ def main() -> None:
         "quality_eligible_mean_epvo_provenance": round(mean([row["epvo_provenance"] for row in eligible]), 4) if eligible else None,
         "quality_eligible_mean_epvo_provenance_excluding_regulatory": round(mean([row["epvo_provenance_excluding_regulatory"] for row in eligible]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_pm1": round(mean([row["semester_alignment_pm1"] for row in eligible if row["semester_alignment_pm1"] is not None]), 4) if eligible else None,
+        "quality_eligible_mean_semester_alignment_scoped_median_pm1": round(mean([row["semester_alignment_scoped_median_pm1"] for row in eligible if row.get("semester_alignment_scoped_median_pm1") is not None]), 4) if eligible else None,
+        "quality_eligible_mean_semester_alignment_any_source_pm1": round(mean([row["semester_alignment_any_source_pm1"] for row in eligible if row.get("semester_alignment_any_source_pm1") is not None]), 4) if eligible else None,
         "quality_eligible_invalid_typical_semester_rows": sum(int(row.get("invalid_typical_semester_rows") or 0) for row in eligible),
         "quality_eligible_mean_best_jaccard": round(mean([row["best_reference"]["jaccard"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "quality_eligible_mean_generated_containment": round(mean([row["best_reference"]["generated_containment"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
