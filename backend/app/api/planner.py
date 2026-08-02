@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from io import BytesIO
 from datetime import datetime, timezone
 import time
+from statistics import median
 from app.database import get_db
 from app.models.user import User
 from app.services.auth import get_current_user
@@ -3198,6 +3199,7 @@ async def course_replacement_preview(
         ] or [0.0])
 
     relevant_rows_by_course = {}
+    typical_semesters_by_course = {}
     for row in normalized_rows:
         if (
             not row.approved_course_id
@@ -3209,6 +3211,8 @@ async def course_replacement_preview(
         previous = relevant_rows_by_course.get(int(row.approved_course_id))
         if previous is None or epvo_row_relevance_score(row, plan.project_version) > epvo_row_relevance_score(previous, plan.project_version):
             relevant_rows_by_course[int(row.approved_course_id)] = row
+        if row.typical_semester:
+            typical_semesters_by_course.setdefault(int(row.approved_course_id), []).append(int(row.typical_semester))
     ranked = []
     required_lo_count = 1 if len(target_lo_ids) <= 1 else 2
     domains = [plan.project_version.project.domain1, plan.project_version.project.domain2]
@@ -3231,7 +3235,11 @@ async def course_replacement_preview(
             "domain": course.domain,
             "type": course.cycle_component,
         }, int(constraints.get("total_semesters", 8) or 8))
-        recommended_semester = int(row.typical_semester or course.recommended_semester or 1)
+        recommended_semester = int(
+            median(typical_semesters_by_course.get(course.id, []))
+            if typical_semesters_by_course.get(course.id)
+            else (row.typical_semester or course.recommended_semester or 1)
+        )
         if complexity_min > current_semester or recommended_semester > current_semester + 1:
             continue
         target_values = [float((data.get("values") or {}).get(lo_id) or 0) for lo_id in target_lo_ids]
