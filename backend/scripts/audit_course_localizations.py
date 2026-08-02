@@ -73,6 +73,30 @@ def main() -> int:
                 {"marker": "%\ufffd%"},
             ).mappings()
         ]
+        same_title_fallbacks = int(connection.execute(text("""
+            WITH p AS (
+              SELECT course_id,
+                max(title) FILTER (WHERE language='ru') AS ru,
+                max(title) FILTER (WHERE language='kk') AS kk,
+                max(title) FILTER (WHERE language='en') AS en
+              FROM course_localizations GROUP BY course_id
+            )
+            SELECT count(*) FROM p WHERE ru=kk AND kk=en AND coalesce(ru,'')<>''
+        """)).scalar() or 0)
+        unresolved_description_fallbacks = int(connection.execute(text("""
+            WITH p AS (
+              SELECT course_id,
+                max(description) FILTER (WHERE language='ru') AS ru,
+                max(description) FILTER (WHERE language='kk') AS kk,
+                max(description) FILTER (WHERE language='en') AS en
+              FROM course_localizations GROUP BY course_id
+            )
+            SELECT count(*) FROM p
+            JOIN epvo_disciplines_normalized n ON n.approved_course_id=p.course_id
+            WHERE p.ru=p.kk AND p.kk=p.en AND coalesce(p.ru,'')<>''
+              AND trim(coalesce(n.content_json->>'description_kk',''))=''
+              AND trim(coalesce(n.content_json->>'description_en',''))=''
+        """)).scalar() or 0)
         for language in ("ru", "kk", "en"):
             condition = (
                 "FROM courses c LEFT JOIN course_localizations l "
@@ -128,6 +152,11 @@ def main() -> int:
         "missing_by_language": missing,
         "corrupt_values": corrupt_values,
         "corrupt_samples": corrupt_samples,
+        "same_title_fallbacks": same_title_fallbacks,
+        "unresolved_description_fallbacks": unresolved_description_fallbacks,
+        "translation_quality_score": round(
+            1 - unresolved_description_fallbacks / max(total_courses, 1), 4
+        ),
         "complete": (
             total_courses > 0
             and all(value == 0 for value in missing.values())
@@ -153,6 +182,8 @@ def main() -> int:
         "statuses": by_status,
         "missing": missing,
         "corrupt_values": corrupt_values,
+        "translation_quality_score": report["translation_quality_score"],
+        "unresolved_description_fallbacks": unresolved_description_fallbacks,
         "directions": catalogue_layers.get("epvo_directions"),
         "groups": catalogue_layers.get("epvo_groups"),
         "output": str(args.output),
