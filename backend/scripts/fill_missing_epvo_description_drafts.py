@@ -39,6 +39,37 @@ DRAFTS = {
     },
 }
 
+# The first version of this helper contained a CP1251-rendered copy of the
+# Kazakh drafts.  Keep the historical mapping above for traceability, but use
+# this UTF-8 mapping for every write.  These are still machine drafts and must
+# remain ``needs_review`` until an expert confirms them.
+CLEAN_DRAFTS = {
+    24445: {
+        "kk": "Пән оқу тиімділігін арттыратын психологиялық әдістер мен жағдайларды жүйелі түрде түсінуді қалыптастырады. Білім алушылар психологиялық ағарту, оқу-тәрбие үдерістерін болжау және іске асыру әдістерін меңгереді.",
+        "en": "The course develops a systematic understanding of psychological methods and conditions that improve learning effectiveness. Students acquire methods for psychological education, forecasting, and implementing educational processes.",
+    },
+    24546: {
+        "kk": "Пән психикалық сала бұзылыстарының психопатологиялық белгілері мен синдромдарын жас ерекшеліктерін ескере отырып тану қабілетін қалыптастырады.",
+        "en": "The course develops the ability to recognize psychopathological symptoms and syndromes of disorders of the mental sphere while considering age-related characteristics.",
+    },
+    24572: {
+        "kk": "Пән ғылыми зерттеулерге қажетті логикалық және әдіснамалық білімдерді, зерттеудегі логиканың рөлін және әдіснамалық талдау тәсілдерін қамтиды. Білім алушылар логикалық пайымдау рәсімдерін, логика заңдары мен қағидаларын, дәлелдеу, сын және пікірталас әдістерін қолдануды үйренеді.",
+        "en": "The course develops the logical and methodological knowledge required for research, including the role of logic in research and approaches to methodological analysis. Students learn to apply logical reasoning procedures, laws and principles of logic, sound argumentation, criticism, and debate.",
+    },
+    24573: {
+        "kk": "Пән психологиялық кеңес беруде қажетті дағдыларды қалыптастыруға бағытталған. Білім алушылар тиімді психологиялық байланыс орнатуды, кеңес беру әдістері мен техникаларын қолдануды, араласу мақсаттарын айқындау үшін ақпаратты талдауды және клиникалық әрі жеке психологиялық ерекшеліктерді ескеретін бағдарламалар әзірлеуді үйренеді.",
+        "en": "The course focuses on developing counselling skills. Students learn to establish effective psychological contact, apply counselling methods and techniques, analyze information needed to define intervention goals, and design intervention programmes that account for clinical and individual psychological characteristics.",
+    },
+    24606: {
+        "kk": "Пән әртүрлі аурулары бар адамдардың психологиялық ерекшеліктерін, психикалық бұзылыстарды диагностикалау әдістерін және пациент пен медицина қызметкері арасындағы қарым-қатынас психологиясын зерттейді. Білім алушылар психикалық жағдайды бағалауды, мінез-құлық пен психиканы талдауды және психокоррекциялық, психогигиеналық әрі психопрофилактикалық жоспарлар әзірлеуді үйренеді.",
+        "en": "Students study the psychological characteristics of people with various diseases, methods for diagnosing mental disorders, and the psychology of patient-health-care-worker relationships. They learn to assess mental states, analyze behaviour and the psyche, and design psychocorrectional, psychohygienic, and psychopreventive plans.",
+    },
+    24627: {
+        "kk": "Пән денсаулық сақтау ұйымдарында адам ресурстарын басқаруда қолданылатын психологиялық құралдар мен технологияларды зерттейді. Білім алушылар тұлғааралық және топаралық қарым-қатынас дағдыларын дамытып, медициналық психология мен денсаулық сақтаудағы нормативтік құқықтық актілерді қолдануды меңгереді.",
+        "en": "The course examines psychological tools and technologies used to manage human resources in health-care organizations. Students develop interpersonal and intergroup communication skills and learn to apply regulatory legal acts in medical psychology and health care.",
+    },
+}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -47,7 +78,7 @@ def main() -> int:
     engine = create_engine(args.database_url, future=True)
     updated = 0
     with engine.begin() as conn:
-        for course_id, drafts in DRAFTS.items():
+        for course_id, drafts in CLEAN_DRAFTS.items():
             row = conn.execute(
                 text("SELECT content_json FROM epvo_disciplines_normalized WHERE approved_course_id=:id"),
                 {"id": course_id},

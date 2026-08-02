@@ -54,12 +54,44 @@ def main() -> int:
                 "FROM course_localizations GROUP BY status"
             )).mappings()
         }
+        # Replacement characters and common UTF-8/CP1251 mojibake markers are
+        # both invalid for a user-visible translation.  The latter used to be
+        # missed because the text was non-empty and therefore looked complete.
+        corrupt_predicate = " OR ".join(
+            [
+                "title LIKE :replacement",
+                "description LIKE :replacement",
+                "title LIKE :moji1",
+                "description LIKE :moji1",
+                "title LIKE :moji2",
+                "description LIKE :moji2",
+                "title LIKE :moji3",
+                "description LIKE :moji3",
+                "title LIKE :moji4",
+                "description LIKE :moji4",
+                "title LIKE :moji5",
+                "description LIKE :moji5",
+                "title LIKE :moji6",
+                "description LIKE :moji6",
+                "title LIKE :moji7",
+                "description LIKE :moji7",
+            ]
+        )
+        corrupt_params = {
+            "replacement": "%\ufffd%",
+            # Use multi-character fragments to avoid false positives such as
+            # the legitimate Kazakh acronym ``КРІ``.
+            "moji1": "%РџР%",
+            "moji2": "%РЎР%",
+            "moji3": "%РІР%",
+            "moji4": "%С‚Р%",
+            "moji5": "%вЂ%",
+            "moji6": "%У™%",
+            "moji7": "%Т›%",
+        }
         corrupt_values = int(connection.execute(
-            text(
-                "SELECT count(*) FROM course_localizations "
-                "WHERE title LIKE :marker OR description LIKE :marker"
-            ),
-            {"marker": "%\ufffd%"},
+            text("SELECT count(*) FROM course_localizations WHERE " + corrupt_predicate),
+            corrupt_params,
         ).scalar() or 0)
         corrupt_samples = [
             dict(row)
@@ -67,10 +99,10 @@ def main() -> int:
                 text(
                     "SELECT course_id, language, title, description "
                     "FROM course_localizations "
-                    "WHERE title LIKE :marker OR description LIKE :marker "
+                    "WHERE " + corrupt_predicate + " "
                     "ORDER BY course_id, language LIMIT 30"
                 ),
-                {"marker": "%\ufffd%"},
+                corrupt_params,
             ).mappings()
         ]
         same_title_fallbacks = int(connection.execute(text("""
@@ -128,10 +160,14 @@ def main() -> int:
                     "title_kk IS NULL OR trim(title_kk)='' OR "
                     "title_en IS NULL OR trim(title_en)=''"
                 )).scalar() or 0)
+                catalogue_predicate = " OR ".join(
+                    f"{column} LIKE :{parameter}"
+                    for column in ("title_ru", "title_kk", "title_en")
+                        for parameter in ("replacement", "moji1", "moji2", "moji3", "moji4", "moji5", "moji6", "moji7")
+                )
                 corrupt_count = int(connection.execute(text(
-                    f"SELECT count(*) FROM {table} WHERE "
-                    "title_ru LIKE :marker OR title_kk LIKE :marker OR title_en LIKE :marker"
-                ), {"marker": "%�%"}).scalar() or 0)
+                    f"SELECT count(*) FROM {table} WHERE {catalogue_predicate}"
+                ), corrupt_params).scalar() or 0)
                 catalogue_layers[table] = {
                     "total": total,
                     "missing_translations": missing_count,
