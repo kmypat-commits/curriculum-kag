@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useNotifications } from '../contexts/NotificationContext'
 
 export default function Repository() {
     const { user, logout } = useAuth()
@@ -15,6 +16,7 @@ export default function Repository() {
     }
     const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const navigate = useNavigate()
+    const { notify } = useNotifications()
     const [courses, setCourses] = useState([])
     const [repositoryStats, setRepositoryStats] = useState({ total_courses: 0, domains: [] })
     const [loading, setLoading] = useState(true)
@@ -102,12 +104,12 @@ export default function Repository() {
             await axios.post('/api/repository/courses/import', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             })
-            alert(t('Import successful!'))
+            notify(t('Import successful!'), 'success')
             setShowImport(false)
             setImportFile(null)
             fetchCourses()
         } catch (error) {
-            alert(localText('Ошибка импорта', 'Импорт қатесі', 'Import error') + ': ' + (error.response?.data?.detail || error.message))
+            notify(localText('Ошибка импорта', 'Импорт қатесі', 'Import error') + ': ' + (error.response?.data?.detail || error.message))
         }
     }
 
@@ -143,7 +145,7 @@ export default function Repository() {
             setAddForm({ course_id: '', title: '', domain: '', credits: 4, cycle_component: 'elective', recommended_semester: 1, description: '' })
             fetchCourses()
         } catch (err) {
-            alert(localText('Ошибка', 'Қате', 'Error') + ': ' + (err.response?.data?.detail || err.message))
+            notify(localText('Ошибка', 'Қате', 'Error') + ': ' + (err.response?.data?.detail || err.message))
         } finally {
             setAddSaving(false)
         }
@@ -211,9 +213,9 @@ export default function Repository() {
         try {
             await axios.delete(`/api/repository/courses/${courseId}`)
             setCourses(courses.filter(c => c.id !== courseId))
-            alert(t('Course deleted'))
+            notify(t('Course deleted'), 'success')
         } catch (error) {
-            alert(t('Error deleting'))
+            notify(t('Error deleting'))
         }
     }
 
@@ -230,11 +232,11 @@ export default function Repository() {
                 prerequisites: editingCourse.prerequisites?.map(p => p.id) || []
             }
             await axios.put(`/api/repository/courses/${editingCourse.id}`, data)
-            alert(t('Changes saved'))
+            notify(t('Changes saved'), 'success')
             setEditingCourse(null)
             fetchCourses()
         } catch (error) {
-            alert(t('Error saving'))
+            notify(t('Error saving'))
         }
     }
 

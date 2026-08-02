@@ -1381,46 +1381,18 @@ def build_plan(
             _plan_build_status[project_version_id].update(
                 stage=f"variant_{variant_type}_start", progress={"A": 25, "B": 50, "C": 75}[variant_type]
             )
-            # The selector is deterministic for scoped EPVO/KZ programmes.
-            # Re-running the full scheduler three times used to consume >1 GB
-            # per variant and could block the API for tens of minutes.  Reuse
-            # the verified A schedule for B/C in that case; they remain real,
-            # separately persisted variants and are safe to activate.
-            if variant_type in {"B", "C"} and "A" in variants:
-                source = db.query(Plan).filter(Plan.id == variants["A"]["plan_id"]).first()
-                clone = Plan(
-                    project_version_id=project_version_id,
-                    variant_type=variant_type,
-                    metrics_json=dict(source.metrics_json or {}),
-                    is_active=0,
-                )
-                db.add(clone)
-                db.flush()
-                for source_item in source.items:
-                    db.add(PlanItem(
-                        plan_id=clone.id,
-                        semester=source_item.semester,
-                        course_id=source_item.course_id,
-                        bridge_module_id=source_item.bridge_module_id,
-                        credits=source_item.credits,
-                        course_type=source_item.course_type,
-                        prerequisites_snapshot=source_item.prerequisites_snapshot,
-                    ))
-                db.flush()
-                result = {
-                    "plan_id": clone.id,
-                    "variant_type": variant_type,
-                    "metrics": dict(clone.metrics_json or {}),
-                    "verification": (clone.metrics_json or {}).get("verification") or {},
-                    "schedule": {},
-                }
-            else:
-                result = build_curriculum_plan(
-                    project_version_id,
-                    db,
-                    variant_type,
-                    commit=False,
-                )
+            # Every requested variant must pass through the selector.  Cloning
+            # A into B/C made the labels cosmetic and allowed identical plans
+            # to pass acceptance.  The scheduler has deterministic
+            # variant-specific ranking, so separate runs remain reproducible
+            # while producing genuinely different candidates when alternatives
+            # exist.
+            result = build_curriculum_plan(
+                project_version_id,
+                db,
+                variant_type,
+                commit=False,
+            )
             variants[variant_type] = result
             timings[f"variant_{variant_type}"] = round(time.perf_counter() - variant_started, 2)
             _set_build_status(
@@ -1439,7 +1411,20 @@ def build_plan(
             # plans; otherwise a valid plan could never be saved when one
             # advisory international-quality check is below its threshold.
             jurisdiction = str((version.project.constraints_json or {}).get("jurisdiction") or "INTERNATIONAL").upper()
-            if (not verification.get("feasible") or int(verification.get("hard_violation_count") or 0) > 0) and jurisdiction != "KZ":
+            quality_reasons = {
+                str(item.get("reason"))
+                for item in (verification.get("quality_violations") or [])
+                if isinstance(item, dict)
+            }
+            # Regulatory KZ plans may retain advisory quality warnings, but
+            # never a plan where a programme LO has no real-course evidence.
+            must_reject_real_lo_gap = "lo_without_real_course" in quality_reasons
+            if (
+                (
+                    not verification.get("feasible")
+                    or int(verification.get("hard_violation_count") or 0) > 0
+                ) and jurisdiction != "KZ"
+            ) or must_reject_real_lo_gap:
                 rejected_variants.append({
                     "variant": variant_name,
                     "hard": int(verification.get("hard_violation_count") or 0),

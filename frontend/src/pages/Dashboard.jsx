@@ -5,11 +5,13 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useNotifications } from '../contexts/NotificationContext'
 
 export default function Dashboard() {
     const { user, logout } = useAuth()
     const { t, language } = useLanguage()
     const navigate = useNavigate()
+    const { notify } = useNotifications()
     const [projects, setProjects] = useState([])
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState({ totalProjects: 0, totalCourses: 0, activePlans: 0 })
@@ -36,7 +38,7 @@ export default function Dashboard() {
             setProjects(projects.filter(p => p.id !== projectId))
         } catch (error) {
             console.error('Error deleting project:', error)
-            alert(t('project_delete_error'))
+            notify(t('project_delete_error'))
         }
     }
 

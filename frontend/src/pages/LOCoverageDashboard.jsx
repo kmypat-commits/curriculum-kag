@@ -5,10 +5,12 @@ import { useLanguage as useI18n } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useNotifications } from '../contexts/NotificationContext'
 
 export default function LOCoverageDashboard() {
     const { id } = useParams()
     const { t, language } = useI18n()
+    const { notify } = useNotifications()
     const [project, setProject] = useState(null)
     const [coverage, setCoverage] = useState(null)
     const [planVariants, setPlanVariants] = useState([])
@@ -106,7 +108,7 @@ export default function LOCoverageDashboard() {
             setSaveSuccess(true)
             setTimeout(() => setSaveSuccess(false), 5000)
         } catch (err) {
-            alert(t('Error saving weights'))
+            notify(t('Error saving weights'))
         } finally {
             setSaving(false)
         }
@@ -185,7 +187,7 @@ export default function LOCoverageDashboard() {
 
     const handlePromoteBridge = async (mod, i) => {
         if (!mod.id) {
-            alert(t('Bridge module ID not found. Please regenerate.'))
+            notify(t('Bridge module ID not found. Please regenerate.'))
             return
         }
         setPromotingBridge(prev => ({ ...prev, [i]: 'loading' }))
@@ -202,7 +204,7 @@ export default function LOCoverageDashboard() {
             if (project?.latest_version?.id) fetchCoverage(project.latest_version.id)
         } catch (err) {
             setPromotingBridge(prev => ({ ...prev, [i]: 'error' }))
-            alert(t('promotion_error') + ': ' + (err.response?.data?.detail || err.message))
+            notify(t('promotion_error') + ': ' + (err.response?.data?.detail || err.message))
         }
     }
 

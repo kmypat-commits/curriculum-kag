@@ -85,3 +85,6 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 .semester-lo-tooltip strong,.semester-lo-tooltip small{display:block}.semester-lo-tooltip strong{margin-bottom:5px;color:#0066cc}.semester-lo-tooltip small{margin-top:7px;color:#6e6e73}
 .semester-lo-chip:hover .semester-lo-tooltip,.semester-lo-chip:focus .semester-lo-tooltip{opacity:1;visibility:visible;transform:translateY(0)}
 .semester-lo-empty{margin-top:7px;color:#8a8a8e;font-style:normal;line-height:1.4}
+ .app-toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 10000; display: grid; gap: 10px; max-width: min(420px, calc(100vw - 40px)); }
+ .app-toast { display: flex; gap: 14px; align-items: flex-start; padding: 13px 15px; border-radius: 12px; color: #17233b; background: #fff; box-shadow: 0 10px 30px rgba(18,31,53,.18); border-left: 4px solid #dc3545; font-size: 14px; }
+ .app-toast-success { border-left-color: #198754; } .app-toast button { border: 0; background: transparent; font-size: 18px; cursor: pointer; color: #667085; }

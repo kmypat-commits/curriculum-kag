@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { lazy, Suspense } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import { LanguageProvider } from './contexts/LanguageContext'
+import { NotificationProvider } from './contexts/NotificationContext'
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Repository = lazy(() => import('./pages/Repository'))
@@ -19,6 +20,7 @@ function App() {
     return (
         <LanguageProvider>
             <AuthProvider>
+                <NotificationProvider>
                 <Router>
                     <Suspense fallback={
                         <div style={{ padding: 40, textAlign: 'center', color: '#4f5d6b' }}>
@@ -40,6 +42,7 @@ function App() {
                         <Route path="/projects/:id/syllabus/:kind/:entityId" element={<CourseSyllabus />} />
                     </Routes></Suspense>
                 </Router>
+                </NotificationProvider>
             </AuthProvider>
         </LanguageProvider>
     )

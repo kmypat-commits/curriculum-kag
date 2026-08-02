@@ -23,6 +23,8 @@ jobs:
         run: pip install -r backend/requirements-minimal.txt
       - name: UTF-8 gate
         run: python backend/check_text_encoding.py
+      - name: Static quality and toast gate
+        run: python backend/scripts/ci_static_gate.py
       - name: Backend tests
         run: python backend/run_tests.py
 

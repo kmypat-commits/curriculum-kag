@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useNotifications } from '../contexts/NotificationContext'
 
 
 function CompactSection({ title, subtitle, accent = '#366092', defaultOpen = false, children }) {
@@ -23,6 +24,7 @@ function CompactSection({ title, subtitle, accent = '#366092', defaultOpen = fal
 }
 
 export default function PlanBuilder() {
+    const { notify } = useNotifications()
     const { id } = useParams()
     const [searchParams] = useSearchParams()
     const { t, localize, localizeCycle, localizeDomain, language } = useLanguage()
@@ -351,7 +353,7 @@ export default function PlanBuilder() {
             } else {
                 const message = errorMessage(err)
                 setBuildStatus({ state: 'failed', stage: 'failed', progress: 0, error: message })
-                alert(t('build_error') + ': ' + message)
+                notify(t('build_error') + ': ' + message)
             }
         } finally {
             setBuilding(false)
@@ -370,7 +372,7 @@ export default function PlanBuilder() {
             await fetchVariants(project.latest_version.id)
             setBuildStatus({ state: 'complete', stage: 'complete', progress: 100, change_report: response.data?.change_report })
         } catch (err) {
-            alert(t('build_error') + ': ' + errorMessage(err))
+                notify(t('build_error') + ': ' + errorMessage(err))
         } finally { setBuilding(false) }
     }
 

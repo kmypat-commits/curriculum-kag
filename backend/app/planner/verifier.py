@@ -494,7 +494,12 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     # A curriculum unit without a direct programme-LO link is not merely a
     # warning: it has no auditable educational purpose and must not be active.
     course_lo_violations = len(weak_courses) + len(structural_foundations)
-    hard_count = len(prerequisite_violations) + len(load_violations) + len(credit_violations) + len(domain_quota_violations) + len(goso_compliance["violations"]) + course_lo_violations
+    # A bridge can explain a curriculum gap, but it cannot replace evidence
+    # that a real course teaches every programme LO.  Keep this as a hard
+    # admission condition so a 100% aggregate bridge score is never presented
+    # as a production-ready plan.
+    real_lo_violations = len(lo_without_real_course)
+    hard_count = len(prerequisite_violations) + len(load_violations) + len(credit_violations) + len(domain_quota_violations) + len(goso_compliance["violations"]) + course_lo_violations + real_lo_violations
     return {"feasible": hard_count == 0, "quality_passed": not quality_violations and goso_compliance["compliant"], "hard_violation_count": hard_count, "course_lo_violations": course_lo_violations, "prerequisite_violations": prerequisite_violations, "semester_load_violations": load_violations, "credit_violations": credit_violations, "domain_quota_violations": domain_quota_violations, "domain_credits": {"domain1": round(domain_credits[0], 2), "domain2": round(domain_credits[1], 2)}, "domain_quota_base_credits": domain_quota_base_credits, "domain_quota_tolerance_credits": domain_quota_tolerance, "goso_compliance": goso_compliance, "pedagogical_audit": pedagogical_audit, "semester_loads": semester_loads, "nominal_semester_load": round(nominal_load, 2), "allowed_semester_load": {"min": round(min_load, 2), "max": round(max_load, 2)}, "target_credits": target_credits, "total_credits": total_credits, "credit_tolerance": credit_tolerance, "maximum_total_credits": target_credits + credit_tolerance, "min_lo_coverage": round(min_coverage, 4), "average_lo_coverage": round(average_coverage, 4), "coverage_threshold": settings.COVERAGE_THRESHOLD, "coverage_by_lo": coverage_by_lo, "evidence_count": evidence_count, "redundancy": redundancy, "redundancy_threshold": redundancy_threshold, "strict_redundancy_threshold": REDUNDANCY_THRESHOLD, "embedding_mode": embedding_mode, "quality_violations": quality_violations}
 
 
