@@ -1404,6 +1404,34 @@ def build_plan(
             )
 
         rejected_variants = []
+        # A/B/C are alternatives, not cosmetic labels.  Reject a build that
+        # accidentally persisted the same course/bridge sequence twice; the
+        # caller can then request fewer variants or adjust the constraints.
+        def _variant_signature(row):
+            schedule = row.get("schedule") or {}
+            signature = []
+            for semester, items in sorted(schedule.items(), key=lambda pair: int(pair[0])):
+                for item in items or []:
+                    if not isinstance(item, dict):
+                        continue
+                    signature.append((int(semester), item.get("course_id"), item.get("bridge_module_id")))
+            return tuple(signature)
+
+        signatures = {}
+        for name, row in variants.items():
+            signatures.setdefault(_variant_signature(row), []).append(name)
+        for duplicate_names in signatures.values():
+            if len(duplicate_names) > 1:
+                for duplicate_name in duplicate_names[1:]:
+                    rejected_variants.append({
+                        "variant": duplicate_name,
+                        "hard": 0,
+                        "hard_details": ["variant_not_distinct"],
+                        "quality_violations": [{
+                            "reason": "variant_not_distinct",
+                            "variants": duplicate_names,
+                        }],
+                    })
         for variant_name, result in variants.items():
             verification = result.get("verification") or {}
             # Quality warnings are review guidance, not a generation failure.
