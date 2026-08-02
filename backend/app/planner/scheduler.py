@@ -1097,6 +1097,57 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                 break
         if not swapped:
             break
+
+    # Final local improvement: move a real course toward its scoped EPVO
+    # semester when the move preserves load and the prerequisite DAG.  This is
+    # deliberately conservative; it never trades away a hard invariant for a
+    # better external similarity score.
+    for _ in range(60):
+        current_loads = loads()
+        course_semesters = semester_by_course()
+        child_map = dependents()
+        candidates = sorted(
+            ((semester, item) for semester, items in schedule.items() for item in items),
+            key=lambda pair: abs(
+                int(pair[1].get("recommended_semester") or pair[0]) - pair[0]
+            ),
+            reverse=True,
+        )
+        moved = False
+        for donor, item in candidates:
+            if item.get("regulatory_required"):
+                continue
+            recommended = int(item.get("recommended_semester") or donor)
+            target_order = sorted(
+                (semester for semester in schedule if semester != donor),
+                key=lambda semester: abs(semester - recommended),
+            )
+            for target in target_order:
+                credits = int(item.get("credits") or 0)
+                if current_loads[donor] - credits < lower or current_loads[target] + credits > upper:
+                    continue
+                if target < _item_minimum_appropriate_semester(item, num_semesters):
+                    continue
+                if target > int(item.get("latest_semester") or num_semesters):
+                    continue
+                parents = [course_semesters.get(pid, 0) for pid in item.get("prerequisites") or []]
+                if parents and max(parents) >= target:
+                    continue
+                children = [course_semesters.get(cid, num_semesters + 1) for cid in child_map.get(item.get("course_id"), [])]
+                if children and min(children) <= target:
+                    continue
+                old_distance = abs(donor - recommended)
+                new_distance = abs(target - recommended)
+                if new_distance >= old_distance:
+                    continue
+                if not _move_item(schedule, donor, target, item):
+                    continue
+                moved = True
+                break
+            if moved:
+                break
+        if not moved:
+            break
     return schedule
 
 
