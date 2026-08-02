@@ -166,7 +166,15 @@ def main() -> None:
     db = SessionLocal()
     try:
         all_epvo_rows = db.query(EpvoDisciplineNormalized).all()
-        all_epvo_by_id = {row.id: row for row in all_epvo_rows}
+        # Course cards are referenced by their stable approved EPVO id.  The
+        # normalized table primary key is an internal row id and can differ
+        # after deduplication/reindexing, so using it here silently attaches a
+        # semester from the wrong discipline in the fallback path.
+        all_epvo_by_id = {
+            int(row.approved_course_id): row
+            for row in all_epvo_rows
+            if row.approved_course_id is not None
+        }
         projects = [evaluate(project_id, db, all_epvo_rows, all_epvo_by_id) for project_id in args.projects]
     finally:
         db.close()
