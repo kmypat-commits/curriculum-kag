@@ -213,9 +213,22 @@ def _item_minimum_appropriate_semester(item: Dict, num_semesters: int) -> int:
     return max(
         1,
         _late_stage_min_semester(item.get("title"), num_semesters),
+        _cycle_min_semester(item, num_semesters),
         _complexity_min_semester(item, num_semesters),
         recommended_lower,
     )
+
+
+def _cycle_min_semester(item: Dict, num_semesters: int) -> int:
+    """Use the curriculum cycle as a soft stage constraint."""
+    cycle = _title_key(item.get("type"))
+    if cycle in {"ood", "ооd", "ооd компонент", "general education"}:
+        return 1
+    if cycle in {"бд", "bd", "basic disciplines", "базовые дисциплины"}:
+        return max(1, min(num_semesters, math.ceil(num_semesters * 0.15)))
+    if cycle in {"пд", "pd", "professional disciplines", "профильные дисциплины"}:
+        return max(1, min(num_semesters, math.ceil(num_semesters * 0.25)))
+    return 1
 
 
 def _foundation_max_semester(title: str | None, num_semesters: int) -> int:
