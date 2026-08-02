@@ -16,5 +16,12 @@ for path in tracked:
 if fail:
     print('\n'.join(fail)); return_code=1
 else:
+    planner=(ROOT/'backend'/'app'/'api'/'planner.py').read_text(encoding='utf-8')
+    verifier=(ROOT/'backend'/'app'/'planner'/'verifier.py').read_text(encoding='utf-8')
+    for marker, source in (("variant_not_distinct", planner), ("lo_without_real_course", planner + verifier), ("rejected_variants", planner)):
+        if marker not in source: fail.append(f'missing quality invariant: {marker}')
+if fail:
+    print('\n'.join(fail)); return_code=1
+else:
     print('static quality gate passed'); return_code=0
 sys.exit(return_code)

@@ -95,7 +95,15 @@ function Find-DockerCli {
         "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
     )
     foreach ($candidate in $candidates) {
-        if (Test-Path $candidate) { return $candidate }
+        if (Test-Path $candidate) {
+            # Docker Desktop installs the CLI outside the default PATH on
+            # Windows.  Make child `docker compose` calls use the same CLI.
+            $bin = Split-Path -Parent $candidate
+            if (-not (($env:Path -split ';') -contains $bin)) {
+                $env:Path = "$bin;$env:Path"
+            }
+            return $candidate
+        }
     }
     return $null
 }
