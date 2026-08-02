@@ -68,11 +68,11 @@ def _course_from_epvo(row: EpvoDisciplineNormalized, project: Project, db: Sessi
     content = row.content_json or {}
     return Course(
         course_id=f"EPVO-{row.id}",
-        title=row.title_ru or row.title_en or row.canonical_title,
+        title=_clean_epvo_text(row.title_ru) or _clean_epvo_text(row.title_en) or row.canonical_title,
         domain=domain,
         credits=int(row.typical_credits or 5),
         recommended_semester=row.typical_semester,
-        description=(content.get("description_ru") or content.get("description") or content.get("description_en") or row.canonical_title or ""),
+        description=(_clean_epvo_text(content.get("description_ru")) or _clean_epvo_text(content.get("description")) or _clean_epvo_text(content.get("description_en")) or row.canonical_title or ""),
         topics=content.get("topics") or [],
         learning_outcomes=learning_outcomes,
         assessment_methods=[],
@@ -93,11 +93,18 @@ def epvo_translation_payload(row: EpvoDisciplineNormalized) -> dict:
     }
 
 
+def _clean_epvo_text(value: object) -> str | None:
+    """Never overwrite a verified translation with a replacement-marker value."""
+    text_value = str(value or '').strip()
+    return text_value if text_value and '\ufffd' not in text_value else None
+
+
 def upsert_epvo_course_localizations(db: Session, course: Course, row: EpvoDisciplineNormalized) -> None:
     payload = epvo_translation_payload(row)
     descriptions = payload["description_translations"]
     for language, title in payload["title_translations"].items():
-        if not title:
+        clean_title = _clean_epvo_text(title)
+        if not clean_title:
             continue
         localization = db.query(CourseLocalization).filter(
             CourseLocalization.course_id == course.id,
@@ -106,10 +113,12 @@ def upsert_epvo_course_localizations(db: Session, course: Course, row: EpvoDisci
         if localization is None:
             localization = CourseLocalization(course_id=course.id, language=language)
             db.add(localization)
-        localization.title = title
-        localization.description = descriptions.get(language) or localization.description
+        localization.title = clean_title
+        clean_description = _clean_epvo_text(descriptions.get(language))
+        if clean_description:
+            localization.description = clean_description
         localization.source = "epvo"
-        localization.status = "verified"
+        localization.status = "verified" if clean_description else "needs_review"
 
 
 def _scope_disciplines(db: Session, scope_item: dict, limit: int = 800) -> tuple[list[EpvoDisciplineNormalized], str, str]:
