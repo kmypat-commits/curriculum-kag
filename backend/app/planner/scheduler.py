@@ -2505,6 +2505,14 @@ def _diversify_variant_items(
         audit = _ict_competency_audit(courses, project_version.project.constraints_json or {})
         return bool(audit.get("passed"))
     alternatives_by_credit: Dict[int, List[Course]] = {}
+    from app.planner.verifier import _ict_competency_requirements
+    competency_requirements = _ict_competency_requirements(project_version.project.constraints_json or {})
+    def course_matches_competency(course: Course, alternatives) -> bool:
+        text = str(course.title or '').casefold()
+        return any(
+            all(stem.casefold() in text for stem in stems)
+            for stems in alternatives
+        )
     for course in db.query(Course).all():
         key = _title_key(course.title)
         if (
@@ -2517,6 +2525,20 @@ def _diversify_variant_items(
             and not course.prerequisites
         ):
             alternatives_by_credit.setdefault(int(course.credits or 5), []).append(course)
+    # Ensure a variant cannot lose the only course representing a required
+    # core competency while seeking diversity.  These candidates are still
+    # subject to the same score, level, credit and LO checks below.
+    for alternatives in competency_requirements.values():
+        for course in db.query(Course).all():
+            key = _title_key(course.title)
+            if (
+                course.id not in selected_ids
+                and key not in selected_titles
+                and course.id in admission_by_course
+                and match_max_by_course.get(course.id, 0.0) >= 0.4
+                and course_matches_competency(course, alternatives)
+            ):
+                alternatives_by_credit.setdefault(int(course.credits or 5), []).append(course)
     for alternatives in alternatives_by_credit.values():
         alternatives.sort(
             key=lambda course: (
