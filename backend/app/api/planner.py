@@ -3218,7 +3218,17 @@ async def course_replacement_preview(
     domains = [plan.project_version.project.domain1, plan.project_version.project.domain2]
     current_semester = int(item.semester or 1)
     for course in courses:
-        row = relevant_rows_by_course.get(course.id)
+        # `Course.id` is the local database PK; normalized EPVO evidence is
+        # keyed by the stable numeric suffix in `Course.course_id`.
+        epvo_course_id = None
+        course_code = str(course.course_id or "")
+        if course_code.startswith("EPVO-"):
+            try:
+                epvo_course_id = int(course_code.split("-", 1)[1])
+            except (TypeError, ValueError):
+                epvo_course_id = None
+        evidence_id = epvo_course_id or int(course.id)
+        row = relevant_rows_by_course.get(evidence_id)
         if row is None:
             continue
         data = scores.get(course.id, {})
@@ -3236,8 +3246,8 @@ async def course_replacement_preview(
             "type": course.cycle_component,
         }, int(constraints.get("total_semesters", 8) or 8))
         recommended_semester = int(
-            median(typical_semesters_by_course.get(course.id, []))
-            if typical_semesters_by_course.get(course.id)
+            median(typical_semesters_by_course.get(evidence_id, []))
+            if typical_semesters_by_course.get(evidence_id)
             else (row.typical_semester or course.recommended_semester or 1)
         )
         if complexity_min > current_semester or recommended_semester > current_semester + 1:
