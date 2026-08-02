@@ -10,7 +10,8 @@ import argparse
 import json
 import random
 from pathlib import Path
-from statistics import mean
+from collections import defaultdict
+from statistics import mean, median
 
 from app.database import SessionLocal
 from app.models.course import Course
@@ -45,6 +46,14 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     directions = {str(value) for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code")) if value}
     scope_rows = [row for row in all_epvo_rows if _scope_match(row, groups, directions)]
     scope_by_id = {row.id: row for row in scope_rows}
+    # A canonical approved course may aggregate several EPVO source cards,
+    # each with a different recommended semester.  Comparing against one
+    # arbitrary row makes the external metric noisy.  Use the median of the
+    # matching scope rows, which is robust to one exceptional programme.
+    typical_by_course: dict[int, list[int]] = defaultdict(list)
+    for row in scope_rows:
+        if row.approved_course_id and row.typical_semester:
+            typical_by_course[int(row.approved_course_id)].append(int(row.typical_semester))
 
     programme_sets: dict[str, set[int]] = {}
     for row in scope_rows:
@@ -67,8 +76,10 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
             continue
         generated_epvo.add(discipline_id)
         row = scope_by_id.get(discipline_id) or all_epvo_by_id.get(discipline_id)
-        if row and row.typical_semester:
-            semester_checks.append(abs(int(item.semester) - int(row.typical_semester)) <= 1)
+        typical_values = typical_by_course.get(int(course.id), []) if course else []
+        typical_semester = median(typical_values) if typical_values else (row.typical_semester if row else None)
+        if typical_semester:
+            semester_checks.append(abs(int(item.semester) - int(typical_semester)) <= 1)
 
     comparisons = []
     for source_id, reference in programme_sets.items():
