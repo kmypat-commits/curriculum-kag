@@ -6208,13 +6208,23 @@ def _apply_scoped_epvo_semesters(
         if str(value or "").strip()
     }
     max_semesters = int(constraints.get("total_semesters") or 0)
-    course_ids = {
+    local_course_ids = {
         int(item["course_id"])
         for item in items
         if item.get("course_id") is not None
         and not item.get("regulatory_required")
         and item.get("bridge_module_id") is None
     }
+    local_to_epvo: Dict[int, int] = {}
+    if local_course_ids:
+        for course in db.query(Course).filter(Course.id.in_(local_course_ids)).all():
+            code = str(course.course_id or "")
+            if code.startswith("EPVO-"):
+                try:
+                    local_to_epvo[int(course.id)] = int(code.split("-", 1)[1])
+                except (TypeError, ValueError):
+                    continue
+    course_ids = set(local_to_epvo.values())
     scoped_values: Dict[int, List[int]] = {}
     if course_ids and (groups or directions):
         rows = db.query(EpvoDisciplineNormalized).filter(
@@ -6229,13 +6239,20 @@ def _apply_scoped_epvo_semesters(
             if 1 <= value and (not max_semesters or value <= max_semesters):
                 scoped_values.setdefault(int(row.approved_course_id), []).append(value)
     for item in items:
-        values = scoped_values.get(int(item["course_id"]), []) if item.get("course_id") is not None else []
+        local_id = int(item["course_id"]) if item.get("course_id") is not None else None
+        epvo_id = local_to_epvo.get(local_id, local_id) if local_id is not None else None
+        values = scoped_values.get(epvo_id, []) if epvo_id is not None else []
         # A scoped EPVO median (selected direction/group and education level)
         # is more informative than the global catalogue median.  Preserve it
         # when the caller has already attached one; use the global value only
         # as a fallback for unscoped candidates.
-        if values and not item.get("recommended_semester"):
+        if values:
+            # The selected EPVO direction/group is stronger evidence than a
+            # recommendation copied from an unrelated catalogue row.  Mark
+            # the origin so the generic scheduler cannot overwrite it with a
+            # global median on the next pass.
             item["recommended_semester"] = int(round(median(values)))
+            item["_scoped_epvo_semester"] = True
     return items
 
 
@@ -6245,13 +6262,23 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
     # single row's recommended semester is therefore unstable.  Before
     # placement, use the median of available EPVO semesters for each real
     # course.  Regulatory GOSO and bridge items keep their explicit semester.
-    epvo_course_ids = {
+    local_course_ids = {
         int(item["course_id"])
         for item in courses
         if item.get("course_id") is not None
         and not item.get("regulatory_required")
         and item.get("bridge_module_id") is None
     }
+    local_to_epvo: Dict[int, int] = {}
+    if local_course_ids:
+        for course in db.query(Course).filter(Course.id.in_(local_course_ids)).all():
+            code = str(course.course_id or "")
+            if code.startswith("EPVO-"):
+                try:
+                    local_to_epvo[int(course.id)] = int(code.split("-", 1)[1])
+                except (TypeError, ValueError):
+                    continue
+    epvo_course_ids = set(local_to_epvo.values())
     semester_values: Dict[int, List[int]] = {}
     if epvo_course_ids:
         rows = db.query(EpvoDisciplineNormalized).filter(
@@ -6263,8 +6290,10 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                 semester_values.setdefault(int(row.approved_course_id), []).append(value)
     for item in courses:
         course_id = item.get("course_id")
-        values = semester_values.get(int(course_id), []) if course_id is not None else []
-        if values:
+        local_id = int(course_id) if course_id is not None else None
+        epvo_id = local_to_epvo.get(local_id, local_id) if local_id is not None else None
+        values = semester_values.get(epvo_id, []) if epvo_id is not None else []
+        if values and not item.get("_scoped_epvo_semester"):
             item["recommended_semester"] = int(round(median(values)))
     schedule = {semester: [] for semester in range(1, num_semesters + 1)}
     loads = {semester: 0 for semester in schedule}
