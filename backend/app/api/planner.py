@@ -39,6 +39,7 @@ from app.planner.planner_utils import (
 )
 from app.services.plan_reporting import academic_classification as _academic_classification
 from app.services.plan_reporting import build_change_report as _build_change_report
+from app.services.plan_reporting import plan_snapshot as _plan_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -101,43 +102,6 @@ def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, t
         f"{themes[1]} для программы «{version.project.title}» ({semester_label})",
         f"{themes[2]} ({semester_label}; {focus})",
     ]
-
-
-def _plan_snapshot(plan, db: Session) -> dict | None:
-    if not plan:
-        return None
-    from app.models.plan import PlanItem
-    items = db.query(PlanItem).filter(PlanItem.plan_id == plan.id).all()
-    course_ids = [item.course_id for item in items if item.course_id]
-    bridge_ids = [item.bridge_module_id for item in items if item.bridge_module_id]
-    courses = {
-        course.id: course
-        for course in db.query(Course).filter(Course.id.in_(course_ids or [-1])).all()
-    }
-    bridges = {
-        bridge.id: bridge
-        for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids or [-1])).all()
-    }
-    titles = []
-    for item in items:
-        if item.course_id and item.course_id in courses:
-            titles.append(courses[item.course_id].title)
-        elif item.bridge_module_id and item.bridge_module_id in bridges:
-            titles.append(bridges[item.bridge_module_id].title)
-    metrics = plan.metrics_json or {}
-    verification = metrics.get("verification") or {}
-    return {
-        "plan_id": plan.id,
-        "variant": plan.variant_type,
-        "credits": sum(int(item.credits or 0) for item in items),
-        "items": len(items),
-        "bridges": len(bridge_ids),
-        "min_lo": verification.get("min_lo_coverage"),
-        "avg_lo": verification.get("average_lo_coverage"),
-        "quality": verification.get("quality_passed"),
-        "hard": verification.get("hard_violation_count"),
-        "titles": sorted({_title_key(title) for title in titles if title}),
-    }
 
 
 @router.get("/version/{project_version_id}/graph")
