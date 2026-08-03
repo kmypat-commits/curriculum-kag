@@ -23,8 +23,11 @@ export default function Login() {
             sessionStorage.removeItem('postLoginPath')
             navigate(returnPath)
         } catch (err) {
-            const message = formatApiError(err, 'Network or server error');
-            setError(message === 'Incorrect email or password' ? t('error') : message);
+            const message = formatApiError(err, t('network_error'))
+            // The API deliberately returns the same 401 response for an
+            // unknown user and a wrong password.  Use the status as the
+            // stable signal instead of comparing one language's text.
+            setError(err?.response?.status === 401 ? t('invalid_credentials') : message)
             console.error('Login error:', err);
         }
     }
