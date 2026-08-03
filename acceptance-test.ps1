@@ -35,6 +35,7 @@ function Invoke-Checked([scriptblock]$Command, [string]$Name) {
 }
 
 Invoke-Checked { powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "test.ps1") } "Backend tests"
+Invoke-Checked { & $python (Join-Path $backend "scripts\check_release_hygiene.py") } "Release hygiene"
 Invoke-Checked { powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "smoke-test.ps1") -ExpectedDatabase postgresql } "PostgreSQL smoke test"
 Invoke-Checked {
     & $python (Join-Path $backend "scripts\smoke_core_api.py")
