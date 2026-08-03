@@ -1,5 +1,5 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict
@@ -348,10 +348,26 @@ async def list_projects(
 ):
     """List all projects"""
     projects = db.query(Project).offset(skip).limit(limit).all()
+    # Load the latest version for the whole page in two queries.  The old
+    # implementation queried versions (and then learning outcomes lazily) once
+    # per project, which made the dashboard degrade linearly as the catalogue
+    # grew.
+    project_ids = [project.id for project in projects]
+    latest_by_project = {}
+    if project_ids:
+        versions = (
+            db.query(ProjectVersion)
+            .options(selectinload(ProjectVersion.learning_outcomes))
+            .filter(ProjectVersion.project_id.in_(project_ids))
+            .order_by(ProjectVersion.project_id, ProjectVersion.version_number.desc())
+            .all()
+        )
+        for version in versions:
+            latest_by_project.setdefault(version.project_id, version)
     # Ensure they have constraints and version info
     result = []
     for p in projects:
-        latest = db.query(ProjectVersion).filter(ProjectVersion.project_id == p.id).order_by(ProjectVersion.version_number.desc()).first()
+        latest = latest_by_project.get(p.id)
         result.append({
             "id": p.id,
             "title": p.title,

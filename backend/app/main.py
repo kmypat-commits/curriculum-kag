@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 import os
+import logging
+import time
 from sqlalchemy import text
 
 # Fix for Passlib + Bcrypt 4.1.0+ compatibility on Python 3.14
@@ -23,6 +26,27 @@ from app.api import auth, projects, repository, kag, planner, export_api, epvo a
 from app.database import engine, Base
 # Import all models to register them with Base
 from app.models import user, project, course, plan, embedding, audit, bridge_module, syllabus, epvo
+
+logger = logging.getLogger("curriculum.performance")
+
+
+class SlowRequestMiddleware(BaseHTTPMiddleware):
+    """Log only slow API requests; keeps page latency diagnosable without payloads."""
+
+    async def dispatch(self, request, call_next):
+        started = time.perf_counter()
+        response = await call_next(request)
+        elapsed = time.perf_counter() - started
+        if elapsed >= 0.75 and request.url.path not in {"/health", "/"}:
+            logger.warning(
+                "slow_request path=%s method=%s status=%s elapsed_ms=%d",
+                request.url.path,
+                request.method,
+                response.status_code,
+                round(elapsed * 1000),
+            )
+        response.headers["Server-Timing"] = f"app;dur={elapsed * 1000:.1f}"
+        return response
 
 # Ensure all tables are created (required for SQLite if migrations aren't run)
 Base.metadata.create_all(bind=engine)
@@ -53,6 +77,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SlowRequestMiddleware)
 
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
