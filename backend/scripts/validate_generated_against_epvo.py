@@ -20,6 +20,7 @@ from app.models.plan import Plan, PlanItem
 from app.models.project import Project
 from app.services.epvo_repository import epvo_row_matches_education_level
 from app.planner.scheduler import _complexity_min_semester
+from app.planner.semester_rules import foundation_max_semester
 
 
 def _scope_match(row: EpvoDisciplineNormalized, groups: set[str], directions: set[str]) -> bool:
@@ -145,6 +146,16 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
                 max_semesters or 0,
             )
             semantic_adjusted = max(adjusted_semester, semantic_floor)
+            # Keep the external metric consistent with the planner: EPVO's
+            # typical semester is advisory, while an introductory/foundation
+            # course has a pedagogical upper bound. Do not penalize a valid
+            # early placement merely because one historical EPVO row placed
+            # the same course later.
+            semantic_ceiling = foundation_max_semester(
+                course.title if course else "", max_semesters or 0
+            )
+            if semantic_ceiling and semantic_floor <= semantic_ceiling:
+                semantic_adjusted = min(semantic_adjusted, semantic_ceiling)
             if max_semesters:
                 semantic_adjusted = min(max_semesters, semantic_adjusted)
             if max_semesters:
