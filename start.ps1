@@ -13,6 +13,11 @@ $frontendDir = Join-Path $root "frontend"
 $runtimeDist = Join-Path $runtime "dist"
 $pidFile = Join-Path $runtime "pids.json"
 $cpuThreads = if ($env:CURRICULUM_CPU_THREADS) { $env:CURRICULUM_CPU_THREADS } else { "4" }
+# Prevent an unavailable Docker engine from leaving the launcher waiting
+# indefinitely. Users can override these values in the environment when a
+# remote Docker endpoint legitimately needs more time.
+if (-not $env:DOCKER_CLIENT_TIMEOUT) { $env:DOCKER_CLIENT_TIMEOUT = "10" }
+if (-not $env:COMPOSE_HTTP_TIMEOUT) { $env:COMPOSE_HTTP_TIMEOUT = "30" }
 foreach ($threadVariable in @("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS")) {
     if (-not [Environment]::GetEnvironmentVariable($threadVariable, "Process")) {
         [Environment]::SetEnvironmentVariable($threadVariable, $cpuThreads, "Process")

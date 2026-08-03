@@ -8,6 +8,9 @@ from app.kag.gap_detector import detect_gaps
 from app.kag.retrieval import retrieve_similar_chunks
 from app.config import settings
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_bridge_response(response: str, context: Dict) -> Optional[str]:
@@ -175,7 +178,7 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
             if normalized:
                 return normalized
         except Exception as exc:
-            print(f"[LLM] OpenAI call failed: {exc}. Using deterministic fallback.")
+            logger.warning("OpenAI bridge generation failed; using deterministic fallback: %s", exc)
     elif has_real_key and settings.LLM_PROVIDER == "anthropic":
         try:
             from anthropic import Anthropic
@@ -184,7 +187,7 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
             if normalized:
                 return normalized
         except Exception as exc:
-            print(f"[LLM] Anthropic call failed: {exc}. Using deterministic fallback.")
+            logger.warning("Anthropic bridge generation failed; using deterministic fallback: %s", exc)
     context = fallback_context or {}
     domain1, domain2 = context.get("domain1", "Primary Discipline"), context.get("domain2", "Secondary Discipline")
     gap_los = context.get("gap_los", [])

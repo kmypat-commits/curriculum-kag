@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # environment does not need an additional dependency.
     PYDANTIC_AI_ENABLED: bool = False
     PYDANTIC_AI_MODEL_NAME: str = ""
+    # Keep optional LLM orchestration bounded and deterministic by default.
+    # A provider retry is allowed only when explicitly configured.
+    PYDANTIC_AI_RETRIES: int = 0
     
     # KAG Configuration
     SIMILARITY_THRESHOLD: float = 0.82

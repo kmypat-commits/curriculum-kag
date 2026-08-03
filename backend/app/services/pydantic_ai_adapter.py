@@ -34,7 +34,10 @@ def _run(prompt: str, output_type: Type[Any], system_prompt: str) -> Any | None:
             agent = Agent(model_name, output_type=output_type, system_prompt=system_prompt)
         except TypeError:  # compatibility with an older PydanticAI release
             agent = Agent(model_name, result_type=output_type, system_prompt=system_prompt)
-        result = agent.run_sync(prompt)
+        try:
+            result = agent.run_sync(prompt, retries=max(0, int(settings.PYDANTIC_AI_RETRIES)))
+        except TypeError:  # compatibility with older PydanticAI releases
+            result = agent.run_sync(prompt)
         return getattr(result, "output", getattr(result, "data", None))
     except Exception:
         # Optional orchestration must never turn a working endpoint into 500.

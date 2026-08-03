@@ -19,17 +19,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
+import logging
 
-# Fix for Passlib + Bcrypt 4.1.0+ compatibility on Python 3.14
-try:
-    import bcrypt
-    if not hasattr(bcrypt, "__about__"):
-        bcrypt.__about__ = type('about', (object,), {'__version__': bcrypt.__version__})
-except ImportError:
-    pass
-
-import bcrypt
-from fastapi.security import OAuth2PasswordBearer
+logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -41,7 +33,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
             hashed_password.encode('utf-8')
         )
     except Exception as e:
-        print(f"Error verifying password: {e}")
+        logger.warning("Password verification failed: %s", e)
         return False
 
 

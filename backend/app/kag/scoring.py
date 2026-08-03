@@ -11,7 +11,11 @@ from app.kag.indexing import index_all_courses
 from app.models.embedding import Embedding
 from app.config import settings
 from app.kag.epvo_two_stage import epvo_two_stage_ranker
-from app.services.content_localization import course_localization_map, course_translations
+from app.services.content_localization import (
+    course_localization_map,
+    course_translations,
+    _legacy_fallback_enabled,
+)
 import numpy as np
 import math
 
@@ -146,7 +150,7 @@ def _course_match_text(course: Course, localization: Dict | None = None) -> str:
     translated_description = (
         (localization or {}).get("description_translations")
         if localization is not None
-        else course_translations(course.id, "description")
+        else (course_translations(course.id, "description") if _legacy_fallback_enabled() else {})
     )
     if translated_description:
         parts.extend(value for value in translated_description.values() if value)
@@ -304,7 +308,7 @@ def _lightweight_candidate_courses(
             (
                 (localization or {}).get("description_translations")
                 if localization is not None
-                else course_translations(course.id, "description")
+                else (course_translations(course.id, "description") if _legacy_fallback_enabled() else {})
             or {}).values()
         )
         text = " ".join(filter(None, [course.title, course.description or "", translated_description, course.domain or ""])).lower()
