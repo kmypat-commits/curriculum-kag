@@ -149,7 +149,11 @@ def ranking_metrics(rows):
     values: dict[str, list[float]] = defaultdict(list)
     for scores, relevant in rows:
         ranking = np.argsort(-scores)
-        for k in (1, 3, 5, 10):
+        # Report a wider retrieval window as well: the planner can afford a
+        # broader candidate pool before constrained reranking, so Recall@20
+        # is a useful diagnostic even though production selection remains
+        # validation-tuned on Recall@10.
+        for k in (1, 3, 5, 10, 20):
             hits = sum(int(item) in relevant for item in ranking[:k])
             recall = hits / len(relevant)
             oracle = min(k, len(relevant)) / len(relevant)

@@ -5890,11 +5890,17 @@ def _apply_scoped_epvo_semesters(
                     local_to_epvo[int(course.id)] = int(code.split("-", 1)[1])
                 except (TypeError, ValueError):
                     continue
+    # EPVO repository cards use ``EPVO-<normalized row id>`` as their stable
+    # public code.  Older imported cards may instead use approved_course_id.
+    # Query both keys so scoped semester evidence is never silently skipped.
     course_ids = set(local_to_epvo.values())
     scoped_values: Dict[int, List[int]] = {}
     if course_ids and (groups or directions):
         rows = db.query(EpvoDisciplineNormalized).filter(
-            EpvoDisciplineNormalized.approved_course_id.in_(course_ids)
+            or_(
+                EpvoDisciplineNormalized.id.in_(course_ids),
+                EpvoDisciplineNormalized.approved_course_id.in_(course_ids),
+            )
         ).all()
         for row in rows:
             if not epvo_row_matches_education_level(row, constraints.get("education_level")):
@@ -5903,7 +5909,8 @@ def _apply_scoped_epvo_semesters(
                 continue
             value = int(row.typical_semester or 0)
             if 1 <= value and (not max_semesters or value <= max_semesters):
-                scoped_values.setdefault(int(row.approved_course_id), []).append(value)
+                key = int(row.id) if int(row.id) in course_ids else int(row.approved_course_id)
+                scoped_values.setdefault(key, []).append(value)
     for item in items:
         local_id = int(item["course_id"]) if item.get("course_id") is not None else None
         epvo_id = local_to_epvo.get(local_id, local_id) if local_id is not None else None
@@ -5948,12 +5955,16 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
     semester_values: Dict[int, List[int]] = {}
     if epvo_course_ids:
         rows = db.query(EpvoDisciplineNormalized).filter(
-            EpvoDisciplineNormalized.approved_course_id.in_(epvo_course_ids)
+            or_(
+                EpvoDisciplineNormalized.id.in_(epvo_course_ids),
+                EpvoDisciplineNormalized.approved_course_id.in_(epvo_course_ids),
+            )
         ).all()
         for row in rows:
             value = int(row.typical_semester or 0)
             if 1 <= value <= num_semesters:
-                semester_values.setdefault(int(row.approved_course_id), []).append(value)
+                key = int(row.id) if int(row.id) in epvo_course_ids else int(row.approved_course_id)
+                semester_values.setdefault(key, []).append(value)
     for item in courses:
         course_id = item.get("course_id")
         local_id = int(course_id) if course_id is not None else None
@@ -6076,6 +6087,96 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                     changed = True; break
                 if changed: break
             if changed: break
+    # A balanced load can still contain an avoidable semester inversion: an
+    # EPVO-scoped course recommended for an early term may sit late while a
+    # later course occupies its slot. Repair this with bounded-credit swaps so
+    # loads remain within the configured tolerance. Every proposed swap is checked against both
+    # prerequisite and dependent edges as well as semantic semester bounds.
+    def improve_scoped_semester_alignment() -> None:
+        def semester_map() -> Dict[int, int]:
+            return {
+                int(row.get("course_id")): int(semester)
+                for semester, rows in schedule.items()
+                for row in rows
+                if row.get("course_id") is not None
+            }
+
+        def valid_assignment(item: Dict, target: int, mapping: Dict[int, int]) -> bool:
+            if target < _item_minimum_appropriate_semester(item, num_semesters):
+                return False
+            latest = int(item.get("latest_semester") or num_semesters)
+            if target > min(num_semesters, latest):
+                return False
+            course_id = item.get("course_id")
+            if course_id is None:
+                return True
+            parents = [mapping.get(int(pid)) for pid in item.get("prerequisites", []) or []]
+            if any(value is not None and value >= target for value in parents):
+                return False
+            children = [mapping.get(int(cid)) for cid in dependents.get(course_id, [])]
+            if any(value is not None and value <= target for value in children):
+                return False
+            return True
+
+        for _ in range(4):
+            mapping = semester_map()
+            best = None
+            for left in range(1, num_semesters + 1):
+                for left_item in schedule[left]:
+                    if (
+                        left_item.get("course_id") is None
+                        or left_item.get("regulatory_required")
+                    ):
+                        continue
+                    left_scoped = bool(left_item.get("_scoped_epvo_semester") and left_item.get("recommended_semester"))
+                    left_credits = int(left_item.get("credits") or 0)
+                    for right in range(left + 1, num_semesters + 1):
+                        for right_item in schedule[right]:
+                            if (
+                                right_item.get("course_id") is None
+                                or right_item.get("regulatory_required")
+                            ):
+                                continue
+                            right_scoped = bool(right_item.get("_scoped_epvo_semester") and right_item.get("recommended_semester"))
+                            if not left_scoped and not right_scoped:
+                                continue
+                            left_rec = int(left_item["recommended_semester"]) if left_scoped else None
+                            right_rec = int(right_item["recommended_semester"]) if right_scoped else None
+                            right_credits = int(right_item.get("credits") or 0)
+                            if (
+                                loads[left] - left_credits + right_credits < lower
+                                or loads[left] - left_credits + right_credits > upper
+                                or loads[right] - right_credits + left_credits < lower
+                                or loads[right] - right_credits + left_credits > upper
+                            ):
+                                continue
+                            before = (abs(left - left_rec) if left_rec is not None else 0) + (abs(right - right_rec) if right_rec is not None else 0)
+                            after = (abs(right - left_rec) if left_rec is not None else 0) + (abs(left - right_rec) if right_rec is not None else 0)
+                            if after >= before:
+                                continue
+                            trial = dict(mapping)
+                            trial[int(left_item["course_id"])] = right
+                            trial[int(right_item["course_id"])] = left
+                            if not valid_assignment(left_item, right, trial):
+                                continue
+                            if not valid_assignment(right_item, left, trial):
+                                continue
+                            gain = before - after
+                            if best is None or gain > best[0]:
+                                best = (gain, left, left_item, right, right_item)
+            if best is None:
+                break
+            _, left, left_item, right, right_item = best
+            left_credits = int(left_item.get("credits") or 0)
+            right_credits = int(right_item.get("credits") or 0)
+            schedule[left].remove(left_item)
+            schedule[right].remove(right_item)
+            schedule[left].append(right_item)
+            schedule[right].append(left_item)
+            loads[left] += right_credits - left_credits
+            loads[right] += left_credits - right_credits
+
+    improve_scoped_semester_alignment()
     return schedule
 
 
