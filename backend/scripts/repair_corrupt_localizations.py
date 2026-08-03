@@ -49,7 +49,14 @@ def main() -> int:
     if not args.database_url:
         raise SystemExit("--database-url or DATABASE_URL is required")
 
-    records = json.loads(TRANSLATIONS.read_text(encoding="utf-8"))
+    # The PostgreSQL catalogue is authoritative.  The legacy JSON cache may
+    # be absent or empty after an interrupted export; repairs must still run
+    # against the database instead of failing before opening a session.
+    try:
+        raw_translation_cache = TRANSLATIONS.read_text(encoding="utf-8").strip()
+        records = json.loads(raw_translation_cache) if raw_translation_cache else {}
+    except (OSError, json.JSONDecodeError):
+        records = {}
     engine = create_engine(args.database_url, pool_pre_ping=True)
     Session = sessionmaker(bind=engine)
     db = Session()
@@ -68,6 +75,7 @@ def main() -> int:
         subject_ids_by_course: dict[int, set[str]] = {}
         target_title_keys: set[str] = set()
         target_subject_ids: set[str] = set()
+        target_source_keys: set[str] = set()
         for affected_row, course in affected:
             normalized = None
             if str(course.course_id or "").startswith("EPVO-"):
@@ -82,6 +90,11 @@ def main() -> int:
             if (str(course.course_id), affected_row.language) in CONTEXTUAL_OVERRIDES:
                 continue
             if normalized and normalized.source_keys:
+                target_source_keys.update(
+                    str(value).strip()
+                    for value in (normalized.source_keys or [])
+                    if str(value).strip()
+                )
                 subject_ids = {
                     str((raw.payload_json or {}).get("subjectid") or "").strip()
                     for raw in db.query(RawEpvoDiscipline).filter(
@@ -101,8 +114,18 @@ def main() -> int:
 
         global_alternatives: dict[tuple[str, str], str] = {}
         subject_alternatives: dict[tuple[str, str], str] = {}
-        if target_title_keys or target_subject_ids:
-            for (payload,) in db.query(RawEpvoDiscipline.payload_json).yield_per(1000):
+        if target_source_keys:
+            # The previous implementation scanned the entire raw EPVO table
+            # for every repair, which made the SQLite fallback take minutes
+            # on a multi-gigabyte database.  A corrupt course already carries
+            # its normalized source_keys, so restrict recovery to those rows.
+            # Direct normalized/source-key recovery remains unchanged; broad
+            # title/subject fallback is only attempted when explicitly needed
+            # by a future repair job.
+            raw_query = db.query(RawEpvoDiscipline.payload_json).filter(
+                RawEpvoDiscipline.source_key.in_(sorted(target_source_keys))
+            )
+            for (payload,) in raw_query.yield_per(1000):
                 payload = payload or {}
                 matching_keys = {
                     title_key(payload.get("nameRu")),

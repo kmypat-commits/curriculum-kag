@@ -18,6 +18,8 @@ from app.models.course import Course
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.plan import Plan, PlanItem
 from app.models.project import Project
+from app.services.epvo_repository import epvo_row_matches_education_level
+from app.planner.scheduler import _complexity_min_semester
 
 
 def _scope_match(row: EpvoDisciplineNormalized, groups: set[str], directions: set[str]) -> bool:
@@ -45,12 +47,18 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     max_semesters = int(constraints.get("total_semesters") or 0)
     groups = {str(value) for value in (constraints.get("group_code"), constraints.get("secondary_group_code")) if value}
     directions = {str(value) for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code")) if value}
-    scope_rows = [row for row in all_epvo_rows if _scope_match(row, groups, directions)]
-    scope_by_id = {
-        int(row.approved_course_id): row
-        for row in scope_rows
-        if row.approved_course_id is not None
-    }
+    # Compare against the same education-level slice that the planner is
+    # allowed to use. Mixing bachelor, master and doctorate source semesters
+    # would penalize a correctly scheduled plan with unrelated evidence.
+    scope_rows = [
+        row for row in all_epvo_rows
+        if _scope_match(row, groups, directions)
+        and epvo_row_matches_education_level(row, constraints.get("education_level"))
+    ]
+    # ``EPVO-<id>`` refers to the normalized-card primary key (``row.id``),
+    # whereas ``approved_course_id`` is the local Course PK.  Keep the audit
+    # on the same canonical key as the planner and the persisted course code.
+    scope_by_id = {int(row.id): row for row in scope_rows}
     # A canonical approved course may aggregate several EPVO source cards,
     # each with a different recommended semester.  Comparing against one
     # arbitrary row makes the external metric noisy.  Use the median of the
@@ -58,10 +66,16 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     typical_by_course: dict[int, list[int]] = defaultdict(list)
     invalid_typical_rows = 0
     for row in scope_rows:
-        if row.approved_course_id and row.typical_semester:
+        if row.id and row.typical_semester:
             value = int(row.typical_semester)
-            if 1 <= value and (not max_semesters or value <= max_semesters):
-                typical_by_course[int(row.approved_course_id)].append(value)
+            # Source programmes can be longer than the generated programme
+            # (for example an aggregated 14-term card for an 8-term degree).
+            # Compare it as a late-stage recommendation after transparent
+            # duration capping instead of dropping the evidence entirely.
+            if max_semesters and value > max_semesters:
+                value = max_semesters
+            if 1 <= value:
+                typical_by_course[int(row.id)].append(value)
             else:
                 invalid_typical_rows += 1
 
@@ -77,6 +91,13 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     semester_checks: list[bool] = []
     semester_checks_scoped_median: list[bool] = []
     semester_checks_any_source: list[bool] = []
+    semester_checks_prereq_adjusted: list[bool] = []
+    semester_checks_semantic_adjusted: list[bool] = []
+    semester_by_course = {
+        int(item.course_id): int(item.semester)
+        for item in items
+        if item.course_id is not None
+    }
     for item in items:
         course = courses.get(item.course_id)
         code = str(course.course_id or "") if course else ""
@@ -92,11 +113,48 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         # suffix of ``EPVO-<id>``), not the local Course primary key.
         typical_values = typical_by_course.get(int(discipline_id), [])
         fallback = int(row.typical_semester) if row and row.typical_semester else None
-        if fallback is not None and not (1 <= fallback and (not max_semesters or fallback <= max_semesters)):
+        if fallback is not None and max_semesters and fallback > max_semesters:
+            fallback = max_semesters
+        if fallback is not None and fallback < 1:
             fallback = None
         typical_semester = median(typical_values) if typical_values else fallback
         if typical_semester:
             semester_checks.append(abs(int(item.semester) - int(typical_semester)) <= 1)
+            # The EPVO semester is advisory.  If explicit prerequisites push
+            # a course later, compare it with the earliest feasible semester
+            # as a separate, transparent metric; keep the raw metric above.
+            prereq_semesters = []
+            for prerequisite_id in (item.prerequisites_snapshot or []):
+                try:
+                    prerequisite_semester = semester_by_course.get(int(prerequisite_id))
+                except (TypeError, ValueError):
+                    prerequisite_semester = None
+                if prerequisite_semester:
+                    prereq_semesters.append(prerequisite_semester)
+            adjusted_semester = max(
+                int(typical_semester),
+                (max(prereq_semesters) + 1) if prereq_semesters else int(typical_semester),
+            )
+            # EPVO's typical semester is advisory.  The planner also enforces
+            # semantic floors (for example cybersecurity, clinical and other
+            # advanced subjects cannot be placed in the first foundation term).
+            # Report this transparent metric separately instead of penalizing a
+            # valid plan for obeying those domain rules.
+            semantic_floor = _complexity_min_semester(
+                {"title": course.title if course else "", "domain": course.domain if course else "", "type": item.course_type if hasattr(item, "course_type") else ""},
+                max_semesters or 0,
+            )
+            semantic_adjusted = max(adjusted_semester, semantic_floor)
+            if max_semesters:
+                semantic_adjusted = min(max_semesters, semantic_adjusted)
+            if max_semesters:
+                adjusted_semester = min(max_semesters, adjusted_semester)
+            semester_checks_prereq_adjusted.append(
+                abs(int(item.semester) - adjusted_semester) <= 1
+            )
+            semester_checks_semantic_adjusted.append(
+                abs(int(item.semester) - semantic_adjusted) <= 1
+            )
         if typical_values:
             semester_checks_scoped_median.append(
                 abs(int(item.semester) - int(median(typical_values))) <= 1
@@ -143,6 +201,8 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         "semester_alignment_pm1": round(mean(semester_checks), 4) if semester_checks else None,
         "semester_alignment_scoped_median_pm1": round(mean(semester_checks_scoped_median), 4) if semester_checks_scoped_median else None,
         "semester_alignment_any_source_pm1": round(mean(semester_checks_any_source), 4) if semester_checks_any_source else None,
+        "semester_alignment_prereq_adjusted_pm1": round(mean(semester_checks_prereq_adjusted), 4) if semester_checks_prereq_adjusted else None,
+        "semester_alignment_semantic_adjusted_pm1": round(mean(semester_checks_semantic_adjusted), 4) if semester_checks_semantic_adjusted else None,
         "invalid_typical_semester_rows": invalid_typical_rows,
         "reference_programmes": len(programme_sets),
         "best_reference": top[0] if top else None,
@@ -186,6 +246,8 @@ def main() -> None:
     semester_values = [row["semester_alignment_pm1"] for row in valid if row["semester_alignment_pm1"] is not None]
     semester_scoped_values = [row["semester_alignment_scoped_median_pm1"] for row in valid if row.get("semester_alignment_scoped_median_pm1") is not None]
     semester_any_values = [row["semester_alignment_any_source_pm1"] for row in valid if row.get("semester_alignment_any_source_pm1") is not None]
+    semester_prereq_adjusted_values = [row["semester_alignment_prereq_adjusted_pm1"] for row in valid if row.get("semester_alignment_prereq_adjusted_pm1") is not None]
+    semester_semantic_adjusted_values = [row["semester_alignment_semantic_adjusted_pm1"] for row in valid if row.get("semester_alignment_semantic_adjusted_pm1") is not None]
     jaccard_values = [row["best_reference"]["jaccard"] for row in valid if row["best_reference"]]
     containment_values = [row["best_reference"]["generated_containment"] for row in valid if row["best_reference"]]
     summary = {
@@ -198,6 +260,8 @@ def main() -> None:
         "mean_semester_alignment_pm1": round(mean(semester_values), 4) if semester_values else None,
         "mean_semester_alignment_scoped_median_pm1": round(mean(semester_scoped_values), 4) if semester_scoped_values else None,
         "mean_semester_alignment_any_source_pm1": round(mean(semester_any_values), 4) if semester_any_values else None,
+        "mean_semester_alignment_prereq_adjusted_pm1": round(mean(semester_prereq_adjusted_values), 4) if semester_prereq_adjusted_values else None,
+        "mean_semester_alignment_semantic_adjusted_pm1": round(mean(semester_semantic_adjusted_values), 4) if semester_semantic_adjusted_values else None,
         "semester_alignment_bootstrap_95ci": _bootstrap_ci(semester_values),
         "mean_best_jaccard": round(mean(jaccard_values), 4) if jaccard_values else None,
         "best_jaccard_bootstrap_95ci": _bootstrap_ci(jaccard_values),
@@ -208,6 +272,8 @@ def main() -> None:
         "quality_eligible_mean_semester_alignment_pm1": round(mean([row["semester_alignment_pm1"] for row in eligible if row["semester_alignment_pm1"] is not None]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_scoped_median_pm1": round(mean([row["semester_alignment_scoped_median_pm1"] for row in eligible if row.get("semester_alignment_scoped_median_pm1") is not None]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_any_source_pm1": round(mean([row["semester_alignment_any_source_pm1"] for row in eligible if row.get("semester_alignment_any_source_pm1") is not None]), 4) if eligible else None,
+        "quality_eligible_mean_semester_alignment_prereq_adjusted_pm1": round(mean([row["semester_alignment_prereq_adjusted_pm1"] for row in eligible if row.get("semester_alignment_prereq_adjusted_pm1") is not None]), 4) if eligible else None,
+        "quality_eligible_mean_semester_alignment_semantic_adjusted_pm1": round(mean([row["semester_alignment_semantic_adjusted_pm1"] for row in eligible if row.get("semester_alignment_semantic_adjusted_pm1") is not None]), 4) if eligible else None,
         "quality_eligible_invalid_typical_semester_rows": sum(int(row.get("invalid_typical_semester_rows") or 0) for row in eligible),
         "quality_eligible_mean_best_jaccard": round(mean([row["best_reference"]["jaccard"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "quality_eligible_mean_generated_containment": round(mean([row["best_reference"]["generated_containment"] for row in eligible if row["best_reference"]]), 4) if eligible else None,

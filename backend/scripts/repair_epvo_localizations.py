@@ -24,14 +24,38 @@ BAD = ("\ufffd", "Ð", "Р", "С")
 def clean(value):
     if not isinstance(value, str):
         return ""
-    return " ".join(unicodedata.normalize("NFC", value).split()).strip()
+    value = unicodedata.normalize("NFC", value)
+    # EPVO exports occasionally contain UTF-8 decoded as CP1251
+    # (e.g. ``РџРµРґ...``).  Repair only when the round-trip is valid and
+    # clearly reduces the characteristic mojibake markers.
+    for _ in range(2):
+        if value.count("Р") < 2 and value.count("С") < 2:
+            break
+        try:
+            candidate = value.encode("cp1251").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+        if candidate == value:
+            break
+        value = candidate
+    return " ".join(value.split()).strip()
+
+
+def has_mojibake(value):
+    if not isinstance(value, str):
+        return False
+    value = value.replace("РНР", "")
+    # Typical UTF-8/CP1251 artefacts look like ``РџРµ`` or ``СЂ``.  Keep
+    # legitimate abbreviations such as ``РНР`` out of this detector.
+    return "\ufffd" in value or bool(re.search(r"Р[А-ЯЁ][РС][^А-Яа-яЁёІіӘәҒғҚқҢңӨөҰұҮүҺһ]|С[А-ЯЁ][РС][^А-Яа-яЁёІіӘәҒғҚқҢңӨөҰұҮүҺһ]", value))
 
 
 def damaged(value):
+    raw = value
     value = clean(value)
     if not value:
         return True
-    if any(marker in value for marker in BAD):
+    if has_mojibake(raw) or any(marker in value for marker in BAD):
         return True
     # A serialized PowerShell/Python mapping must never be shown as a title.
     return value.startswith("@{") or value.startswith("{'")
@@ -123,7 +147,11 @@ def main():
           WHERE title_ru IS NULL OR title_kk IS NULL OR title_en IS NULL
              OR trim(title_ru) = '' OR trim(title_kk) = '' OR trim(title_en) = ''
              OR title_ru LIKE '%�%' OR title_kk LIKE '%�%' OR title_en LIKE '%�%'
+             OR title_ru ~ 'Р[А-ЯЁ][РС][^А-Яа-яЁёІіӘәҒғҚқҢңӨөҰұҮүҺһ]'
+             OR title_kk ~ 'Р[А-ЯЁ][РС][^А-Яа-яЁёІіӘәҒғҚқҢңӨөҰұҮүҺһ]'
+             OR title_en ~ 'Р[А-ЯЁ][РС][^А-Яа-яЁёІіӘәҒғҚқҢңӨөҰұҮүҺһ]'
              OR content_json::text LIKE '%�%'
+             OR content_json::text ~ 'Р[А-ЯЁ][РС][^А-Яа-яЁёІіӘәҒғҚқҢңӨөҰұҮүҺһ]'
              OR content_json::text NOT LIKE '%description_en%'
              OR content_json::text NOT LIKE '%description_kk%'
              OR trim(coalesce(content_json->>'description_en','')) = ''

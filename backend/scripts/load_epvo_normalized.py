@@ -83,11 +83,28 @@ def main():
                 cursor = db.execute("INSERT INTO epvo_disciplines_normalized(canonical_title,title_ru,title_kk,title_en,typical_credits,typical_semester,direction_codes,group_codes,source_programs,source_keys,content_json,dedup_fingerprint,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (canonical, course.get("nameRu"), course.get("nameKz"), course.get("nameEn"), credits, semester, packed([direction_code] if direction_code else []), packed([group_code] if group_code else []), packed([program_id]), packed([source_key]), packed(content), fingerprint, "normalized"))
                 discipline_id = cursor.lastrowid
                 stats["normalized_new"] += 1
+            # EPVO stores external review as one or more votes per course–LO
+            # in expertCheckResults. Preserve the graded signal instead of
+            # collapsing every declared link to 1.0.
+            expert_votes = {}
+            for check in course.get("expertCheckResults") or []:
+                try:
+                    value = float(str(check.get("result")).replace(",", "."))
+                except (TypeError, ValueError):
+                    continue
+                if value not in (0.0, 0.5, 1.0) or check.get("floId") is None:
+                    continue
+                expert_votes.setdefault(str(check["floId"]), []).append(value)
             for link in course.get("learningOutcomes") or []:
                 lo_key = str(link.get("id") or link.get("code") or digest(link)[:16])
                 check_payload = {"declared_link": True, "expert_level": link.get("level") or link.get("expertLevel"), "raw": link}
+                votes = expert_votes.get(lo_key, [])
+                strength = round(sum(votes) / len(votes), 4) if votes else 1.0
+                expert_level = ("rejected" if strength <= 0 else ("medium" if strength < 0.75 else "strong")) if votes else str(check_payload["expert_level"] or "declared")
+                check_payload["expert_votes"] = votes
+                check_payload["expert_strength"] = strength if votes else None
                 db.execute("INSERT INTO raw_epvo_expert_checks(program_source_id,discipline_source_key,lo_source_key,payload_json,checksum) VALUES(?,?,?,?,?) ON CONFLICT(program_source_id,discipline_source_key,lo_source_key) DO UPDATE SET payload_json=excluded.payload_json,checksum=excluded.checksum", (program_id, source_key, lo_key, packed(check_payload), digest(check_payload)))
-                db.execute("INSERT INTO epvo_discipline_lo_links(discipline_id,program_source_id,lo_source_key,strength,expert_level,source,evidence_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(discipline_id,program_source_id,lo_source_key) DO UPDATE SET strength=excluded.strength,expert_level=excluded.expert_level,evidence_json=excluded.evidence_json", (discipline_id, program_id, lo_key, 1.0, str(check_payload["expert_level"] or "declared"), "epvo_expert", packed(check_payload)))
+                db.execute("INSERT INTO epvo_discipline_lo_links(discipline_id,program_source_id,lo_source_key,strength,expert_level,source,evidence_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(discipline_id,program_source_id,lo_source_key) DO UPDATE SET strength=excluded.strength,expert_level=excluded.expert_level,evidence_json=excluded.evidence_json", (discipline_id, program_id, lo_key, strength, expert_level, "epvo_expert", packed(check_payload)))
                 stats["links"] += 1
             stats["disciplines"] += 1
         stats["programs"] += 1

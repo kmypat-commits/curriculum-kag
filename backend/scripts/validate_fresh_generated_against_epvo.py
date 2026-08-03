@@ -26,6 +26,17 @@ def main() -> int:
     args = parser.parse_args()
     db = SessionLocal()
     try:
+        def schedule_fingerprint(schedule: dict) -> str:
+            values = []
+            for semester, items in sorted((schedule or {}).items(), key=lambda pair: int(pair[0])):
+                for item in items or []:
+                    if not isinstance(item, dict):
+                        continue
+                    values.append(
+                        f"{int(semester)}:{item.get('course_id') or ''}:{item.get('bridge_module_id') or ''}"
+                    )
+            return "|".join(values)
+
         rows = db.query(EpvoDisciplineNormalized).filter(
             EpvoDisciplineNormalized.approved_course_id.isnot(None)
         ).all()
@@ -63,8 +74,28 @@ def main() -> int:
                             prerequisites_snapshot=item.get("prerequisites") or [],
                         ))
                 db.flush()
-                results.append(evaluate(project_id, db, rows, by_id) | {"variant_fresh": variant})
+                results.append(
+                    evaluate(project_id, db, rows, by_id)
+                    | {
+                        "variant_fresh": variant,
+                        "schedule_fingerprint": schedule_fingerprint(generated.get("schedule") or {}),
+                    }
+                )
                 db.rollback()
+        by_project = {}
+        for row in results:
+            by_project.setdefault(int(row.get("project_id") or 0), []).append(row)
+        for project_rows in by_project.values():
+            fingerprints = [row.get("schedule_fingerprint") for row in project_rows]
+            distinct = len(fingerprints) == len(set(fingerprints))
+            duplicate_variants = []
+            for fingerprint in sorted(set(fingerprints)):
+                names = [row.get("variant_fresh") for row in project_rows if row.get("schedule_fingerprint") == fingerprint]
+                if len(names) > 1:
+                    duplicate_variants.append(names)
+            for row in project_rows:
+                row["variants_are_distinct"] = distinct
+                row["duplicate_variants"] = duplicate_variants
         summary_rows = [row for row in results if row.get("quality_eligible")]
         def mean_metric(key: str):
             values = [float(row[key]) for row in summary_rows if row.get(key) is not None]
@@ -77,6 +108,8 @@ def main() -> int:
             "mean_semester_alignment_pm1": mean_metric("semester_alignment_pm1"),
             "mean_semester_alignment_scoped_median_pm1": mean_metric("semester_alignment_scoped_median_pm1"),
             "mean_semester_alignment_any_source_pm1": mean_metric("semester_alignment_any_source_pm1"),
+            "mean_semester_alignment_prereq_adjusted_pm1": mean_metric("semester_alignment_prereq_adjusted_pm1"),
+            "mean_semester_alignment_semantic_adjusted_pm1": mean_metric("semester_alignment_semantic_adjusted_pm1"),
             "interpretation": "Fresh transactional planner output; structural comparison, not blinded expert evaluation.",
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)

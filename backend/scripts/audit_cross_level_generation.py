@@ -55,6 +55,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--level", choices=("bachelor", "master", "doctorate"), required=True)
     parser.add_argument("--profile", choices=("standard", "ict-medicine"), default="standard")
+    parser.add_argument("--jurisdiction", choices=("KZ", "INTERNATIONAL"), default="KZ")
     parser.add_argument("--output", required=True)
     parser.add_argument("--variants", nargs="+", choices=("A", "B", "C"), default=("A", "B", "C"))
     parser.add_argument("--keep", action="store_true")
@@ -79,7 +80,7 @@ def main() -> None:
         secondary_direction = secondary_group = secondary_area = ""
         domain1, domain2 = "Информационно-коммуникационные технологии", ""
         professional_los = BACHELOR_LOS
-        max_allowed_bridges = 1
+        max_allowed_bridges = 2 if args.jurisdiction != "KZ" else 1
         min_prerequisite_edges = 5
     elif args.level == "doctorate":
         total_credits, semesters, direction, group, area = 180, 6, "8D061", "D094", "8D06"
@@ -97,7 +98,7 @@ def main() -> None:
         min_prerequisite_edges = 3
     constraints = {
         "education_level": args.level,
-        "jurisdiction": "KZ",
+        "jurisdiction": args.jurisdiction,
         "program_type": "interdisciplinary" if args.profile == "ict-medicine" else "standard",
         "education_area": area,
         "direction_code": direction,
@@ -145,7 +146,8 @@ def main() -> None:
         db.commit()
         db.refresh(version)
         print(f"created project={project_id} version={version.id}", flush=True)
-        ensure_goso_learning_outcomes(version, db)
+        if args.jurisdiction == "KZ":
+            ensure_goso_learning_outcomes(version, db)
         repository = approve_epvo_candidates(version, db, limit=500)
         db.commit()
         print(f"repository created={repository.get('created')} linked={repository.get('linked')}", flush=True)
@@ -300,7 +302,10 @@ def main() -> None:
                 "structural_foundations": audit.get("structural_foundations"),
                 "competency_blocks": audit.get("competency_blocks") or {},
                 "quality_passed": verification.get("quality_passed"),
-                "goso_compliant": (verification.get("goso_compliance") or {}).get("compliant"),
+                "goso_compliant": (
+                    (verification.get("goso_compliance") or {}).get("compliant")
+                    if args.jurisdiction == "KZ" else True
+                ),
                 "wrong_semester": len(audit.get("semester_misplacements") or []),
                 "semester_misplacements": audit.get("semester_misplacements") or [],
                 "wrong_level": len((metrics.get("course_admission") or {}).get("wrong_level_courses") or []),
@@ -377,6 +382,18 @@ def main() -> None:
         }
         variants_are_distinct = len(fingerprints) == len(variants)
         def bridge_contract(row: dict) -> bool:
+            if args.jurisdiction != "KZ":
+                # International programmes have no protected ГОСО block.  A
+                # deterministic bridge is admissible when it has explicit LO
+                # targets, stays inside the credit budget and is not an
+                # opaque placeholder.
+                details = row.get("bridge_details") or []
+                return (
+                    len(details) <= max_allowed_bridges
+                    and all(bool(item.get("target_los")) for item in details)
+                    and all(int(item.get("credits") or 0) > 0 for item in details)
+                    and all(1 <= int(item.get("semester") or 0) <= semesters for item in details)
+                )
             if args.profile != "ict-medicine":
                 return row["bridges"] <= max_allowed_bridges
             details = row.get("bridge_details") or []
@@ -437,6 +454,7 @@ def main() -> None:
             )
         report.update({
             "profile": args.profile,
+            "jurisdiction": args.jurisdiction,
             "status": "complete",
             "elapsed_seconds": round(time.perf_counter() - started, 2),
             "scope": {"direction": direction, "group": group},

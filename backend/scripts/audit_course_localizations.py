@@ -38,6 +38,7 @@ def main() -> int:
     missing: dict[str, int] = {}
     samples: dict[str, list[dict]] = {}
     catalogue_layers: dict[str, dict] = {}
+    source_coverage: dict[str, dict[str, float | int]] = {}
     with engine.connect() as connection:
         total_courses = int(connection.execute(text("SELECT count(*) FROM courses")).scalar() or 0)
         by_language = {
@@ -54,27 +55,13 @@ def main() -> int:
                 "FROM course_localizations GROUP BY status"
             )).mappings()
         }
-        # Replacement characters and common UTF-8/CP1251 mojibake markers are
-        # both invalid for a user-visible translation.  The latter used to be
-        # missed because the text was non-empty and therefore looked complete.
+        # Only the Unicode replacement character is an unambiguous corruption
+        # signal at the SQL layer. Broad mojibake LIKE patterns caused false
+        # positives for ordinary Cyrillic and Kazakh words.
         corrupt_predicate = " OR ".join(
             [
                 "title LIKE :replacement",
                 "description LIKE :replacement",
-                "title LIKE :moji1",
-                "description LIKE :moji1",
-                "title LIKE :moji2",
-                "description LIKE :moji2",
-                "title LIKE :moji3",
-                "description LIKE :moji3",
-                "title LIKE :moji4",
-                "description LIKE :moji4",
-                "title LIKE :moji5",
-                "description LIKE :moji5",
-                "title LIKE :moji6",
-                "description LIKE :moji6",
-                "title LIKE :moji7",
-                "description LIKE :moji7",
             ]
         )
         corrupt_params = {
@@ -163,7 +150,7 @@ def main() -> int:
                 catalogue_predicate = " OR ".join(
                     f"{column} LIKE :{parameter}"
                     for column in ("title_ru", "title_kk", "title_en")
-                        for parameter in ("replacement", "moji1", "moji2", "moji3", "moji4", "moji5", "moji6", "moji7")
+                        for parameter in ("replacement",)
                 )
                 corrupt_count = int(connection.execute(text(
                     f"SELECT count(*) FROM {table} WHERE {catalogue_predicate}"
@@ -178,6 +165,21 @@ def main() -> int:
                 # Older SQLite snapshots do not contain the layered EPVO
                 # catalogue; the course audit remains useful there.
                 catalogue_layers[table] = {"available": False}
+
+        # The normalized layer can contain historical EPVO cards that are not
+        # promoted to the active repository. Report its source completeness
+        # separately; missing fields here mean that the raw card itself had no
+        # translation and must not be silently replaced by RU text.
+        try:
+            normalized_total = int(connection.execute(text("SELECT count(*) FROM epvo_disciplines_normalized")).scalar() or 0)
+            for field in ("title_ru", "title_kk", "title_en"):
+                filled = int(connection.execute(text(f"SELECT count(*) FROM epvo_disciplines_normalized WHERE trim(coalesce({field},''))<>''")).scalar() or 0)
+                source_coverage[field] = {"filled": filled, "total": normalized_total, "coverage": round(filled / max(normalized_total, 1), 6)}
+            for lang in ("ru", "kk", "en"):
+                filled = int(connection.execute(text(f"SELECT count(*) FROM epvo_disciplines_normalized WHERE trim(coalesce(content_json->>'description_{lang}',''))<>''")).scalar() or 0)
+                source_coverage[f"description_{lang}"] = {"filled": filled, "total": normalized_total, "coverage": round(filled / max(normalized_total, 1), 6)}
+        except Exception:
+            source_coverage = {}
 
     report = {
         "database": safe_database_name(args.database_url),
@@ -204,6 +206,7 @@ def main() -> int:
         ),
         "samples": samples,
         "catalogue_layers": catalogue_layers,
+        "normalized_source_coverage": source_coverage,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
