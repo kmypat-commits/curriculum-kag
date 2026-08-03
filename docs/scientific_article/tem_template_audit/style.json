@@ -1,0 +1,120 @@
+{
+  "input": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_official_template.docx",
+  "fonts_by_char_count": {
+    "Times New Roman": 1125
+  },
+  "direct_run_formatting_runs": 373,
+  "direct_paragraph_formatting_paragraphs": 85,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 1,
+      "text": "Guidelines for Writing Scientific Paper",
+      "style": "Normal"
+    },
+    {
+      "para_index": 2,
+      "text": "for TEM Journal Publication",
+      "style": "ICEST_Title"
+    },
+    {
+      "para_index": 14,
+      "text": "Introduction",
+      "style": "Normal"
+    },
+    {
+      "para_index": 23,
+      "text": "Corresponding author: - , ",
+      "style": "Normal"
+    },
+    {
+      "para_index": 25,
+      "text": "Email: -",
+      "style": "Normal"
+    },
+    {
+      "para_index": 60,
+      "text": "Methodology Section",
+      "style": "ICEST_Title"
+    },
+    {
+      "para_index": 64,
+      "text": "Results",
+      "style": "ICEST_Title"
+    },
+    {
+      "para_index": 70,
+      "text": "Discussion",
+      "style": "ICEST_Title"
+    },
+    {
+      "para_index": 74,
+      "text": "Conclusion",
+      "style": "ICEST_Title"
+    },
+    {
+      "para_index": 82,
+      "text": "References",
+      "style": "Els-body-text"
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "Guidelines for Writing Scientific Paper",
+        "style": "Normal"
+      },
+      {
+        "para_index": 4,
+        "text": "First Author 1, Second Author 2, Third Author 3",
+        "style": "Normal"
+      },
+      {
+        "para_index": 5,
+        "text": "",
+        "style": "Normal"
+      },
+      {
+        "para_index": 6,
+        "text": "1First affiliation, Address, City, Country  (e-mail)",
+        "style": "Normal"
+      },
+      {
+        "para_index": 7,
+        "text": "2Second affiliation, Address, City, Country (e-mail)",
+        "style": "Normal"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "Guidelines for ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 1,
+        "run_text": "Writing",
+        "style": "Normal"
+      },
+      {
+        "para_index": 1,
+        "run_text": " ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 1,
+        "run_text": "Scientific ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 1,
+        "run_text": "Paper",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

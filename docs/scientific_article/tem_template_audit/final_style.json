@@ -1,0 +1,95 @@
+{
+  "input": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\Curriculum_KAG_TEM_manuscript_official_template.docx",
+  "fonts_by_char_count": {
+    "Times New Roman": 260
+  },
+  "direct_run_formatting_runs": 25,
+  "direct_paragraph_formatting_paragraphs": 25,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 60,
+      "text": "Model / stage",
+      "style": "Normal"
+    },
+    {
+      "para_index": 61,
+      "text": "ROC-AUC",
+      "style": "Normal"
+    },
+    {
+      "para_index": 62,
+      "text": "PR-AUC",
+      "style": "Normal"
+    },
+    {
+      "para_index": 63,
+      "text": "F1",
+      "style": "Normal"
+    },
+    {
+      "para_index": 64,
+      "text": "Ranking result",
+      "style": "Normal"
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 60,
+        "text": "Model / stage",
+        "style": "Normal"
+      },
+      {
+        "para_index": 61,
+        "text": "ROC-AUC",
+        "style": "Normal"
+      },
+      {
+        "para_index": 62,
+        "text": "PR-AUC",
+        "style": "Normal"
+      },
+      {
+        "para_index": 63,
+        "text": "F1",
+        "style": "Normal"
+      },
+      {
+        "para_index": 64,
+        "text": "Ranking result",
+        "style": "Normal"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 60,
+        "run_text": "Model / stage",
+        "style": "Normal"
+      },
+      {
+        "para_index": 61,
+        "run_text": "ROC-AUC",
+        "style": "Normal"
+      },
+      {
+        "para_index": 62,
+        "run_text": "PR-AUC",
+        "style": "Normal"
+      },
+      {
+        "para_index": 63,
+        "run_text": "F1",
+        "style": "Normal"
+      },
+      {
+        "para_index": 64,
+        "run_text": "Ranking result",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

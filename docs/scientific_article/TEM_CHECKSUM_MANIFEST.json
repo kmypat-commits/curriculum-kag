@@ -1,0 +1,70 @@
+{
+  "algorithm": "SHA-256",
+  "files": [
+    {
+      "path": "TEM_official_template.docx",
+      "bytes": 41758,
+      "sha256": "0dba4319d7022c0057b3995ace894ea55ae40c1d2f4515d5954e936a606de3b2"
+    },
+    {
+      "path": "Curriculum_KAG_TEM_manuscript_official_template.docx",
+      "bytes": 31912,
+      "sha256": "2d4c4006e39f4cfaa3b7a03e454f01aebd664bfabe71038f945d41d18a35c9d0"
+    },
+    {
+      "path": "Curriculum_KAG_TEM_manuscript_anonymous.docx",
+      "bytes": 31861,
+      "sha256": "6126c821ba99a6fc355ced6530e728af2036bd83c83dfcb53e78ced3b107ad5e"
+    },
+    {
+      "path": "TEM_SUPPLEMENTARY_MATERIALS_EN.md",
+      "bytes": 7441,
+      "sha256": "424e0f6e05adb995415d9d53d9f34e46015045414fa150b7d955897f9684df5b"
+    },
+    {
+      "path": "TEM_FROZEN_RESULTS_TABLE_EN.md",
+      "bytes": 1908,
+      "sha256": "784cca0eb53972fb742127cb541f87460eb5a00e006f8464d302d8b6fa84fc1d"
+    },
+    {
+      "path": "TEM_COVER_LETTER_EN.md",
+      "bytes": 2470,
+      "sha256": "dba679b9c7cdfad42d3417eb24db56fb074a5ca3be54bb39731947a8e89fcc1c"
+    },
+    {
+      "path": "TEM_SUBMISSION_CHECKLIST_EN.md",
+      "bytes": 2636,
+      "sha256": "32394cc9d576248777d59959ac0f7a733c5dc5f5df24d15a6e57e36748e0c900"
+    },
+    {
+      "path": "tem_package_audit.json",
+      "bytes": 3394,
+      "sha256": "12943609e33f8250c8243641094cb20725e2c60d5c4ab3c3f106104c4ef942c3"
+    },
+    {
+      "path": "tem_anonymity_audit.json",
+      "bytes": 496,
+      "sha256": "18f19696820cddefb1e08fbcb3b9a52f3731f688e0f432eb097300c3d736c5fd"
+    },
+    {
+      "path": "TEM_UPLOAD_INSTRUCTIONS_RU.md",
+      "bytes": 3339,
+      "sha256": "5dfa0ee35b8f4514fcb8a45db27877b45c76ed86b09c05e458dc9c61dd7cb4e5"
+    },
+    {
+      "path": "tem_text_audit.json",
+      "bytes": 318,
+      "sha256": "a2077f945d1a1def2b7949d616aa5c7484f82f743a45a722d6261f5abfc6000d"
+    },
+    {
+      "path": "tem_citation_audit.json",
+      "bytes": 385,
+      "sha256": "0666d41e5128e52f8002be31b4d61523c2f96968c60bc79a49932391257ad7be"
+    },
+    {
+      "path": "TEM_READINESS_REPORT_RU.md",
+      "bytes": 2238,
+      "sha256": "9aa652480f90704171ede96c862f5ab1dc29181ff3214eabbf5fae045f68aa15"
+    }
+  ]
+}

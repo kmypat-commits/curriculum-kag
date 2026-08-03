@@ -1,0 +1,98 @@
+{
+  "package": {
+    "template": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_official_template.docx",
+    "full_manuscript": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\Curriculum_KAG_TEM_manuscript_official_template.docx",
+    "anonymous_manuscript": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\Curriculum_KAG_TEM_manuscript_anonymous.docx",
+    "supplement": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_SUPPLEMENTARY_MATERIALS_EN.md",
+    "checklist": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_SUBMISSION_CHECKLIST_EN.md",
+    "frozen_table": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_FROZEN_RESULTS_TABLE_EN.md",
+    "checksum_manifest": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_CHECKSUM_MANIFEST.json",
+    "blinded_protocol": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_BLINDED_REVIEW_PROTOCOL_EN.md",
+    "anonymity_audit": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\tem_anonymity_audit.json",
+    "upload_instructions": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_UPLOAD_INSTRUCTIONS_RU.md",
+    "text_audit": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\tem_text_audit.json",
+    "citation_audit": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\tem_citation_audit.json",
+    "readiness_report": "D:\\curriculum-kag\\curriculum-kag\\docs\\scientific_article\\TEM_READINESS_REPORT_RU.md"
+  },
+  "documents": {
+    "template": {
+      "exists": true,
+      "bytes": 41758,
+      "paragraphs": 93,
+      "tables": 1,
+      "sections": 2,
+      "words": 1150,
+      "abstract_words": 0,
+      "keywords": "",
+      "placeholder_paragraphs": [],
+      "has_title": true
+    },
+    "full_manuscript": {
+      "exists": true,
+      "bytes": 31912,
+      "paragraphs": 65,
+      "tables": 1,
+      "sections": 2,
+      "words": 2255,
+      "abstract_words": 99,
+      "keywords": "curriculum design; learning outcomes; EPVO; SBERT; expert-in-the-loop",
+      "placeholder_paragraphs": [],
+      "has_title": true
+    },
+    "anonymous_manuscript": {
+      "exists": true,
+      "bytes": 31861,
+      "paragraphs": 65,
+      "tables": 1,
+      "sections": 2,
+      "words": 2241,
+      "abstract_words": 99,
+      "keywords": "curriculum design; learning outcomes; EPVO; SBERT; expert-in-the-loop",
+      "placeholder_paragraphs": [],
+      "has_title": true
+    }
+  },
+  "supporting_files": {
+    "supplement": {
+      "exists": true,
+      "bytes": 7441
+    },
+    "checklist": {
+      "exists": true,
+      "bytes": 2636
+    },
+    "frozen_table": {
+      "exists": true,
+      "bytes": 1908
+    },
+    "checksum_manifest": {
+      "exists": true,
+      "bytes": 2251
+    },
+    "blinded_protocol": {
+      "exists": true,
+      "bytes": 3122
+    },
+    "anonymity_audit": {
+      "exists": true,
+      "bytes": 496
+    },
+    "upload_instructions": {
+      "exists": true,
+      "bytes": 3339
+    },
+    "text_audit": {
+      "exists": true,
+      "bytes": 318
+    },
+    "citation_audit": {
+      "exists": true,
+      "bytes": 385
+    },
+    "readiness_report": {
+      "exists": true,
+      "bytes": 2238
+    }
+  },
+  "pass": true
+}
