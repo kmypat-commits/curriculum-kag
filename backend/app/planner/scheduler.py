@@ -4608,7 +4608,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # deterministic scheduler only needs a ranked frontier; traversing the
     # complete catalogue makes each variant quadratic and can exhaust memory.
     # Keep enough diversity for both domains while bounding generation time.
-    candidate_ids = unique_candidate_ids[:50]
+    candidate_ids = unique_candidate_ids[:100]
     root_credits = sum(
         int(course.credits or 5)
         for course in courses.values()
