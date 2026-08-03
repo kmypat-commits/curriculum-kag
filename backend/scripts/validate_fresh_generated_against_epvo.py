@@ -110,6 +110,7 @@ def main() -> int:
             "mean_semester_alignment_any_source_pm1": mean_metric("semester_alignment_any_source_pm1"),
             "mean_semester_alignment_prereq_adjusted_pm1": mean_metric("semester_alignment_prereq_adjusted_pm1"),
             "mean_semester_alignment_semantic_adjusted_pm1": mean_metric("semester_alignment_semantic_adjusted_pm1"),
+            "mean_semester_alignment_constrained_pm1": mean_metric("semester_alignment_constrained_pm1"),
             "interpretation": "Fresh transactional planner output; structural comparison, not blinded expert evaluation.",
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)

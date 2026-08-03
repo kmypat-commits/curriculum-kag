@@ -1257,6 +1257,25 @@ The control experiments confirmed exact credit totals, real LO coverage, and the
 The system simplifies the task as follows: the expert specifies the program idea and constraints; KAG retrieves and links relevant knowledge; the planner assembles alternatives; independent rules reject infeasible solutions; and the human expert reviews the evidence and makes the final decision.
 \end{plainbox}
 
+\section{Constrained semester reranking and expert interpretation}
+
+In the latest fresh control series, raw agreement with the EPVO typical semester within $\pm1$ was $0.7682$ across six quality-eligible programmes. After accounting for the earliest feasible semester implied by prerequisites it increased to $0.8042$, and after applying semantic pedagogical floors and ceilings it reached $0.8403$. These figures answer different questions: the first measures literal historical agreement, the second permits an objectively necessary prerequisite shift, and the third also respects the pedagogical ordering of foundation and advanced subjects.
+
+We therefore define a separate \emph{constrained semester alignment} metric for the next reranking stage. It does not replace the raw metric and does not label every displacement as correct. For course $c_i$ with recommended term $t_i$, the nearest term $s_i$ is accepted only when the credit envelope remains feasible:
+\begin{equation}
+ s_i^*=\arg\min_{s\in\{1,\ldots,T\}} |s-t_i|,
+ \quad L\leq C_s(P)-C_i\leq U,
+ \quad L\leq C_{s_i^*}(P)+C_i\leq U,
+\end{equation}
+where $C_s(P)$ is the current semester load, $C_i$ is the course credit value, and $[L,U]=[27,33]$ for a nominal 30-credit semester. If a move violates this interval, the current term is retained and reported as a capacity constraint rather than being presented as evidence of historical agreement. The metric is thus suitable for constrained reranking: it improves semester proximity without breaking exact credits or prerequisite order.
+
+SCES RK (the State Compulsory Standard of Education of the Republic of Kazakhstan, ГОСО) defines a protected regulatory core: mandatory courses, practice, research work, and final attestation, with requirements depending on the education level. A SCES-constrained plan therefore cannot replace every mandatory course by the most semantically similar EPVO course; the protected block can reduce the measured profile-semantic overlap. In the international mode, where SCES RK is not imposed, the same retrieval and reranking pipeline generally produces a higher profile-match percentage. The system reports these regimes separately rather than conflating them.
+
+In an expert demonstration, representatives of Abylkas Saginov Karaganda Technical University and the Academy of Public Administration under the President of the Republic of Kazakhstan assessed the resulting programmes positively, particularly their traceable evidence, explainability, and protection of regulatory components. They also recommended a final manual refinement of disputed links and syllabus-level details before formal approval. This is consistent with the intended human-in-the-loop scope: the system reduces search and exposes evidence, while the academic expert retains the final decision.
+
+\paragraph{PROMPT FOR FIGURE ``Constrained semester reranking''.}
+Create a publication-grade vector diagram for a Q2 scientific journal. Show an eight-semester curriculum with 30 credits per semester and a 27--33 tolerance band. On the left show the EPVO recommended semester $t_i$, the prerequisite earliest feasible semester, and semantic pedagogical floor/ceiling. In the centre show a constrained reranking gate that selects the nearest feasible semester only if source and target loads remain within 27--33 and prerequisite arrows remain forward. On the right compare three transparent metrics: raw alignment 0.7682, prerequisite-adjusted 0.8042, semantic-adjusted 0.8403. Add a warning that constrained alignment is a feasibility metric, not an accreditation decision. White background, navy/teal/amber palette, no robots, no neon, no invented values, readable English labels, editable SVG and 300-dpi PNG.
+
 \appendix
 
 

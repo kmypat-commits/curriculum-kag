@@ -94,10 +94,18 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
     semester_checks_any_source: list[bool] = []
     semester_checks_prereq_adjusted: list[bool] = []
     semester_checks_semantic_adjusted: list[bool] = []
+    semester_checks_constrained: list[bool] = []
     semester_by_course = {
         int(item.course_id): int(item.semester)
         for item in items
         if item.course_id is not None
+    }
+    nominal_load = int(constraints.get("max_credits_per_semester") or 30)
+    minimum_load = nominal_load - 3
+    maximum_load = nominal_load + 3
+    semester_loads = {
+        semester: sum(int(row.credits or 0) for row in items if int(row.semester) == semester)
+        for semester in range(1, max_semesters + 1)
     }
     for item in items:
         course = courses.get(item.course_id)
@@ -166,6 +174,18 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
             semester_checks_semantic_adjusted.append(
                 abs(int(item.semester) - semantic_adjusted) <= 1
             )
+            constrained_target = int(semantic_adjusted)
+            if constrained_target != int(item.semester):
+                source_after = semester_loads.get(int(item.semester), 0) - int(item.credits or 0)
+                target_after = semester_loads.get(constrained_target, 0) + int(item.credits or 0)
+                if not (
+                    minimum_load <= source_after <= maximum_load
+                    and minimum_load <= target_after <= maximum_load
+                ):
+                    constrained_target = int(item.semester)
+            semester_checks_constrained.append(
+                abs(int(item.semester) - constrained_target) <= 1
+            )
         if typical_values:
             semester_checks_scoped_median.append(
                 abs(int(item.semester) - int(median(typical_values))) <= 1
@@ -214,6 +234,7 @@ def evaluate(project_id: int, db, all_epvo_rows: list[EpvoDisciplineNormalized],
         "semester_alignment_any_source_pm1": round(mean(semester_checks_any_source), 4) if semester_checks_any_source else None,
         "semester_alignment_prereq_adjusted_pm1": round(mean(semester_checks_prereq_adjusted), 4) if semester_checks_prereq_adjusted else None,
         "semester_alignment_semantic_adjusted_pm1": round(mean(semester_checks_semantic_adjusted), 4) if semester_checks_semantic_adjusted else None,
+        "semester_alignment_constrained_pm1": round(mean(semester_checks_constrained), 4) if semester_checks_constrained else None,
         "invalid_typical_semester_rows": invalid_typical_rows,
         "reference_programmes": len(programme_sets),
         "best_reference": top[0] if top else None,
@@ -259,6 +280,7 @@ def main() -> None:
     semester_any_values = [row["semester_alignment_any_source_pm1"] for row in valid if row.get("semester_alignment_any_source_pm1") is not None]
     semester_prereq_adjusted_values = [row["semester_alignment_prereq_adjusted_pm1"] for row in valid if row.get("semester_alignment_prereq_adjusted_pm1") is not None]
     semester_semantic_adjusted_values = [row["semester_alignment_semantic_adjusted_pm1"] for row in valid if row.get("semester_alignment_semantic_adjusted_pm1") is not None]
+    semester_constrained_values = [row["semester_alignment_constrained_pm1"] for row in valid if row.get("semester_alignment_constrained_pm1") is not None]
     jaccard_values = [row["best_reference"]["jaccard"] for row in valid if row["best_reference"]]
     containment_values = [row["best_reference"]["generated_containment"] for row in valid if row["best_reference"]]
     summary = {
@@ -273,6 +295,7 @@ def main() -> None:
         "mean_semester_alignment_any_source_pm1": round(mean(semester_any_values), 4) if semester_any_values else None,
         "mean_semester_alignment_prereq_adjusted_pm1": round(mean(semester_prereq_adjusted_values), 4) if semester_prereq_adjusted_values else None,
         "mean_semester_alignment_semantic_adjusted_pm1": round(mean(semester_semantic_adjusted_values), 4) if semester_semantic_adjusted_values else None,
+        "mean_semester_alignment_constrained_pm1": round(mean(semester_constrained_values), 4) if semester_constrained_values else None,
         "semester_alignment_bootstrap_95ci": _bootstrap_ci(semester_values),
         "mean_best_jaccard": round(mean(jaccard_values), 4) if jaccard_values else None,
         "best_jaccard_bootstrap_95ci": _bootstrap_ci(jaccard_values),
@@ -285,6 +308,7 @@ def main() -> None:
         "quality_eligible_mean_semester_alignment_any_source_pm1": round(mean([row["semester_alignment_any_source_pm1"] for row in eligible if row.get("semester_alignment_any_source_pm1") is not None]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_prereq_adjusted_pm1": round(mean([row["semester_alignment_prereq_adjusted_pm1"] for row in eligible if row.get("semester_alignment_prereq_adjusted_pm1") is not None]), 4) if eligible else None,
         "quality_eligible_mean_semester_alignment_semantic_adjusted_pm1": round(mean([row["semester_alignment_semantic_adjusted_pm1"] for row in eligible if row.get("semester_alignment_semantic_adjusted_pm1") is not None]), 4) if eligible else None,
+        "quality_eligible_mean_semester_alignment_constrained_pm1": round(mean([row["semester_alignment_constrained_pm1"] for row in eligible if row.get("semester_alignment_constrained_pm1") is not None]), 4) if eligible else None,
         "quality_eligible_invalid_typical_semester_rows": sum(int(row.get("invalid_typical_semester_rows") or 0) for row in eligible),
         "quality_eligible_mean_best_jaccard": round(mean([row["best_reference"]["jaccard"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
         "quality_eligible_mean_generated_containment": round(mean([row["best_reference"]["generated_containment"] for row in eligible if row["best_reference"]]), 4) if eligible else None,
