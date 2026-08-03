@@ -74,7 +74,9 @@
 - (A) Обновить тезис: «детерминированный эвристический планировщик + NSGA-II как экспериментальная ветка для каталогов без явного EPVO-скоупа»; либо
 - (B) Вернуть NSGA-II в рабочий контур для scoped-программ и доказать улучшение метрик (потребует регрессии на 4 контрольных проектах).
 
-### 2.4 Приёмочный шлюз сейчас RED (последние прогоны)
+### 2.4 Приёмочный шлюз стабилизирован
+
+**Актуальный статус (03.08.2026):** полный production acceptance проходит: 38/38 backend-тестов, PostgreSQL smoke, Alembic schema state, core API smoke, контрольные программы, локализации и frontend build. Старые RED-прогоны ниже являются исторической записью.
 - `full-acceptance` 2026-07-29 22:46: `status=failed`, ошибка «Fresh interdisciplinary ICT + medicine A/B/C generation failed with exit code 1».
 - Последующие отдельные прогоны (30.07 00:23–00:32) прошли (ICT+medicine passed=true).
 - Финальный `standard-final-acceptance` 30.07 00:37: все генерации прошли, но `status=failed` из-за **vite build**:
@@ -82,14 +84,18 @@
 
 **Решение:** исправить frontend build, чтобы warning не ронял exit-код (обновить `vite.config`/Vite-версию или не трактовать warning как error), затем прогнать полную приёмку: `.\acceptance-test.ps1` (и с `-IncludeFreshGeneration`).
 
-### 2.5 Схема БД не мигрируется (нет Alembic-версий)
+### 2.5 Схема БД: baseline Alembic зафиксирован
+
+**Актуальный статус (03.08.2026):** `20260802_baseline` находится в `backend/migrations/versions/20260802_0001_baseline.py`; production подтверждён на `head`. Read-only проверку выполняет `backend/scripts/check_alembic_state.py`, подключённый к acceptance.
 - `backend/migrations/` содержит только `env.py` и `script.py.mako` — **папки `versions/` нет**.
 - Схема создаётся при старте: `Base.metadata.create_all` (`app/main.py:28`) — не идемпотентна для изменения колонок, опасна при совместной работе.
 - Alembic установлен в `requirements.txt`, но не используется.
 
 **Решение:** начать Alembic с первого коммита-слепка текущей схемы (`alembic revision --autogenerate` против SQLite), затем все изменения схемы — через миграции. Для одно-пользовательской НИР это допустимо отложить, но задокументировать.
 
-### 2.6 `requirements.txt` (Docker) устарел и расходится с `requirements-local.txt`
+### 2.6 Единый production stack зафиксирован
+
+**Актуальный статус (03.08.2026):** Docker и acceptance используют Python 3.12; production `requirements.txt` синхронизирован с локальным ML-стеком. `requirements-local.txt` остаётся облегчённым профилем без FAISS.
 | Пакет | `requirements.txt` | `requirements-local.txt` (реально используется) |
 |---|---|---|
 | sentence-transformers | 2.3.1 | 5.6.0 |
