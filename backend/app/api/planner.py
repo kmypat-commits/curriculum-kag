@@ -37,6 +37,8 @@ from app.planner.planner_utils import (
     goso_definition_code as _goso_definition_code,
     title_key as _title_key,
 )
+from app.services.plan_reporting import academic_classification as _academic_classification
+from app.services.plan_reporting import build_change_report as _build_change_report
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -101,54 +103,6 @@ def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, t
     ]
 
 
-def _academic_classification(
-    course: Course | None,
-    semester: int,
-    total_semesters: int,
-    role: str,
-    jurisdiction: str = "INTERNATIONAL",
-) -> dict:
-    """Return separate RK curriculum cycle and component labels."""
-    raw = str(getattr(course, "cycle_component", None) or "").casefold()
-    code = str(getattr(course, "course_id", None) or "")
-    if "_ood_" in raw or raw.startswith("goso_ood"):
-        cycle, cycle_source = "ООД", "goso"
-    elif "_bd_" in raw or raw.startswith("goso_bd"):
-        cycle, cycle_source = "БД", "goso"
-    elif "_pd_" in raw or raw.startswith("goso_pd"):
-        cycle, cycle_source = "ПД", "goso"
-    elif raw.startswith("goso_research") or raw.startswith("goso_final"):
-        cycle, cycle_source = "ПД", "goso"
-    elif role == "general":
-        cycle, cycle_source = "ООД", "inferred"
-    elif int(semester or 1) <= max(2, int(total_semesters or 8) // 2):
-        cycle, cycle_source = "БД", "inferred"
-    else:
-        cycle, cycle_source = "ПД", "inferred"
-
-    if "elective" in raw or "по выбору" in raw:
-        component = "компонент по выбору"
-    elif "university" in raw or "вузов" in raw:
-        component = "вузовский компонент"
-    elif "practice" in raw:
-        component = "практика"
-    elif "research" in raw:
-        component = "научно-исследовательская работа"
-    elif "final" in raw:
-        component = "итоговая аттестация"
-    else:
-        component = "обязательный компонент"
-    return {
-        "academic_cycle": cycle,
-        "academic_cycle_source": cycle_source,
-        "academic_component": component,
-        "protected_by_goso": (
-            str(jurisdiction or "INTERNATIONAL").upper() == "KZ"
-            and code.startswith("GOSO-KZ-")
-        ),
-    }
-
-
 def _plan_snapshot(plan, db: Session) -> dict | None:
     if not plan:
         return None
@@ -183,36 +137,6 @@ def _plan_snapshot(plan, db: Session) -> dict | None:
         "quality": verification.get("quality_passed"),
         "hard": verification.get("hard_violation_count"),
         "titles": sorted({_title_key(title) for title in titles if title}),
-    }
-
-
-def _build_change_report(old_snapshot: dict | None, new_snapshot: dict | None) -> dict:
-    if not old_snapshot or not new_snapshot:
-        return {"available": False, "reason": "Нет старого или нового активного плана для сравнения"}
-    old_titles = set(old_snapshot.get("titles") or [])
-    new_titles = set(new_snapshot.get("titles") or [])
-    added = sorted(new_titles - old_titles)
-    removed = sorted(old_titles - new_titles)
-    return {
-        "available": True,
-        "old_plan_id": old_snapshot["plan_id"],
-        "new_plan_id": new_snapshot["plan_id"],
-        "variant": new_snapshot["variant"],
-        "credits_delta": int(new_snapshot["credits"] or 0) - int(old_snapshot["credits"] or 0),
-        "items_delta": int(new_snapshot["items"] or 0) - int(old_snapshot["items"] or 0),
-        "bridges_delta": int(new_snapshot["bridges"] or 0) - int(old_snapshot["bridges"] or 0),
-        "min_lo_delta": (
-            None if old_snapshot.get("min_lo") is None or new_snapshot.get("min_lo") is None
-            else round(float(new_snapshot["min_lo"]) - float(old_snapshot["min_lo"]), 4)
-        ),
-        "quality_before": old_snapshot.get("quality"),
-        "quality_after": new_snapshot.get("quality"),
-        "hard_before": old_snapshot.get("hard"),
-        "hard_after": new_snapshot.get("hard"),
-        "added_count": len(added),
-        "removed_count": len(removed),
-        "added_titles_sample": added[:12],
-        "removed_titles_sample": removed[:12],
     }
 
 
