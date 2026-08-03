@@ -5,6 +5,7 @@
 - Добавлен read-only smoke-тест `backend/scripts/smoke_core_api.py`. Без указания версии он получает список проектов и безопасно разрешает `latest_version` через detail API, поэтому не зависит от облегчённого ответа списка.
 - Проверены критические endpoints на рабочем PostgreSQL backend: `variants` — HTTP 200, `graph` — HTTP 200, `lo-achievability` — HTTP 200. Пустых ответов нет.
 - Регрессия backend: **38/38 PASS**, UTF-8 gate чист.
+- Acceptance усилен read-only core API smoke-проверкой: `variants`, `graph` и `lo-achievability` теперь автоматически проверяются при каждом полном прогоне; текущий результат — HTTP 200 для всех трёх.
 - SHA-256 шаблона в проекте совпадает с переданным DOCX-шаблоном TEM Journal: `0DBA4319D7022C0057B3995ACE894EA55AE40C1D2F4515D5954E936A606DE3B2`.
 - Контрольный API-аудит трёх уровней (проекты 15/14/19: бакалавриат/магистратура/докторантура) прошёл: 9 вариантов A/B/C, без дублей, жёстких нарушений, неподходящего уровня и пропусков реальных LO-источников. Подробно: `docs/CONTROL_AUDIT_2026_08_03_RU.md`.
 - Полный production acceptance после коммитов прошёл: 38/38 backend-тестов, PostgreSQL smoke, 6 контрольных программ A/B/C, RU/KK/EN 26\,696/26\,696 курсов без пропусков и повреждений, frontend production build.
