@@ -192,6 +192,17 @@ def _foundation_max_semester(title: str | None, num_semesters: int) -> int:
     return num_semesters
 
 
+# Canonical implementations live in the pure semester-rules module.  The
+# aliases keep existing internal callers and external audit scripts stable.
+from app.planner.semester_rules import (
+    complexity_min_semester as _complexity_min_semester,
+    cycle_min_semester as _cycle_min_semester,
+    foundation_max_semester as _foundation_max_semester,
+    late_stage_min_semester as _late_stage_min_semester,
+    minimum_appropriate_semester as _item_minimum_appropriate_semester,
+)
+
+
 def _is_interdisciplinary_title_relevant(course: Course, project_domains: List[str]) -> bool:
     """Require a course to fit the professional role of its project domain.
 
