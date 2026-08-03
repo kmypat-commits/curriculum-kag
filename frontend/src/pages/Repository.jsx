@@ -273,7 +273,7 @@ export default function Repository() {
                     <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                         <LanguageSelector />
                         <Link to="/" style={{ textDecoration: 'none', color: '#366092' }}>{t('dashboard')}</Link>
-                        <Link to="/versions" style={{ textDecoration: 'none', color: '#366092' }}>Версии</Link>
+                        <Link to="/versions" style={{ textDecoration: 'none', color: '#366092' }}>{localText('Версии', 'Нұсқалар', 'Versions')}</Link>
                         <span>{user?.full_name || user?.email}</span>
                         <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-secondary">{t('logout')}</button>
                     </div>
@@ -283,18 +283,18 @@ export default function Repository() {
             <div className="container" style={{ paddingTop: '30px' }}>
                 <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h2 style={{ margin: 0 }}>Courses ({filteredCourses.length}/{repositoryStats.total_courses || filteredCourses.length}) {coursesLoading && <small style={{ color: '#667' }}>loading…</small>}</h2>
+                        <h2 style={{ margin: 0 }}>{localText('Дисциплины', 'Пәндер', 'Courses')} ({filteredCourses.length}/{repositoryStats.total_courses || filteredCourses.length}) {coursesLoading && <small style={{ color: '#667' }}>{localText('загрузка…', 'жүктелуде…', 'loading…')}</small>}</h2>
                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                             <button
                                 onClick={() => { setShowGenerate(!showGenerate); setGenerateResult(null) }}
                                 className="btn btn-primary"
                                 style={{ background: '#6c3483', borderColor: '#6c3483' }}
                             >
-                                🤖 Generate with AI
+                                🤖 {localText('Предложить дисциплины с ИИ', 'ЖИ арқылы пәндерді ұсыну', 'Suggest courses with AI')}
                             </button>
-                            <button onClick={() => setShowAdd(true)} className="btn btn-primary" style={{ background: '#1a7a4a', borderColor: '#1a7a4a' }}>➕ Add Course</button>
-                            <button onClick={() => { setShowAutoReq(true); setAutoReqResult(null) }} className="btn btn-primary" style={{ background: '#b7600a', borderColor: '#b7600a' }}>🔗 Auto Pre/Post-Req (AI)</button>
-                            <button onClick={() => setShowImport(true)} className="btn btn-primary">📥 Import</button>
+                            <button onClick={() => setShowAdd(true)} className="btn btn-primary" style={{ background: '#1a7a4a', borderColor: '#1a7a4a' }}>➕ {t('add_course')}</button>
+                            <button onClick={() => { setShowAutoReq(true); setAutoReqResult(null) }} className="btn btn-primary" style={{ background: '#b7600a', borderColor: '#b7600a' }}>🔗 {t('auto_assign_requisites')}</button>
+                            <button onClick={() => setShowImport(true)} className="btn btn-primary">📥 {t('import')}</button>
                         </div>
                     </div>
 
@@ -302,16 +302,16 @@ export default function Repository() {
                     {showGenerate && (
                         <div style={{ background: 'linear-gradient(135deg, #f3e8ff, #ede0ff)', border: '1px solid #c39bd3', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
                             <h3 style={{ margin: '0 0 15px', color: '#6c3483', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🤖 Generate Courses with AI
+                                🤖 {localText('Предложить дисциплины с ИИ', 'ЖИ арқылы пәндерді ұсыну', 'Suggest courses with AI')}
                             </h3>
                             <form onSubmit={handleGenerateCourses}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '12px', alignItems: 'flex-end' }}>
                                     <div className="form-group" style={{ margin: 0 }}>
-                                        <label className="form-label" style={{ color: '#6c3483', fontWeight: 'bold' }}>Domain / Subject Area</label>
+                                        <label className="form-label" style={{ color: '#6c3483', fontWeight: 'bold' }}>{localText('Предметная область', 'Пәндік сала', 'Subject area')}</label>
                                         <input
                                             type="text"
                                             className="form-control"
-                                            placeholder='e.g. Information Security, Data Science, Medicine'
+                                            placeholder={localText('Например: информационная безопасность, анализ данных, медицина', 'Мысалы: ақпараттық қауіпсіздік, деректер ғылымы, медицина', 'e.g. information security, data science, medicine')}
                                             value={generateDomain}
                                             onChange={e => setGenerateDomain(e.target.value)}
                                             required
@@ -320,7 +320,7 @@ export default function Repository() {
                                     </div>
                                     <div className="form-group" style={{ margin: 0, minWidth: '120px' }}>
                                         <label className="form-label" style={{ color: '#6c3483', fontWeight: 'bold' }}>
-                                            Number of courses: <strong>{generateCount}</strong>
+                                            {localText('Количество дисциплин', 'Пәндер саны', 'Number of courses')}: <strong>{generateCount}</strong>
                                         </label>
                                         <input
                                             type="range"
@@ -346,7 +346,7 @@ export default function Repository() {
                                             fontSize: '14px'
                                         }}
                                     >
-                                        {generating ? '⏳ Generating...' : '✨ Generate'}
+                                        {generating ? `⏳ ${localText('Создание…', 'Құрылуда…', 'Generating…')}` : `✨ ${localText('Создать', 'Құру', 'Generate')}`}
                                     </button>
                                 </div>
                             </form>
@@ -360,8 +360,8 @@ export default function Repository() {
                                     fontWeight: 'bold'
                                 }}>
                                     {generateResult.success
-                                        ? `✅ Successfully generated ${generateResult.count} courses! Table has been refreshed.`
-                                        : `❌ Error: ${generateResult.error}`}
+                                        ? localText(`✅ Создано дисциплин: ${generateResult.count}. Таблица обновлена.`, `✅ Құрылған пәндер: ${generateResult.count}. Кесте жаңартылды.`, `✅ Generated courses: ${generateResult.count}. Table refreshed.`)
+                                        : `${localText('❌ Ошибка', '❌ Қате', '❌ Error')}: ${generateResult.error}`}
                                 </div>
                             )}
                         </div>
