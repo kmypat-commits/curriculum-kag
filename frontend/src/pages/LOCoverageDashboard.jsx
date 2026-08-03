@@ -5,6 +5,7 @@ import { useLanguage as useI18n } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 import { useNotifications } from '../contexts/NotificationContext'
 
 export default function LOCoverageDashboard() {
@@ -86,7 +87,7 @@ export default function LOCoverageDashboard() {
             setLoSources(sourceRes.data)
         } catch (err) {
             console.error('Error fetching coverage:', err)
-            setError(err.response?.data?.detail || 'Error loading analytics')
+            setError(formatApiError(err, t('Error loading analytics')))
         } finally {
             setCoverageLoading(false)
         }
@@ -140,7 +141,7 @@ export default function LOCoverageDashboard() {
             await fetchSystemStatus()
             if (project?.latest_version?.id) await fetchCoverage(project.latest_version.id)
         } catch (err) {
-            setGraphError(err.response?.data?.detail || err.message)
+            setGraphError(formatApiError(err, t('error')))
         } finally {
             setReindexing(false)
         }
@@ -158,7 +159,7 @@ export default function LOCoverageDashboard() {
                 text: t('graph_rebuilt_text')
             })
         } catch (err) {
-            setGraphError(err.response?.data?.detail || err.message)
+            setGraphError(formatApiError(err, t('error')))
         } finally {
             setBuildingGraph(false)
         }
@@ -179,7 +180,7 @@ export default function LOCoverageDashboard() {
                 text: forceEnrichment ? 'Это необязательный модуль углубления. Добавляйте его в репозиторий только после экспертной проверки.' : t('bridge_generated_text')
             })
         } catch (err) {
-            setBridgeError(err.response?.data?.detail || err.message)
+            setBridgeError(formatApiError(err, t('bridge_suggestions')))
         } finally {
             setGeneratingBridge(false)
         }
@@ -204,7 +205,7 @@ export default function LOCoverageDashboard() {
             if (project?.latest_version?.id) fetchCoverage(project.latest_version.id)
         } catch (err) {
             setPromotingBridge(prev => ({ ...prev, [i]: 'error' }))
-            notify(t('promotion_error') + ': ' + (err.response?.data?.detail || err.message))
+            notify(t('promotion_error') + ': ' + formatApiError(err, t('unknown_error')))
         }
     }
 
@@ -223,7 +224,7 @@ export default function LOCoverageDashboard() {
                 text: t('analysis_completed_text')
             })
         } catch (err) {
-            setAchievabilityError(err.response?.data?.detail || err.message)
+            setAchievabilityError(formatApiError(err, t('error')))
         } finally {
             setAnalyzingAchievability(false)
         }

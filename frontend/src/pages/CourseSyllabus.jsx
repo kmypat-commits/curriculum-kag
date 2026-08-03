@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 
 export default function CourseSyllabus() {
     const { id, kind, entityId } = useParams()
@@ -32,7 +33,7 @@ export default function CourseSyllabus() {
             setData(nextData)
             setError(null)
         } catch (err) {
-            setError(err.response?.data?.detail || err.message)
+            setError(formatApiError(err, t('error')))
         } finally {
             setLoading(false)
         }
@@ -56,7 +57,7 @@ export default function CourseSyllabus() {
         try {
             await axios.post('/api/planner/syllabus/draft/' + kind + '/' + entityId, { content: data })
             setSaveNotice(labels.saved)
-        } catch (err) { setError(err.response?.data?.detail || err.message) }
+        } catch (err) { setError(formatApiError(err, t('error'))) }
         finally { setSaving(false) }
     }
 

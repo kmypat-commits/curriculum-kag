@@ -44,9 +44,13 @@ def upsert_course_localizations(db: Session, course_id: int, payload: Dict, sour
             row = CourseLocalization(course_id=course_id, language=language)
             db.add(row)
         row.title = title
-        row.description = descriptions.get(language) or row.description
+        description = (descriptions.get(language) or "").strip()
+        if description:
+            row.description = description
         row.source = source
-        row.status = "verified"
+        # A missing source description is a reviewable gap, never a verified
+        # translation and never a silent RU fallback.
+        row.status = "verified" if description or row.description else "needs_review"
 
 
 class GenerateCoursesRequest(BaseModel):
@@ -395,9 +399,9 @@ async def reindex_epvo_scope(
         translations[course.id] = {
             "title": {"ru": row.title_ru, "kk": row.title_kk, "en": row.title_en},
             "description": {
-                "ru": description_ru or course.description,
-                "kk": content.get("description_kk") or description_ru or course.description,
-                "en": content.get("description_en") or description_ru or course.description,
+                "ru": description_ru,
+                "kk": content.get("description_kk") or "",
+                "en": content.get("description_en") or "",
             },
             "review_status": "verified_epvo", "source": "epvo_normalized_repository",
         }

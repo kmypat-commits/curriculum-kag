@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { formatApiError } from '../utils/errors'
 import LanguageSelector from '../components/LanguageSelector'
 
 export default function Login() {
@@ -22,7 +23,7 @@ export default function Login() {
             sessionStorage.removeItem('postLoginPath')
             navigate(returnPath)
         } catch (err) {
-            const message = err.response?.data?.detail || 'Network or server error';
+            const message = formatApiError(err, 'Network or server error');
             setError(message === 'Incorrect email or password' ? t('error') : message);
             console.error('Login error:', err);
         }

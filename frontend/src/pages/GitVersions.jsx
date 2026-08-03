@@ -4,6 +4,8 @@ import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const statusLabels = {
     M: 'изменён',
@@ -15,10 +17,25 @@ const statusLabels = {
     '??': 'новый',
 }
 
-function formatDate(value) {
+const statusLabelsByLanguage = {
+    M: { ru: 'Изменён', kk: 'Өзгертілді', en: 'Modified' },
+    A: { ru: 'Добавлен', kk: 'Қосылды', en: 'Added' },
+    D: { ru: 'Удалён', kk: 'Жойылды', en: 'Deleted' },
+    R: { ru: 'Переименован', kk: 'Атауы өзгертілді', en: 'Renamed' },
+    C: { ru: 'Скопирован', kk: 'Көшірілді', en: 'Copied' },
+    U: { ru: 'Конфликт', kk: 'Қайшылық', en: 'Conflict' },
+    '??': { ru: 'Новый', kk: 'Жаңа', en: 'New' },
+}
+
+function statusLabel(status, language) {
+    return statusLabelsByLanguage[status]?.[language] || statusLabels[status] || status
+}
+
+function formatDate(value, language = 'ru') {
     if (!value) return '—'
     try {
-        return new Intl.DateTimeFormat('ru-RU', {
+        const locale = language === 'en' ? 'en-US' : language === 'kk' ? 'kk-KZ' : 'ru-RU'
+        return new Intl.DateTimeFormat(locale, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -39,6 +56,8 @@ function diffTitle(mode, commit) {
 
 export default function GitVersions() {
     const { user, logout } = useAuth()
+    const { language } = useLanguage()
+    const l = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const navigate = useNavigate()
     const [overview, setOverview] = useState(null)
     const [loading, setLoading] = useState(true)
@@ -56,7 +75,7 @@ export default function GitVersions() {
         setError('')
         axios.get('/api/git/overview')
             .then(response => setOverview(response.data))
-            .catch(err => setError(err.response?.data?.detail || err.message || 'Не удалось загрузить Git-статус'))
+            .catch(err => setError(formatApiError(err, l('Не удалось загрузить Git-статус', 'Git күйін жүктеу мүмкін болмады', 'Could not load Git status'))))
             .finally(() => setLoading(false))
     }
 
@@ -83,7 +102,7 @@ export default function GitVersions() {
             setDiff(response.data.diff || 'Изменений нет.')
             setDiffTruncated(Boolean(response.data.truncated))
         } catch (err) {
-            setDiff(err.response?.data?.detail || err.message || 'Не удалось получить diff')
+            setDiff(formatApiError(err, l('Не удалось получить изменения', 'Өзгерістерді алу мүмкін болмады', 'Could not load diff')))
         } finally {
             setDiffLoading(false)
         }
@@ -101,7 +120,7 @@ export default function GitVersions() {
             setBranchName('')
             loadOverview()
         } catch (err) {
-            setBranchMessage(err.response?.data?.detail || err.message || 'Не удалось создать ветку')
+            setBranchMessage(formatApiError(err, l('Не удалось создать ветку', 'Бұтақты жасау мүмкін болмады', 'Could not create branch')))
         }
     }
 
@@ -151,7 +170,7 @@ export default function GitVersions() {
                                     <thead><tr><th>Статус</th><th>Файл</th></tr></thead>
                                     <tbody>{overview.changed_files.map(file => (
                                         <tr key={`${file.status}-${file.path}`}>
-                                            <td><span className="badge">{statusLabels[file.status] || file.status}</span></td>
+                                            <td><span className="badge">{statusLabel(file.status, language)}</span></td>
                                             <td><code>{file.path}</code></td>
                                         </tr>
                                     ))}</tbody>
@@ -162,13 +181,13 @@ export default function GitVersions() {
                         <section className="card">
                             <div className="section-head"><h2>Последние 20 коммитов</h2><span style={{ color: '#6e6e73', fontSize: 13 }}>{overview.commits.length}</span></div>
                             <div className="table-wrap"><table className="table">
-                                <thead><tr><th>Hash</th><th>Сообщение</th><th>Автор</th><th>Дата</th><th>Действия</th></tr></thead>
+                                <thead><tr><th>{l('Хэш', 'Хэш', 'Hash')}</th><th>{l('Сообщение', 'Хабарлама', 'Message')}</th><th>{l('Автор', 'Автор', 'Author')}</th><th>{l('Дата', 'Күні', 'Date')}</th><th>{l('Действия', 'Әрекеттер', 'Actions')}</th></tr></thead>
                                 <tbody>{overview.commits.map(commit => (
                                     <tr key={commit.hash}>
                                         <td><code title={commit.hash}>{commit.short_hash}</code></td>
                                         <td>{commit.message}</td>
                                         <td>{commit.author}</td>
-                                        <td>{formatDate(commit.date)}</td>
+                                        <td>{formatDate(commit.date, language)}</td>
                                         <td>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                                 <button className="btn btn-secondary" onClick={() => loadDiff(commit, 'commit')}>Изменения</button>

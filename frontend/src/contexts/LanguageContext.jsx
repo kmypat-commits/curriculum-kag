@@ -6,7 +6,11 @@ const LanguageContext = createContext(null);
 
 export const LanguageProvider = ({ children }) => {
     const [language, setLanguage] = useState(localStorage.getItem('language') || 'ru');
-    const normalizedLanguage = language === 'kz' ? 'kk' : language;
+    const normalizedLanguage = ({
+        ru: 'ru', rus: 'ru', russian: 'ru',
+        kk: 'kk', kz: 'kk', kaz: 'kk', kazakh: 'kk',
+        en: 'en', eng: 'en', english: 'en',
+    })[String(language || '').trim().toLowerCase()] || 'ru';
     const clean = {
         ru: { domains: 'Предметные области', domain: 'Предметная область', education_area: 'Область образования', cycle_component: 'Компонент цикла', course_domain: 'Предметная область' },
         kk: { domains: 'Пәндік салалар', domain: 'Пәндік сала', education_area: 'Білім беру саласы', cycle_component: 'Цикл компоненті', course_domain: 'Пәндік сала' },
@@ -83,7 +87,7 @@ export const LanguageProvider = ({ children }) => {
         return labels[normalizedLanguage]?.[key] || localize(value);
     };
     const changeLanguage = (lang) => { setLanguage(lang); localStorage.setItem('language', lang); };
-    return <LanguageContext.Provider value={{ language, t, localize, localizeDomain, localizeCycle, changeLanguage }}>{children}</LanguageContext.Provider>;
+    return <LanguageContext.Provider value={{ language: normalizedLanguage, t, localize, localizeDomain, localizeCycle, changeLanguage }}>{children}</LanguageContext.Provider>;
 };
 
 export const useLanguage = () => {

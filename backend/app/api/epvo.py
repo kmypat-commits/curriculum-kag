@@ -22,6 +22,7 @@ from app.services.epvo_repository import (
     epvo_row_relevance_score,
     epvo_row_matches_education_level,
 )
+from app.services.language import epvo_payload_suffix, normalize_language
 import json
 from pathlib import Path
 import time
@@ -178,7 +179,7 @@ AREA_NAMES.update({
 
 
 def localized(row, language):
-    language = "kk" if language in {"kk", "kz"} else language
+    language = normalize_language(language)
     return getattr(row, f"title_{language}", None) or row.title_ru or row.title_en or row.code
 
 
@@ -201,7 +202,7 @@ def _overlap(left: set[str], right: set[str]) -> float:
 
 
 def _payload_title(payload: dict, language: str) -> str:
-    suffix = "Kz" if language in {"kk", "kz"} else "En" if language == "en" else "Ru"
+    suffix = epvo_payload_suffix(language)
     return (
         payload.get(f"eduProgramName{suffix}")
         or payload.get("eduProgramNameRu")
@@ -211,7 +212,7 @@ def _payload_title(payload: dict, language: str) -> str:
 
 
 def _payload_goal(payload: dict, language: str) -> str:
-    suffix = "Kz" if language in {"kk", "kz"} else "En" if language == "en" else "Ru"
+    suffix = epvo_payload_suffix(language)
     return payload.get(f"eduGoalName{suffix}") or payload.get("eduGoalNameRu") or payload.get("eduGoalNameEn") or ""
 
 
@@ -245,7 +246,7 @@ def _best_model_from_baseline() -> dict:
 async def education_areas(education_level: str = Query("bachelor"), language: str = Query("ru"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     prefix = {"bachelor": "6B", "master": "7M", "doctorate": "8D"}.get(education_level, "")
     codes = sorted({row[0] for row in db.query(EpvoDirection.education_level).filter(EpvoDirection.code.like(f"{prefix}%")).all() if row[0]})
-    lang = "kk" if language in {"kk", "kz"} else language
+    lang = normalize_language(language)
     return [{"code": code, "title": AREA_NAMES.get(str(code)[-2:], {}).get(lang) or code} for code in codes]
 
 
@@ -325,6 +326,14 @@ async def expert_feedback_summary(
         .group_by(MatchFeedback.verdict)
         .all()
     }
+    score_counts = {
+        str(score): int(count)
+        for score, count in db.query(MatchFeedback.corrected_score, func.count(MatchFeedback.id))
+        .filter(MatchFeedback.corrected_score.isnot(None))
+        .group_by(MatchFeedback.corrected_score)
+        .order_by(MatchFeedback.corrected_score)
+        .all()
+    }
     rows = db.query(MatchFeedback, Course, LearningOutcome).join(
         Course, Course.id == MatchFeedback.course_id
     ).join(
@@ -349,7 +358,7 @@ async def expert_feedback_summary(
             "model_name": snapshot.get("model_name"),
             "model_version": snapshot.get("model_version"),
         })
-    return {"total": sum(verdict_counts.values()), "verdict_counts": verdict_counts, "recent": recent}
+    return {"total": sum(verdict_counts.values()), "verdict_counts": verdict_counts, "score_counts": score_counts, "recent": recent}
 
 
 @router.get("/reproducible-baseline")
@@ -689,7 +698,7 @@ async def compare_project(project_id: int, language: str = Query("ru"), db: Sess
             break
     raw_programs = db.query(RawEpvoProgram).filter(RawEpvoProgram.source_id.in_(source_program_ids[:_COMPARE_PROGRAM_LIMIT])).limit(_COMPARE_PROGRAM_LIMIT).all() if source_program_ids else []
     similar_programs, lo_counter = [], {}
-    suffix = "Kz" if language in {"kk", "kz"} else "En" if language == "en" else "Ru"
+    suffix = epvo_payload_suffix(language)
     for raw in raw_programs:
         payload = raw.payload_json or {}
         title = _payload_title(payload, language)

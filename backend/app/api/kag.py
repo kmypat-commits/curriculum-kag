@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.project import ProjectVersion
 from app.models.bridge_module import BridgeModule
 from app.services.auth import get_current_user
+from app.services.language import normalize_language
 from app.kag.scoring import compute_all_matches
 from app.kag.gap_detector import detect_gaps
 from app.kag.duplication_detector import detect_duplicates
@@ -35,6 +36,8 @@ async def submit_match_feedback(
 ):
     if verdict not in {"confirmed", "weak", "incorrect", "corrected"}:
         raise HTTPException(status_code=400, detail="Недопустимая экспертная оценка")
+    if corrected_score is not None and not 0.0 <= float(corrected_score) <= 1.0:
+        raise HTTPException(status_code=400, detail="Оценка связи должна быть в диапазоне от 0 до 1")
     match = db.query(MatchScore).filter(MatchScore.project_version_id == project_version_id, MatchScore.course_id == course_id, MatchScore.lo_id == lo_id).first()
     snapshot = {"score": match.score, "model_name": match.model_name, "model_version": match.model_version, "evidence": match.evidence_json} if match else {"score": None, "source": "graph_suggestion"}
     feedback = MatchFeedback(project_version_id=project_version_id, course_id=course_id, lo_id=lo_id, verdict=verdict, corrected_score=corrected_score, comment=comment, user_id=current_user.id, model_snapshot_json=snapshot)
@@ -368,7 +371,7 @@ async def analyze_lo_achievability(
         project = project_version.project
         domains = f"{getattr(project, 'domain1', '')} and {getattr(project, 'domain2', '')}".strip(" and")
 
-        language = payload.get("language", "ru") if isinstance(payload, dict) else "ru"
+        language = normalize_language(payload.get("language") if isinstance(payload, dict) else "ru")
         response_language = {"ru": "Russian", "kk": "Kazakh", "en": "English"}.get(language, "Russian")
 
         prompt = f"""You are an expert curriculum quality assessor.
@@ -522,7 +525,7 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
         # If a legacy project has incomplete match rows or the optional AI
         # provider fails before the normal fallback is reached, return an
         # explicit deterministic status instead of leaking a generic HTTP 500.
-        language = payload.get("language", "ru") if isinstance(payload, dict) else "ru"
+        language = normalize_language(payload.get("language") if isinstance(payload, dict) else "ru")
         messages = {
             "ru": "Автоматическая проверка не смогла завершить полный расчёт для этой версии. Сохранён честный результат: требуется проверка покрытия LO и связей дисциплина–LO.",
             "kk": "Бұл нұсқа үшін автоматты тексеру толық есепті аяқтай алмады. Адал нәтиже сақталды: LO қамтуы мен пән–LO байланыстарын тексеру қажет.",

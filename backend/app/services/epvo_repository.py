@@ -14,6 +14,7 @@ from sqlalchemy import String, cast, or_
 
 from app.models.course import Course, CourseChunk
 from app.models.epvo import EpvoDisciplineNormalized
+from app.services.language import normalize_language
 
 
 def _key(value: str | None) -> str:
@@ -119,7 +120,9 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
     primary_direction = str(constraints.get("direction_code") or "")
     secondary_group = str(constraints.get("secondary_group_code") or "")
     secondary_direction = str(constraints.get("secondary_direction_code") or "")
-    language = str(constraints.get("instruction_language") or "ru")
+    # Store and generate repository text using the same canonical language
+    # codes as the API (kz/kaz/kazakh must resolve to kk).
+    language = normalize_language(constraints.get("instruction_language"))
     program_type = str(constraints.get("program_type") or "standard").lower()
 
     scopes: list[tuple[str, str, int]] = [(primary_group, primary_direction, 0)]
@@ -238,10 +241,8 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
             suffix = "kk" if language in {"kk", "kz"} else language
             description = (
                 content.get(f"description_{suffix}")
-                or content.get("description_ru")
-                or content.get("description_en")
                 or descriptions.get(suffix)
-                or descriptions.get("ru")
+                or _fallback_description(title, scope_label, suffix)
             )
             title_tokens = _tokens(title) | _tokens(description)
             domain_scores = [_overlap(tokens, title_tokens) for tokens in domain_tokens]

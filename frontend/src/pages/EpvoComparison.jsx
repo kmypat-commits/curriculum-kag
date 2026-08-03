@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 
 const labels = {
     ru: {
@@ -150,7 +151,7 @@ export default function EpvoComparison() {
             setData(refreshed.data)
         } catch (err) {
             const detail = err.response?.data?.detail
-            setNotice({ type: 'error', text: typeof detail === 'string' ? detail : err.message })
+            setNotice({ type: 'error', text: formatApiError(err, t('error')) })
         } finally {
             setApplying(false)
         }
@@ -163,7 +164,7 @@ export default function EpvoComparison() {
             .then(response => setData(response.data))
             .catch(err => {
                 const detail = err.response?.data?.detail
-                setError(typeof detail === 'string' ? detail : err.message)
+                setError(formatApiError(err, t('error')))
             })
     }, [id, language])
 

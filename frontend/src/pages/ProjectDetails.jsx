@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 
 export default function ProjectDetails() {
     const { id } = useParams()
@@ -49,7 +50,7 @@ export default function ProjectDetails() {
             })
         } catch (err) {
             console.error('Error fetching project:', err)
-            setError(err.response?.data?.detail || 'Error loading project')
+            setError(formatApiError(err, t('error')))
         } finally {
             setLoading(false)
         }
@@ -92,7 +93,7 @@ export default function ProjectDetails() {
             setProject({ ...project, constraints: response.data.constraints })
             setEpvoNotice({ type: 'success', text: 'ЕПВО-настройка сохранена. Теперь можно перестроить план.' })
         } catch (err) {
-            setEpvoNotice({ type: 'error', text: err.response?.data?.detail?.[0]?.msg || err.response?.data?.detail || err.message })
+            setEpvoNotice({ type: 'error', text: formatApiError(err, t('error')) })
         } finally {
             setSavingEpvo(false)
         }

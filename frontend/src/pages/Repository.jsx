@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 import { useNotifications } from '../contexts/NotificationContext'
 
 export default function Repository() {
@@ -109,7 +110,7 @@ export default function Repository() {
             setImportFile(null)
             fetchCourses()
         } catch (error) {
-            notify(localText('Ошибка импорта', 'Импорт қатесі', 'Import error') + ': ' + (error.response?.data?.detail || error.message))
+            notify(localText('Ошибка импорта', 'Импорт қатесі', 'Import error') + ': ' + formatApiError(error, t('error')))
         }
     }
 
@@ -126,7 +127,7 @@ export default function Repository() {
             setGenerateResult({ success: true, count: res.data.generated })
             fetchCourses()
         } catch (err) {
-            setGenerateResult({ success: false, error: err.response?.data?.detail || err.message })
+            setGenerateResult({ success: false, error: formatApiError(err, t('error')) })
         } finally {
             setGenerating(false)
         }
@@ -145,7 +146,7 @@ export default function Repository() {
             setAddForm({ course_id: '', title: '', domain: '', credits: 4, cycle_component: 'elective', recommended_semester: 1, description: '' })
             fetchCourses()
         } catch (err) {
-            notify(localText('Ошибка', 'Қате', 'Error') + ': ' + (err.response?.data?.detail || err.message))
+            notify(localText('Ошибка', 'Қате', 'Error') + ': ' + formatApiError(err, t('error')))
         } finally {
             setAddSaving(false)
         }
@@ -171,7 +172,7 @@ export default function Repository() {
             fetchCourses()
             fetchRepositoryStats()
         } catch (error) {
-            setScopeIndexResult({ error: error.response?.data?.detail || error.message })
+            setScopeIndexResult({ error: formatApiError(error, t('error')) })
         } finally {
             setScopeIndexing(false)
         }
@@ -189,7 +190,7 @@ export default function Repository() {
             setAutoReqResult({ success: true, data: res.data })
             fetchCourses()
         } catch (err) {
-            setAutoReqResult({ success: false, error: err.response?.data?.detail || err.message })
+            setAutoReqResult({ success: false, error: formatApiError(err, t('error')) })
         } finally {
             setAutoReqLoading(false)
         }

@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 
 const pct = value => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%`
 const num = value => Number(value || 0).toLocaleString()
@@ -35,7 +36,7 @@ export default function ResearchDashboard() {
                 axios.get('/api/epvo/article-experiment-report'),
             ])
             if (passportRes.status === 'fulfilled') setData(passportRes.value.data)
-            else setError(passportRes.reason?.response?.data?.detail || passportRes.reason?.message)
+            else setError(formatApiError(passportRes.reason, t('error')))
             setFeedback(feedbackRes.status === 'fulfilled' ? feedbackRes.value.data : { total: 0, verdict_counts: {}, recent: [] })
             setBaseline(baselineRes.status === 'fulfilled' ? baselineRes.value.data : null)
             setGnnManifest(manifestRes.status === 'fulfilled' ? manifestRes.value.data : null)
@@ -43,7 +44,7 @@ export default function ResearchDashboard() {
             setLstmStatus(lstmStatusRes.status === 'fulfilled' ? lstmStatusRes.value.data : null)
             setArticleReport(articleReportRes.status === 'fulfilled' ? articleReportRes.value.data : null)
         } catch (err) {
-            setError(err.response?.data?.detail || err.message)
+            setError(formatApiError(err, t('error')))
         }
     }
 
@@ -135,7 +136,7 @@ export default function ResearchDashboard() {
 
     const n = data.normalized || {}
     const counts = data.counts || {}
-    const created = data.created_at ? new Date(data.created_at).toLocaleString(language === 'en' ? 'en-US' : 'ru-RU') : '—'
+    const created = data.created_at ? new Date(data.created_at).toLocaleString(language === 'en' ? 'en-US' : language === 'kk' ? 'kk-KZ' : 'ru-RU') : '—'
     const planSummary = baseline?.plan_audit?.summary || {}
     const readiness = baseline?.readiness || {}
 
@@ -200,7 +201,7 @@ export default function ResearchDashboard() {
                     </div>
                     <div className="table-wrap">
                         <table className="table">
-                            <thead><tr><th>{t('model')}</th><th>ROC-AUC</th><th>PR-AUC</th><th>F1</th><th>Recall</th><th>Recall@10</th><th>MRR</th><th>nDCG@10</th><th>{t('examples')}</th></tr></thead>
+                            <thead><tr><th>{t('model')}</th><th>{l('ROC-AUC', 'ROC-AUC', 'ROC-AUC')}</th><th>{l('PR-AUC', 'PR-AUC', 'PR-AUC')}</th><th>F1</th><th>{l('Полнота', 'Толықтық', 'Recall')}</th><th>{l('Полнота@10', 'Толықтық@10', 'Recall@10')}</th><th>MRR</th><th>nDCG@10</th><th>{t('examples')}</th></tr></thead>
                             <tbody>
                                 {(data.benchmarks || []).map(row => (
                                     <tr key={row.name}>
@@ -322,14 +323,14 @@ export default function ResearchDashboard() {
                     <section className="card">
                         <div className="section-head">
                             <h2>{l('Отчёт для научной статьи', 'Ғылыми мақалаға есеп', 'Article-ready report')}</h2>
-                            <button className="btn btn-secondary" onClick={downloadArticleMarkdown}>Markdown</button>
+                            <button className="btn btn-secondary" onClick={downloadArticleMarkdown}>{l('Markdown', 'Markdown', 'Markdown')}</button>
                         </div>
                         <p className="page-subtitle" style={{ fontSize: 13 }}>{articleReport.title_ru}</p>
                         <div className="quick-grid">
                             <div><b>{l('Моделей в сравнении', 'Салыстырылған модельдер', 'Compared models')}</b><br />{articleReport.models?.length || 0}</div>
                             <div><b>{l('Лучший baseline', 'Үздік baseline', 'Best baseline')}</b><br />{articleReport.best_model?.name || '—'}</div>
                             <div><b>GNN</b><br />{articleReport.controlled_experiment?.gnn_available ? l('результат сохранён', 'нәтиже сақталды', 'result saved') : '—'}</div>
-                            <div><b>LSTM</b><br />{articleReport.controlled_experiment?.lstm_available ? l('результат сохранён', 'нәтиже сақталды', 'result saved') : l('ожидает запуска', 'іске қосуды күтеді', 'waiting for run')}</div>
+                            <div><b>{l('LSTM', 'LSTM', 'LSTM')}</b><br />{articleReport.controlled_experiment?.lstm_available ? l('результат сохранён', 'нәтиже сақталды', 'result saved') : l('ожидает запуска', 'іске қосуды күтеді', 'waiting for run')}</div>
                         </div>
                         <p style={{ marginTop: 12, fontSize: 13 }}>{articleReport.conclusion_ru}</p>
                     </section>
@@ -353,7 +354,7 @@ export default function ResearchDashboard() {
                                         <td>{row.course_title}</td>
                                         <td title={row.lo_text}>{row.lo_code}</td>
                                         <td>{row.model_score == null ? '—' : Math.round(row.model_score * 100) + '%'}</td>
-                                        <td>{row.created_at ? new Date(row.created_at).toLocaleString(language === 'en' ? 'en-US' : 'ru-RU') : '—'}</td>
+                                        <td>{row.created_at ? new Date(row.created_at).toLocaleString(language === 'en' ? 'en-US' : language === 'kk' ? 'kk-KZ' : 'ru-RU') : '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>

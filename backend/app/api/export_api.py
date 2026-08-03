@@ -11,6 +11,7 @@ from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchScore
 from app.models.audit import AuditEvent
 from app.services.content_localization import course_localization_map
+from app.services.language import normalize_language
 from app.kag.knowledge_graph import get_graph_stats
 from app.kag.embedding_service import embedding_service
 import openpyxl
@@ -20,15 +21,25 @@ from io import BytesIO
 router = APIRouter()
 
 
-def localized_title(localizations: dict, course: Course) -> str:
+def localized_title(localizations: dict, course: Course, language: str = "ru") -> str:
     translations = (localizations.get(course.id) or {}).get("title_translations") or {}
-    return translations.get("ru") or translations.get("kk") or translations.get("en") or course.title
+    language = normalize_language(language)
+    # Prefer the requested interface language, then use a deterministic fallback
+    # so an incomplete legacy row never produces an empty export cell.
+    return (
+        translations.get(language)
+        or translations.get("ru")
+        or translations.get("kk")
+        or translations.get("en")
+        or course.title
+    )
 
 
 @router.post("/{project_version_id}")
 async def export_plan(
     project_version_id: int,
     format: str = "xlsx",
+    language: str = "ru",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -83,7 +94,7 @@ async def export_plan(
                 ws1.append([
                     item.semester,
                     course.course_id,
-                    localized_title(localizations, course),
+                    localized_title(localizations, course, language),
                     course.credits,
                     course.domain,
                     item.course_type,
@@ -112,7 +123,7 @@ async def export_plan(
         courses = db.query(Course).filter(Course.id.in_(course_ids)).all()
         
         for course in courses:
-            row = [course.course_id, localized_title(localizations, course)]
+            row = [course.course_id, localized_title(localizations, course, language)]
             for lo in los:
                 match = db.query(MatchScore).filter(
                     MatchScore.course_id == course.id,

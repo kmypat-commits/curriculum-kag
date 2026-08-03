@@ -10,6 +10,7 @@ from app.services.auth import get_current_user
 from app.config import settings
 from app.services.ai_contracts import validate_suggestions
 from app.services.pydantic_ai_adapter import run_suggestions as run_pydantic_ai_suggestions
+from app.services.language import normalize_language
 import json
 
 router = APIRouter()
@@ -150,7 +151,7 @@ async def suggest_program_content(payload: SuggestionRequest, current_user: User
     external LLM is unavailable, while keeping the response contract ready for
     a future reviewed AI provider.
     """
-    lang = (payload.language or "ru").lower()
+    lang = normalize_language(payload.language)
     name = payload.name.strip() or ("образовательной программы" if lang == "ru" else "білім беру бағдарламасы" if lang == "kk" else "the programme")
     d1 = payload.domain1.strip() or ("выбранной области" if lang == "ru" else "таңдалған сала" if lang == "kk" else "the selected domain")
     d2 = payload.domain2.strip()

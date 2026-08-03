@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { formatApiError } from '../utils/errors'
 
 const neon = ['#64a8ff', '#9b8cff', '#5ac8a8', '#e4ae57', '#dc78a5', '#6fb7c9', '#8fbd63', '#b68ac9']
 const stageHeight = 520
@@ -61,7 +62,7 @@ export default function PrerequisiteGraph() {
             setVariants(variantsResponse.data)
             const active = variantsResponse.data.find(item => item.is_active)
             setVariant(active?.variant_type || variantsResponse.data[0]?.variant_type || 'A')
-        }).catch(err => { setError(err.response?.data?.detail || err.message); setLoading(false) })
+        }).catch(err => { setError(formatApiError(err, t('graph_not_built'))); setLoading(false) })
     }, [id])
 
     useEffect(() => {
@@ -73,7 +74,7 @@ export default function PrerequisiteGraph() {
             axios.get('/api/planner/version/' + versionId + '/semester-competencies', { params: { variant } })
         ]).then(([g, c]) => {
             setGraph(g.data); setCompetencies(c.data); setSelected(null); setSelectedEdge(null); setActiveSemester(1); setError(null)
-        }).catch(err => setError(err.response?.data?.detail || err.message)).finally(() => setLoading(false))
+        }).catch(err => setError(formatApiError(err, t('graph_not_built')))).finally(() => setLoading(false))
     }, [project, variant])
 
     useEffect(() => {
@@ -162,7 +163,7 @@ export default function PrerequisiteGraph() {
                 }
             })
             cyRef.current = cy
-        }).catch(err => setError(err.message || String(err)))
+        }).catch(err => setError(formatApiError(err, t('error'))))
         return () => { cancelled = true; cyRef.current?.destroy() }
     }, [graph])
 
@@ -195,7 +196,7 @@ export default function PrerequisiteGraph() {
             })
             setSemesterInsights(current => ({ ...current, [semester]: response.data }))
         } catch (err) {
-            setError(err.response?.data?.detail || err.message)
+            setError(formatApiError(err, t('error')))
         } finally {
             setInsightLoading(null)
         }
