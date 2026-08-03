@@ -12,8 +12,10 @@ from app.services.ai_contracts import validate_suggestions
 from app.services.pydantic_ai_adapter import run_suggestions as run_pydantic_ai_suggestions
 from app.services.language import normalize_language
 import json
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _invalid_epvo_codes(constraints: Dict) -> List[str]:
@@ -183,8 +185,14 @@ Return ONLY JSON with exactly two arrays: goals (exactly 3 concise goals) and le
             if len(goals) == 3 and len(los) >= 3:
                 validated = validate_suggestions({"goals": goals, "learning_outcomes": los}, required_terms=(d1, d2))
                 return {**validated.model_dump(), "source": "openai_api", "ai_generated": True, "language": lang}
-        except Exception:
-            pass
+        except Exception as exc:
+            # Keep the endpoint available through the reviewed deterministic
+            # template, but leave an actionable server-side diagnostic.  Do
+            # not log prompts, credentials, or provider response bodies.
+            logger.warning(
+                "AI programme suggestions failed; deterministic fallback used (%s)",
+                exc.__class__.__name__,
+            )
 
     if lang == "kk":
         goals = [
