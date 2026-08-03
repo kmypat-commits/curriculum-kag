@@ -49,6 +49,7 @@ export default function Dashboard() {
         : language === 'kk'
             ? 'Білім беру бағдарламаларын жобалаңыз, оқу нәтижелерін тексеріңіз және оқу жоспарларын бір жұмыс кеңістігінде басқарыңыз.'
             : 'Design programmes, verify learning outcomes and manage curricula in one focused workspace.'
+    const versionsLabel = language === 'kk' ? 'Нұсқалар' : language === 'en' ? 'Versions' : 'Версии'
 
     return (
         <div className="app-shell">
@@ -58,7 +59,7 @@ export default function Dashboard() {
                     <div className="app-nav">
                         <LanguageSelector />
                         <Link to="/repository" className="app-nav-link">{t('repository')}</Link>
-                        <Link to="/versions" className="app-nav-link">Версии</Link>
+                        <Link to="/versions" className="app-nav-link">{versionsLabel}</Link>
                         <span className="user-chip">{user?.full_name || user?.email}</span>
                         <button onClick={() => { logout(); navigate('/login') }} className="btn btn-secondary">{t('logout')}</button>
                     </div>
