@@ -34,6 +34,10 @@ from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.scheduler_text import has_domain_term as _has_domain_term
 from app.planner.scheduler_text import short_lo_theme as _short_lo_theme
 from app.planner.scheduler_prerequisites import prerequisite_concepts as _prerequisite_concepts
+from app.planner.scheduler_domain_rules import (
+    course_domain_matches as _course_domain_matches,
+    invalid_project_domain_label as _is_invalid_project_domain_label,
+)
 
 from app.planner.scheduler_catalogue import (
     foundation_equivalent_title_key as _foundation_equivalent_title_key,
@@ -198,21 +202,6 @@ def _has_foreign_professional_title(
         and not _has_domain_term(domains, allowed_domain_markers)
         for title_markers, allowed_domain_markers in context_groups
     )
-
-
-def _course_domain_matches(course: Course, project_domains: List[str]) -> bool:
-    domain = (course.domain or "").lower().strip()
-    return bool(domain) and any(d and (d in domain or domain in d) for d in project_domains)
-
-
-def _is_invalid_project_domain_label(value: str | None) -> bool:
-    normalized = _title_key(value)
-    if not normalized:
-        return True
-    if "?" in normalized:
-        return True
-    alpha_count = sum(1 for char in normalized if char.isalpha())
-    return alpha_count < 3
 
 
 def _project_domain_terms(project_version: ProjectVersion, db: Session) -> List[str]:
