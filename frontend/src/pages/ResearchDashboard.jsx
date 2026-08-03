@@ -180,9 +180,9 @@ export default function ResearchDashboard() {
                     <p className="page-subtitle" style={{ fontSize: 13 }}>{l('Сформирован', 'Құрылған', 'Created')}: {created}. {data.split_policy}</p>
                     <div className="quick-grid">
                         <div>
-                            <p><b>Train:</b> {num(counts.pairs_train)}</p>
-                            <p><b>Validation:</b> {num(counts.pairs_validation)}</p>
-                            <p><b>Test:</b> {num(counts.pairs_test)}</p>
+                            <p><b>{l('Обучение', 'Оқыту', 'Train')}:</b> {num(counts.pairs_train)}</p>
+                            <p><b>{l('Валидация', 'Валидация', 'Validation')}:</b> {num(counts.pairs_validation)}</p>
+                            <p><b>{l('Тест', 'Тест', 'Test')}:</b> {num(counts.pairs_test)}</p>
                             <p><b>{l('Размеченные пары', 'Белгіленген жұптар', 'Labeled pairs')}:</b> {num(counts.labeled_pairs)}</p>
                             <p><b>{l('Сырые экспертные проверки', 'Шикі сарапшы тексерулері', 'Raw expert checks')}:</b> {num(n.raw_expert_checks)}</p>
                         </div>
@@ -226,7 +226,7 @@ export default function ResearchDashboard() {
                     <div className="section-head">
                         <h2>{l('Baseline перед LSTM/GNN', 'LSTM/GNN алдындағы baseline', 'Baseline before LSTM/GNN')}</h2>
                         <span className={planSummary.active_plans_with_hard_violations ? 'status-pill status-draft' : 'status-pill status-active'}>
-                            active hard: {planSummary.active_plans_with_hard_violations ?? '—'}
+                            {l('Активные планы с жёсткими нарушениями', 'Қатаң бұзушылықтары бар белсенді жоспарлар', 'Active plans with hard violations')}: {planSummary.active_plans_with_hard_violations ?? '—'}
                         </span>
                     </div>
                     <div className="quick-grid">
