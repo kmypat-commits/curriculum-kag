@@ -31,108 +31,11 @@ from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.scheduler_text import has_domain_term as _has_domain_term
 from app.planner.scheduler_text import short_lo_theme as _short_lo_theme
 
-
-def _unique_items_by_title(items: List[Dict]) -> List[Dict]:
-    """Keep one curriculum item per title, even when repository IDs differ."""
-    result: List[Dict] = []
-    seen: set[str] = set()
-    seen_semantic: set[tuple[str, int]] = set()
-    for item in items:
-        key = _title_key(item.get("title"))
-        if _is_component_placeholder_title(key):
-            continue
-        # Missing titles are still protected by their stable database identity.
-        key = key or f"id:{item.get('course_id')}:{item.get('bridge_module_id')}"
-        if key in seen:
-            continue
-        semantic_key = _foundation_equivalent_title_key(key)
-        # Named semantic families are duplicates even when catalogue records
-        # assign slightly different credits. Prefix-only equivalence remains
-        # credit-sensitive to avoid collapsing legitimately different courses.
-        semantic_credits = 0 if semantic_key.startswith("semantic ") else int(item.get("credits") or 0)
-        semantic_identity = (semantic_key, semantic_credits)
-        if semantic_key and semantic_key != key and semantic_identity in seen_semantic:
-            continue
-        if semantic_key and semantic_key == key and semantic_identity in seen_semantic:
-            continue
-        seen.add(key)
-        if semantic_key:
-            seen_semantic.add(semantic_identity)
-        result.append(item)
-    return result
-
-
-def _is_component_placeholder_title(key: str) -> bool:
-    """Reject catalogue metadata accidentally imported as a course title."""
-    return key in {
-        "обязательный компонент",
-        "компонент по выбору",
-        "вузовский компонент",
-        "mandatory component",
-        "elective component",
-        "university component",
-    }
-
-
-def _foundation_equivalent_title_key(key: str) -> str:
-    """Conservatively merge same-credit titles that denote the same course."""
-    # EPVO often contains a short generic programming foundation alongside a
-    # Python-labelled copy.  They are the same introductory competency, not
-    # two separate curriculum units; keeping both can push the foundation
-    # course into a late semester and create a false quality violation.
-    if key in {
-        "основы программирования",
-        "основы программирования python",
-        "основы программирования на python",
-        "введение в программирование",
-        "fundamentals of programming",
-        "introduction to programming",
-    }:
-        return "semantic programming foundations"
-    research_methodology_markers = (
-        "методология исследования",
-        "методология исследований",
-        "методология научного исследования",
-        "методология научных исследований",
-        "research methodology",
-        "methodology of research",
-        "ғылыми зерттеу әдіснамасы",
-        "зерттеу әдіснамасы",
-    )
-    if key in research_methodology_markers:
-        return "semantic research methodology"
-    if "алгоритм" in key and "структур" in key and "данн" in key:
-        return "semantic algorithms and data structures"
-    if "операционн" in key and ("систем" in key or "сред" in key or "оболоч" in key):
-        return "semantic operating systems"
-    if key in {
-        "базы данных",
-        "базы данных и информационные системы",
-        "система управления базами данных",
-        "системы баз данных",
-        "database systems",
-        "database management systems",
-    }:
-        return "semantic database systems"
-    if key in {
-        "проектный менеджмент",
-        "управление it проектами",
-        "управление ит проектами",
-        "управление проектами",
-        "project management",
-        "it project management",
-    }:
-        return "semantic project management"
-    prefixes = (
-        "основы ", "введение в ", "введение в основы ", "базовый курс ",
-        "fundamentals of ", "introduction to ", "basic course in ",
-    )
-    for prefix in prefixes:
-        if key.startswith(prefix):
-            candidate = key[len(prefix):].strip()
-            if len(candidate.split()) >= 2:
-                return candidate
-    return key
+from app.planner.scheduler_catalogue import (
+    foundation_equivalent_title_key as _foundation_equivalent_title_key,
+    is_component_placeholder_title as _is_component_placeholder_title,
+    unique_items_by_title as _unique_items_by_title,
+)
 
 
 def _late_stage_min_semester(title: str | None, num_semesters: int) -> int:
