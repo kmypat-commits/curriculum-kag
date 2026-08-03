@@ -38,6 +38,9 @@ Invoke-Checked { powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-P
 Invoke-Checked { & $python (Join-Path $backend "scripts\check_release_hygiene.py") } "Release hygiene"
 Invoke-Checked { powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "smoke-test.ps1") -ExpectedDatabase postgresql } "PostgreSQL smoke test"
 Invoke-Checked {
+    & $python (Join-Path $backend "scripts\check_alembic_state.py")
+} "Alembic schema state"
+Invoke-Checked {
     & $python (Join-Path $backend "scripts\smoke_core_api.py")
 } "Core plan-analysis API smoke"
 Invoke-Checked {
