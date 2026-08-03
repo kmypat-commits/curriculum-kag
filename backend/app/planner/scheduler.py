@@ -36,6 +36,9 @@ from app.planner.scheduler_text import short_lo_theme as _short_lo_theme
 from app.planner.scheduler_prerequisites import prerequisite_concepts as _prerequisite_concepts
 from app.planner.scheduler_domain_rules import (
     course_domain_matches as _course_domain_matches,
+    has_foreign_professional_title as _has_foreign_professional_title,
+    is_interdisciplinary_title_relevant as _is_interdisciplinary_title_relevant,
+    is_it_medicine_support_course as _is_it_medicine_support_course,
     invalid_project_domain_label as _is_invalid_project_domain_label,
 )
 
@@ -55,153 +58,6 @@ from app.planner.semester_rules import (
     late_stage_min_semester as _late_stage_min_semester,
     minimum_appropriate_semester as _item_minimum_appropriate_semester,
 )
-
-
-def _is_interdisciplinary_title_relevant(course: Course, project_domains: List[str]) -> bool:
-    """Require a course to fit the professional role of its project domain.
-
-    EPVO groups legitimately contain general education and elective noise.  For
-    interdisciplinary generation the plan core should be selected by positive
-    domain fit, not by a growing list of forbidden titles.
-    """
-    domains = " ".join(project_domains).lower()
-    has_it = "it" in domains or "информ" in domains or "computer" in domains or "кибер" in domains
-    has_forensics = "forensic" in domains or "криминал" in domains or "расслед" in domains or "след" in domains
-    if not (("medicine" in domains or "мед" in domains or "здрав" in domains) and ("it" in domains or "информ" in domains or "computer" in domains)):
-        if not (has_it and has_forensics):
-            return True
-    full_text = _title_key(" ".join([course.title or "", course.description or ""]))
-    if not full_text:
-        return False
-    medical_terms = (
-        "мед", "здрав", "клиник", "пациент", "врач", "био", "анатом", "физиолог",
-        "фармак", "эпидеми", "вирус", "бактер", "гистолог", "иммун", "хирург",
-        "инфекц", "патолог", "онколог", "уролог", "невролог", "педиатр",
-    )
-    it_terms = (
-        "it", "информ", "цифр", "данн", "data", "программ", "алгоритм",
-        "автомат", "ai", "искусствен", "модел", "mathlab", "3d", "телемед",
-        "сеть", "сетей", "баз", "cloud", "облач", "machine learning",
-        "кибер", "безопас", "сервер", "вычисл", "software", "computer",
-    )
-    forensic_terms = (
-        "forensic", "криминалист", "расслед", "доказател", "экспертн",
-        "судеб", "процессу", "инцидент", "угроз", "вредонос",
-        "malware", "киберпреступ", "цифров", "журнал", "лог", "osint",
-        "атак", "уязвим", "сохранен", "документирован", "цепочк",
-    )
-    domain = (course.domain or "").lower()
-    if has_it and has_forensics:
-        if not _has_domain_term(full_text, it_terms + forensic_terms):
-            return False
-        if "forensic" in domain or "криминал" in domain or "расслед" in domain or "след" in domain:
-            return _has_domain_term(full_text, forensic_terms)
-        if "it" in domain or "информ" in domain or "computer" in domain or "кибер" in domain:
-            return _has_domain_term(full_text, it_terms + forensic_terms)
-        return _has_domain_term(full_text, it_terms + forensic_terms)
-    if "medicine" in domain or "мед" in domain or "здрав" in domain:
-        return _has_domain_term(full_text, medical_terms)
-    if "it" in domain or "информ" in domain or "computer" in domain:
-        return _has_domain_term(full_text, it_terms)
-    return True
-
-
-def _is_it_medicine_support_course(
-    course: Course,
-    project_domains: List[str],
-) -> bool:
-    """Reject physician-training depth from an IT + medicine curriculum.
-
-    A secondary medical field should contribute biomedical foundations,
-    health-system context or digital/analytical medicine.  Exact membership in
-    a medical EPVO group is not enough to admit a clinical treatment course
-    intended for training a physician.
-    """
-    domains = " ".join(project_domains).casefold()
-    is_it_medicine = (
-        any(marker in domains for marker in ("it", "информ", "computer", "software", "цифр"))
-        and any(marker in domains for marker in ("мед", "здрав", "medicine", "medical", "health"))
-    )
-    if not is_it_medicine:
-        return True
-    text = _title_key(" ".join([
-        course.title or "",
-        course.description or "",
-    ]))
-    explicit_digital = (
-        "информационн систем", "медицинская информатика",
-        "медицинской информатики", "медицинскую информатику", "цифр",
-        "алгоритм", "программ", "телемед", "биоинформ", "искусствен",
-        "machine learning", "data science", "database", "digital",
-        "information system", "software", "computer",
-        "электронн медицинск", "электронн здравоохран",
-    )
-    physician_training_depth = (
-        "клиническ", "диагност", "лечени", "хирург", "терапевт",
-        "внутренние болезни", "акуш", "гинек", "педиатр", "офтальм",
-        "онколог", "кардио", "уролог", "реаним", "стоматолог",
-        "пропедевтик", "врачебн практик", "clinical diagnostics", "clinical diagnosis",
-        "surgery", "treatment",
-    )
-    if not _has_domain_term(text, physician_training_depth):
-        return True
-    if _has_domain_term(text, explicit_digital):
-        return True
-    return 0 < int(course.credits or 0) <= 7
-
-
-def _has_foreign_professional_title(
-    course: Course,
-    project_domains: List[str],
-) -> bool:
-    """Detect a professional context not represented by selected fields.
-
-    Semantic similarity can be inflated by generic words such as "AI" or
-    "digital".  The title still has to belong to a selected professional
-    context; e.g. AI in marketing is not an IT-health course merely because it
-    contains "AI".
-    """
-    title = _title_key(course.title)
-    domains = " ".join(project_domains).casefold()
-    context_groups = (
-        (
-            (
-                "маркетинг", "marketing", "бизнес коммуникац",
-                "business communication", "цифровая экономика",
-                "digital economy", "экономик", "предприяти",
-                "enterprise management", "комплексная логистика",
-                "логистика", "logistics", "бухгалтер", "accounting",
-                "финанс", "finance",
-            ),
-            (
-                "бизнес", "управлен", "эконом", "менедж", "маркет",
-                "логист", "финанс", "account", "business", "management",
-                "econom", "marketing", "logistics", "finance",
-            ),
-        ),
-        (
-            ("промышленная безопасность", "industrial safety"),
-            (
-                "промышлен", "производ", "инженер", "безопасность труда",
-                "industrial", "manufactur", "engineering", "occupational safety",
-            ),
-        ),
-        (
-            (
-                "эмоциональн", "эмоциональный интеллект",
-                "emotional intelligence",
-            ),
-            (
-                "психолог", "человеческ ресурс", "hr", "управлен",
-                "psycholog", "human resource", "management",
-            ),
-        ),
-    )
-    return any(
-        _has_domain_term(title, title_markers)
-        and not _has_domain_term(domains, allowed_domain_markers)
-        for title_markers, allowed_domain_markers in context_groups
-    )
 
 
 def _project_domain_terms(project_version: ProjectVersion, db: Session) -> List[str]:
