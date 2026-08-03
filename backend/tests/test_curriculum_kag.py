@@ -478,12 +478,15 @@ def test_scheduler_removes_foundation_aliases_and_component_placeholders():
     courses = [
         {"course_id": 1, "title": "Цифровая криминалистика", "credits": 5, "prerequisites": []},
         {"course_id": 2, "title": "Основы цифровой криминалистики", "credits": 5, "prerequisites": []},
+        {"course_id": 5, "title": "Основы программирования Python", "credits": 3, "prerequisites": []},
+        {"course_id": 6, "title": "Основы программирования", "credits": 6, "prerequisites": []},
         {"course_id": 3, "title": "обязательный компонент", "credits": 5, "prerequisites": []},
         {"course_id": 4, "title": "Анализ вредоносного ПО", "credits": 5, "prerequisites": []},
     ]
     schedule = schedule_courses(courses, 2, 30, MagicMock())
     titles = [item["title"].strip().casefold() for items in schedule.values() for item in items]
     assert sum("цифровая криминалистика" in title for title in titles) == 1
+    assert sum("основы программирования" in title for title in titles) == 1
     assert "обязательный компонент" not in titles
 
 

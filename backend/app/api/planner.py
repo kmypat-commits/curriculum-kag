@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from io import BytesIO
 from datetime import datetime, timezone
 import time
+import logging
 from statistics import median
 from app.database import get_db
 from app.models.user import User
@@ -38,6 +39,7 @@ from app.planner.planner_utils import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 _plan_build_status = {}
 REPLACEMENT_PREVIEW_CANDIDATE_LIMIT = 1500
 REPLACEMENT_PREVIEW_MATCH_LIMIT = 3000
@@ -1549,8 +1551,7 @@ def build_plan(
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         }
-        import traceback
-        print(f"PLAN BUILD ERROR: {traceback.format_exc()}")
+        logger.exception("Plan build failed for project version %s", project_version_id)
         raise HTTPException(status_code=500, detail=f"Не удалось сформировать учебный план: {str(e)}")
 
 
@@ -2292,6 +2293,28 @@ async def get_variants(
             "suspicious_courses": suspicious_courses,
         })
     
+    # Expose the same deterministic fingerprint used by the build endpoint.
+    # This makes legacy duplicate A/B/C variants visible in the UI instead of
+    # silently presenting cosmetic labels as independent alternatives.
+    fingerprints = {}
+    for row in result:
+        signature = []
+        schedule = row.get("schedule") or {}
+        for semester, semester_items in sorted(schedule.items(), key=lambda pair: int(pair[0])):
+            for item in semester_items or []:
+                if not isinstance(item, dict):
+                    continue
+                signature.append((int(semester), item.get("course_id"), item.get("bridge_module_id")))
+        fingerprint = "|".join(
+            f"{semester}:{course_id or ''}:{bridge_id or ''}"
+            for semester, course_id, bridge_id in signature
+        )
+        row["schedule_fingerprint"] = fingerprint
+        fingerprints.setdefault(fingerprint, []).append(row.get("variant_type"))
+    for row in result:
+        duplicate_variants = fingerprints.get(row.get("schedule_fingerprint"), [])
+        row["variant_distinct"] = len(duplicate_variants) <= 1
+        row["duplicate_variants"] = duplicate_variants if len(duplicate_variants) > 1 else []
     return result
 
 

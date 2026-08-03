@@ -76,6 +76,19 @@ def _is_component_placeholder_title(key: str) -> bool:
 
 def _foundation_equivalent_title_key(key: str) -> str:
     """Conservatively merge same-credit titles that denote the same course."""
+    # EPVO often contains a short generic programming foundation alongside a
+    # Python-labelled copy.  They are the same introductory competency, not
+    # two separate curriculum units; keeping both can push the foundation
+    # course into a late semester and create a false quality violation.
+    if key in {
+        "основы программирования",
+        "основы программирования python",
+        "основы программирования на python",
+        "введение в программирование",
+        "fundamentals of programming",
+        "introduction to programming",
+    }:
+        return "semantic programming foundations"
     research_methodology_markers = (
         "методология исследования",
         "методология исследований",
@@ -167,11 +180,17 @@ def _complexity_min_semester(item: Dict, num_semesters: int) -> int:
         "невролог", "паразитолог", "психиатр", "офтальм", "реаним",
         "терапи", "педиатр", "акуш", "гинек", "дермат", "клиническ",
     )
+    system_advanced_terms = (
+        "диагност", "надежност", "надёжност", "систем автоматизац",
+        "diagnostic", "reliability of automation",
+    )
     research_terms = (
         "методология науч", "scientific methodology", "доказательная медицина",
         "evidence based medicine", "научных исследований", "research methods",
     )
     if _has_domain_term(text, clinical_advanced_terms):
+        return max(2, min(num_semesters, math.ceil(num_semesters * 0.55)))
+    if _has_domain_term(text, system_advanced_terms):
         return max(2, min(num_semesters, math.ceil(num_semesters * 0.55)))
     if _has_domain_term(text, research_terms):
         if num_semesters <= 6:
@@ -687,11 +706,45 @@ def _repair_missing_ict_competencies(
     candidate_ids = set(effective_by_course) - selected_ids
     candidates = db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
     project_domains = _project_domain_terms(project_version, db)
+    # EPVO cards are valid repair candidates when they belong to the selected
+    # direction/group and education level.  The previous filter rejected all
+    # ``EPVO-*`` cards, which made the competency repair unable to add real
+    # programming or systems courses even when EPVO contained them.
+    scope_pairs = [(
+        str(constraints.get("group_code") or "").strip(),
+        str(constraints.get("direction_code") or "").strip(),
+    )]
+    if str(constraints.get("program_type") or "").lower() in {"interdisciplinary", "joint"}:
+        scope_pairs.append((
+            str(constraints.get("secondary_group_code") or "").strip(),
+            str(constraints.get("secondary_direction_code") or "").strip(),
+        ))
+    epvo_candidate_ids: set[int] = set()
+    epvo_candidates = db.query(EpvoDisciplineNormalized).filter(
+        EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or {-1})
+    ).all()
+    for row in epvo_candidates:
+        if not row.approved_course_id or not epvo_row_matches_education_level(
+            row, constraints.get("education_level")
+        ):
+            continue
+        groups = {str(value or "") for value in (row.group_codes or [])}
+        directions = {str(value or "") for value in (row.direction_codes or [])}
+        if any(
+            (group and group in groups) or (direction and direction in directions)
+            for group, direction in scope_pairs
+        ):
+            epvo_candidate_ids.add(int(row.approved_course_id))
     candidates = [
         course for course in candidates
-        if not str(course.course_id or "").startswith("EPVO-")
-        and _education_level_course_allowed(course, constraints.get("education_level"))
-        and _course_domain_matches(course, project_domains)
+        if _education_level_course_allowed(course, constraints.get("education_level"))
+        and (
+            (str(course.course_id or "").startswith("EPVO-") and course.id in epvo_candidate_ids)
+            or (
+                not str(course.course_id or "").startswith("EPVO-")
+                and _course_domain_matches(course, project_domains)
+            )
+        )
     ]
     protected_ids = {
         int(prerequisite_id)
@@ -755,7 +808,11 @@ def _repair_missing_ict_competencies(
                     "prerequisites": [],
                     "type": candidate.cycle_component or "mandatory",
                     "selection_method": "ict_competency_repair",
-                    "admission_reason": "missing_ict_competency_and_lo",
+                    # Keep the same auditable admission marker as other
+                    # scoped EPVO selections so the final domain guard does
+                    # not mistake a valid repair for a foreign course.
+                    "admission_reason": "epvo_scope_and_lo",
+                    "repair_reason": "missing_ict_competency_and_lo",
                     "admission_los": sorted(
                         str(lo.lo_code)
                         for lo in project_version.learning_outcomes
@@ -975,6 +1032,11 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                 for item in sorted(list(schedule[donor]), key=lambda x: int(x.get("credits") or 0), reverse=True):
                     if item.get("regulatory_required"):
                         continue
+                    if item.get("_scoped_epvo_semester") and item.get("recommended_semester"):
+                        if abs(donor - int(item["recommended_semester"])) <= 1:
+                            # A scoped course already sits inside its EPVO
+                            # window; use another item for overload repair.
+                            continue
                     credits = int(item.get("credits") or 0)
                     if current_loads[target] + credits > upper:
                         continue
@@ -1014,6 +1076,9 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                 for item in sorted(list(schedule[donor]), key=lambda x: int(x.get("credits") or 0)):
                     if item.get("regulatory_required"):
                         continue
+                    if item.get("_scoped_epvo_semester") and item.get("recommended_semester"):
+                        if abs(target - int(item["recommended_semester"])) > 1:
+                            continue
                     credits = int(item.get("credits") or 0)
                     if current_loads[donor] - credits < lower:
                         continue
@@ -1057,6 +1122,9 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
         def can_place(item: Dict, target: int, overrides: Dict[int, int]) -> bool:
             if item.get("regulatory_required"):
                 return False
+            if item.get("_scoped_epvo_semester") and item.get("recommended_semester"):
+                if abs(target - int(item["recommended_semester"])) > 1:
+                    return False
             if target < _item_minimum_appropriate_semester(item, num_semesters):
                 return False
             if target > int(item.get("latest_semester") or num_semesters):
@@ -1203,6 +1271,12 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
             for item in sorted(list(schedule[donor]), key=lambda row: int(row.get("credits") or 0)):
                 if item.get("regulatory_required"):
                     continue
+                if item.get("_scoped_epvo_semester") and item.get("recommended_semester"):
+                    recommended = int(item["recommended_semester"])
+                    # Keep evidence-backed courses in their ±1 window while
+                    # strict max-load repair looks for flexible candidates.
+                    if abs(donor - recommended) <= 1:
+                        continue
                 credits = int(item.get("credits") or 0)
                 if credits <= 0:
                     continue
@@ -3093,6 +3167,10 @@ def _trim_to_target_credits(items: List[Dict], target_credits: int, db: Session)
             for index, item in enumerate(normalized)
             if item.get("course_id") is not None
             and not item.get("regulatory_required")
+            # A competency repair is a deliberate quality constraint, not a
+            # low-priority elective.  Never trim it merely to close a credit
+            # gap; bridge credits are adjusted before removing core evidence.
+            and item.get("selection_method") != "ict_competency_repair"
             and item.get("course_id") not in protected
             and int(item.get("credits") or 0) <= excess
             and total() - int(item.get("credits") or 0) >= target_credits
@@ -3619,9 +3697,19 @@ def build_curriculum_plan(
 
     selected_courses = sanitize_selected_courses(selected_courses)
     selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
+    # Final candidate repairs can reintroduce a second generic foundation
+    # after the earlier normalization pass.  Deduplicate once immediately
+    # before scheduling so a late duplicate cannot create a false semester
+    # violation or consume professional-course capacity.
+    selected_courses = _unique_items_by_title(selected_courses)
     selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
 
     for _ in range(12):
+        # Prerequisite repair may append replacement courses after the initial
+        # EPVO-semester pass. Re-attach the selected direction/group evidence
+        # before every scheduling attempt so replacements follow the same
+        # education-level and semester rules.
+        selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
         schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
         schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
         verification = verify_curriculum_plan(schedule, project_version, db)
@@ -3976,6 +4064,12 @@ def build_curriculum_plan(
         schedule, project_version, target_credits, maximum_credits, db
     )
     prerequisite_graph = _infer_schedule_prerequisites(schedule)
+    # The final credit-gap repair may move flexible courses after the normal
+    # semantic pass. Re-apply the bounded semester-improvement pass last so
+    # EPVO-recommended semesters are respected in the persisted schedule too.
+    schedule = _repair_semester_appropriateness(
+        schedule, num_semesters, nominal_load, db
+    )
 
     invalid_domain_courses = []
     for semester_items in schedule.values():
@@ -4909,6 +5003,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     def rank(cid):
         data, course = aggregates[cid], courses.get(cid)
         credits = max(1, course.credits if course else 1)
+        # EPVO's recommended semester is advisory, but using it as a stable
+        # tie-breaker prevents a late specialised course from displacing an
+        # equally evidenced foundation course.  Prerequisite repair remains
+        # authoritative after selection.
+        semester_preference = -int(course.recommended_semester or 99)
         if variant_type == "B":
             # Reuse-first variant: prefer scoped existing courses with a simple
             # prerequisite chain, but avoid overloading early semesters with
@@ -4918,7 +5017,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 scope_rank(course),
                 priority_rank(course),
                 semester_stability_rank(course),
-                -(course.recommended_semester or 99),
+                semester_preference,
                 -course_depth(cid),
                 -len(prereq_ids_by_course.get(cid, [])),
                 data["max"],
@@ -4928,8 +5027,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         if variant_type == "C":
             domains = {(version.project.domain1 or "").lower(), (version.project.domain2 or "").lower()}
             domain_bonus = 1 if course and any(d and (d in (course.domain or "").lower() or (course.domain or "").lower() in d) for d in domains) else 0
-            return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), -len(prereq_ids_by_course.get(cid, [])), domain_bonus, data["sum"] / credits, -course_depth(cid), -course.id)
-        return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), len(data["los"]), data["sum"], data["max"], -course_depth(cid), -course.id)
+            return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), semester_preference, -len(prereq_ids_by_course.get(cid, [])), domain_bonus, data["sum"] / credits, -course_depth(cid), -course.id)
+        return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), semester_preference, len(data["los"]), data["sum"], data["max"], -course_depth(cid), -course.id)
     candidate_ids = sorted(
         (cid for cid in aggregates if cid in courses and is_project_domain(courses[cid]) and course_depth(cid) < num_semesters),
         key=rank,
@@ -5889,6 +5988,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = rebalance_domain_quotas(result)
     result = _fill_existing_bridge_credit_gap(result, target, db)
     result = top_up_with_credit_bridges(result)
+    # Final pass: all credit/domain/LO repairs above can converge B/C back to A.
+    # Diversify only after the last mutation so an accepted plan keeps its
+    # variant identity. The helper preserves same-credit courses, professional
+    # LO coverage, core competencies and prerequisite safety; the verifier
+    # remains the final authority for hard constraints.
+    if variant_type in {"B", "C"}:
+        result = _diversify_variant_items(result, version, db, variant_type)
     if (
         variant_type == "C"
         and str(constraints.get("education_level") or "").lower()
@@ -6384,6 +6490,15 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                 if donor_semester == target_semester: continue
                 for item in list(schedule[donor_semester]):
                     credits = item.get("credits") or 0
+                    # Do not use a scoped EPVO course as a generic load
+                    # shuttle: moving it away from its evidence-backed
+                    # semester is exactly the failure measured by the
+                    # external alignment audit.  Unscoped and bridge items
+                    # remain available for balancing below.
+                    if item.get("_scoped_epvo_semester"):
+                        recommended_semester = int(item.get("recommended_semester") or 0)
+                        if recommended_semester and target_semester != recommended_semester:
+                            continue
                     if item.get("regulatory_required") and target_semester != int(item.get("recommended_semester") or donor_semester):
                         continue
                     if target_semester < _item_minimum_appropriate_semester(
@@ -6669,14 +6784,3 @@ def calculate_plan_metrics(schedule, selected_courses, project_version, db, veri
             "objectives": ["LO coverage", "redundancy", "domain entropy"],
         })
     return {"total_credits": verification["total_credits"], "target_credits": verification["target_credits"], "total_courses": len(persisted_items), "num_bridge_modules": sum(1 for item in persisted_items if item.get("bridge_module_id") is not None), "lo_coverage_percentage": round(verification["average_lo_coverage"] * 100, 1), "min_lo_coverage": verification["min_lo_coverage"], "evidence_count": verification["evidence_count"], "redundancy": verification["redundancy"], "prerequisite_violations": len(verification["prerequisite_violations"]), "semester_load_violations": len(verification["semester_load_violations"]), "feasible": verification["feasible"], "optimizer": optimizer, "international_quality": international_quality, "verification": verification}
-
-
-
-
-
-
-
-
-
-
-

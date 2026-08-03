@@ -727,11 +727,13 @@ export default function PlanBuilder() {
         const key = `${courseId}:${loId}`
         setMatchFeedbackState(prev => ({ ...prev, [key]: 'saving' }))
         try {
+            const correctedScore = verdict === 'confirmed' ? 1.0 : verdict === 'weak' ? 0.5 : 0.0
             await axios.post('/api/kag/match-feedback', {
                 project_version_id: versionId,
                 course_id: courseId,
                 lo_id: loId,
                 verdict,
+                corrected_score: correctedScore,
             })
             setMatchFeedbackState(prev => ({ ...prev, [key]: verdict }))
         } catch (err) {
@@ -747,6 +749,10 @@ export default function PlanBuilder() {
     const currentPlanHasHardViolations = Number(
         (currentPlan?.metrics?.verification || currentPlan?.verification || {}).hard_violation_count || 0
     ) > 0
+    const duplicateVariantGroups = Object.values(variants || {})
+        .filter(item => item && Array.isArray(item.duplicate_variants) && item.duplicate_variants.length > 1)
+        .map(item => item.duplicate_variants.join('/'))
+        .filter((value, index, values) => values.indexOf(value) === index)
 
     return (
         <div className="workspace-page planner-page" style={{ minHeight: '100vh', background: '#f5f7fa' }}>
@@ -874,6 +880,18 @@ export default function PlanBuilder() {
                     </div>
                 ) : (
                     <div>
+                        {duplicateVariantGroups.length > 0 && (
+                            <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10, background: '#fff8e1', border: '1px solid #f1c40f', color: '#6d4c00' }}>
+                                <b>{localText('Внимание: варианты совпадают', 'Назар аударыңыз: нұсқалар бірдей', 'Warning: variants are identical')}</b>
+                                <div style={{ marginTop: 5, fontSize: 13 }}>
+                                    {localText(
+                                        `Сохранённые варианты ${duplicateVariantGroups.join(', ')} имеют одинаковый состав дисциплин. Это не разные альтернативы. Перестройте только эти варианты после изменения ограничений или состава ЕПВО.`,
+                                        `Сақталған ${duplicateVariantGroups.join(', ')} нұсқаларының пәндер құрамы бірдей. Бұл әртүрлі балама емес. Шектеулерді немесе ЕПВО құрамын өзгерткеннен кейін осы нұсқаларды қайта құрыңыз.`,
+                                        `Saved variants ${duplicateVariantGroups.join(', ')} have the same course composition. They are not distinct alternatives. Rebuild these variants after changing the EPVO scope or constraints.`
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                             {['A', 'B', 'C'].map(v => (
                                 <button

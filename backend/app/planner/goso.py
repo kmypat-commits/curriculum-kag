@@ -342,7 +342,30 @@ def ensure_goso_items(version: ProjectVersion, db: Session) -> List[Dict]:
 def merge_goso_items(items: List[Dict], version: ProjectVersion, db: Session) -> List[Dict]:
     required = ensure_goso_items(version, db)
     required_keys = {item["course_id"] for item in required}
-    return [*required, *[item for item in items if item.get("course_id") not in required_keys]]
+    constraints = version.project.constraints_json or {}
+    is_kz = str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
+    has_legal_goso = any(
+        "основы права" in str(item.get("title") or "").casefold()
+        for item in required
+    )
+
+    def is_redundant_epvo_foundation(item: Dict) -> bool:
+        if not is_kz or item.get("regulatory_required") or item.get("course_id") in required_keys:
+            return False
+        if not has_legal_goso:
+            return False
+        title = str(item.get("title") or "").casefold()
+        # These catalogue cards duplicate the mandatory KZ legal/ethical
+        # block.  They remain in EPVO, but must not be selected twice in a
+        # Kazakhstan plan as late generic electives.
+        return "основы права" in title or "антикорруп" in title
+
+    filtered = [
+        item for item in items
+        if item.get("course_id") not in required_keys
+        and not is_redundant_epvo_foundation(item)
+    ]
+    return [*required, *filtered]
 
 
 def evaluate_goso_compliance(schedule: Dict[int, List[Dict]], version: ProjectVersion) -> Dict:
