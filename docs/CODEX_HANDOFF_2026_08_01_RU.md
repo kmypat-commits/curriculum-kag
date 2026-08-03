@@ -1,5 +1,12 @@
 # Аудит Curriculum-KAG и задание для реализации (handoff в Codex)
 
+### Проверка core API после стабилизации (2026-08-03)
+
+- Добавлен read-only smoke-тест `backend/scripts/smoke_core_api.py`. Без указания версии он получает список проектов и безопасно разрешает `latest_version` через detail API, поэтому не зависит от облегчённого ответа списка.
+- Проверены критические endpoints на рабочем PostgreSQL backend: `variants` — HTTP 200, `graph` — HTTP 200, `lo-achievability` — HTTP 200. Пустых ответов нет.
+- Регрессия backend: **38/38 PASS**, UTF-8 gate чист.
+- SHA-256 шаблона в проекте совпадает с переданным DOCX-шаблоном TEM Journal: `0DBA4319D7022C0057B3995ACE894EA55AE40C1D2F4515D5954E936A606DE3B2`.
+
 - Дата анализа: 2026-08-01
 - Автор анализа: opencode (только чтение, код не изменялся)
 - Репозиторий: `D:\curriculum-kag\curriculum-kag`, ветка `master`, рабочее дерево чистое
@@ -12,6 +19,7 @@
 ### Дополнение 2026-08-02
 
 - В PostgreSQL восстановлены RU/KK/EN локализации дисциплин из нормализованного и сырого слоя ЕПВО; 26\,696 дисциплин имеют все три языка, повреждённых значений — 0.
+- Повторный repair-проход 2026-08-02 обработал 1\,339 нормализованных строк: обновил 926 полей normalized и 119 локализаций из raw EPVO; verified-тексты не перезаписывались.
 - Translation quality score: 1,0000; для 6 карточек, где raw EPVO содержал только RU-описание, добавлены машинные KK/EN-черновики со статусом `needs_review` — они не считаются экспертно подтверждёнными.
 - Проверены и включены в единый аудит 125 направлений и 483 групп ОП: пропусков и повреждённых переводов нет.
 - API `/api/epvo/directions` возвращает локализованные названия для `ru`, `kk` и `en`; пример `6B011`: «Педагогика и психология», «Педагогика және психология», «Pedagogy and Psychology».
@@ -218,3 +226,99 @@
 - 2026-08-02: scheduler now maps local `Course.id` to stable EPVO `approved_course_id`, prioritizes the selected EPVO group/direction semester median over global recommendations, filters values outside `[1, total_semesters]`, and applies a conservative load/prerequisite-safe repair. A fresh transactional set of six quality-eligible A-variants produced EPVO provenance 0.9964 and strict scoped-semester alignment 0.810 (any-source 0.810); a separate negative control remained ineligible. The historical quality-eligible set remains 0.200 on the strict scoped metric (0.229 when any valid source is allowed), because it was saved before the key correction. These are structural comparisons with the EPVO repository, not blinded expert evaluation.
 - 2026-08-02: the scoped-semester priority change passed all 33 regression tests and the fresh control set without new hard violations; it is retained as a production-safe repair, not as a claim of pedagogical validity.
 - 2026-08-02: PydanticAI adapter remains optional and disabled in production. `pydantic-ai-slim[openai]==2.22.0` was verified in an isolated runtime; backend/venv was not upgraded.
+- 2026-08-02: статья `docs/scientific_article/Curriculum_KAG_EPVO_RU.tex` обновлена по аудиту: production planner отделён от экспериментального NSGA-II, добавлены свежие внешние EPVO-метрики, таблица готовности, ограничения по blinded-оценке, Top-10 улучшений и два абзаца о PydanticAI. В статье явно зафиксировано, что сохранённые A/B/C проектов 136 и 137 имеют одинаковые fingerprints и не выдаются за решённую диверсификацию.
+- 2026-08-02: API `GET /planner/{version}/variants` теперь возвращает `schedule_fingerprint`, `variant_distinct` и `duplicate_variants`; Plan Builder показывает локализованное предупреждение для старых совпадающих A/B/C. Новая генерация уже отклоняет дубли до commit, старые планы не удаляются автоматически.
+- 2026-08-02: scheduler получил самый поздний diversity-pass после credit/domain/LO repair. Он выполняется только для B/C, сохраняет одинаковые кредиты, профессиональное LO-покрытие, core-компетенции и prerequisite safety; финальный verifier остаётся обязательным.
+- 2026-08-02: `validate_fresh_generated_against_epvo.py` расширен полями `schedule_fingerprint`, `variants_are_distinct` и `duplicate_variants`; внешний read-only аудит теперь проверяет не только feasibility/provenance, но и фактическую различимость A/B/C.
+- 2026-08-02: v2 fresh audit `.runtime/fresh-136-137-abc-final-diversity-v2.json` завершён: 6/6 вариантов quality-eligible, hard violations 0, `variants_are_distinct=true` для обоих проектов. Сохранённые старые дубли не изменялись автоматически.
+- 2026-08-02: PydanticAI adapter проверен в изолированном окружении версии 2.22.0: disabled fallback возвращает штатный deterministic/OpenAI путь, enabled typed mock проходит валидацию целей/LO и передаёт `retries=0`. В production зависимость и внешний вызов остаются выключенными.
+- 2026-08-02: повторный frozen-split эксперимент expert-memory поверх `epvo-sbert-finetuned-40k` завершён: Recall@10 0.6688→0.6796, MRR 0.7918→0.7992, nDCG@10 0.6642→0.6751 при весе 0.25. Split отличается от production benchmark (Recall@10 0.7071), поэтому эксперимент не внедрён и production-модель не изменена.
+- 2026-08-02: `_repair_semester_appropriateness` теперь сужает только scoped-EPVO курсы до окна `recommended±1`; нормативные, bridge и нес scoped-курсы не изменяются. Свежий проект 136/A: overall semester alignment 0.8889, scoped median 1.0, hard violations 0. Результат одной программы не обобщается на весь набор.
+- 2026-08-02: fallback SQLite также приведён в проверяемое состояние: оптимизирован `repair_corrupt_localizations.py` (выборка только по normalized `source_keys`, без полного сканирования raw EPVO), восстановлено 118 записей, 114 необратимых строк оставлены `needs_review`; итоговый аудит SQLite: RU/KK/EN без пропусков, corrupt_values=0, направления 125/125, группы 483/483.
+- 2026-08-02: load balancers now avoid using scoped EPVO courses as generic shuttles when that would move them outside their evidence-backed `recommended±1` window. Project 137/A remains at 0.5 scoped alignment because the remaining valid source case is constrained by the generated prerequisite/load graph; it is not relabeled as a success.
+- 2026-08-02: дополнительно защищены scoped-курсы во всех основных load-rebalance ветках. Контрольный 137/A-прогон сохранил 0.5 scoped alignment: причина не в свободном переносе курса, а в невозможности одновременно удовлетворить текущую кредитную ёмкость и граф; дальнейшее улучшение требует отдельной swap/flow-оптимизации и экспертной проверки.
+- 2026-08-02: исправлен sampler в evaluation-only `benchmark_epvo_hybrid_ranking.py` для совпадения с heap-based frozen split; добавлен mixed word/character-3gram режим. Лучший корректный результат при weight=0.50: Recall@10 0.6700→0.6732, MRR 0.7906→0.7979, nDCG@10 0.6654→0.6714; production model unchanged.
+### 2026-08-03: локализованный экспорт
+
+Исправлен `backend/app/api/export_api.py`: XLSX-экспорт принимает параметр `language` (RU/KK/EN, также понимает legacy-алиас `kz`) и выбирает название дисциплины в языке интерфейса. При неполной строке используется последовательный fallback RU → KK → EN → исходное название. Проверка: `py_compile`, `git diff --check`, `test.ps1` — 33/33.
+
+Добавлена отдельная метрика внешнего аудита `semester_alignment_prereq_adjusted_pm1`. Она учитывает самый ранний семестр после фактических пререквизитов, но сохраняет исходные raw-метрики отдельно. На свежей программе 136: raw 0,8889, scoped median 1,0000; на программе 137: raw 0,5000, prerequisite-adjusted 0,7857. Это диагностическая метрика, а не замена исходному EPVO-сравнению.
+
+В evaluation-only ranking benchmark добавлены seed 42, `model.eval()` и детерминированные CUDA-настройки. Эксперимент с добавлением цели/направления программы к тексту LO не внедрён: его абсолютный baseline оказался несопоставим с предыдущим frozen отчётом, поэтому результат признан диагностическим, а не улучшением модели.
+
+Контрольный API-аудит с уровнями bachelor/master/doctorate (`.runtime/quality-control-stable-levels.json`) прошёл: 5/5 контрольных проектов, все варианты A/B/C, один активный вариант и отсутствие пропусков уровней. В расширенном списке проекты 136 и 137 остаются историческими контрольными записями с устаревшими сохранёнными fingerprint; свежая транзакционная проверка этих проектов проходит, поэтому их нельзя смешивать со стабильным baseline без регенерации.
+### 2026-08-03 — контроль полного EPVO-слоя
+
+- Для активного PostgreSQL-каталога подтверждено 26 696 курсов с RU/KK/EN, без пропусков и `�`; направления 125/125, группы 483/483.
+- Для полного нормализованного слоя (191 292 карточки) покрытие источником: заголовки RU 100%, KK 99,994%, EN 99,874%; описания RU 99,887%, KK 99,923%, EN 99,363%.
+- 930 полей восстановлены из raw EPVO; 134 локализации получили подтверждённые исходные значения. Оставшиеся пустые поля отсутствуют в raw-карточках и не заполняются копированием русского текста.
+- Добавлен локальный NLLB-процесс для машинных черновиков отсутствующих переводов; результат всегда маркируется `machine_nllb_draft/needs_review` и не считается экспертным.
+### 2026-08-03: production acceptance gate rechecked
+
+`acceptance-test.ps1` завершился успешно: backend 35/35 тестов, PostgreSQL smoke connected, 6 контрольных программ A/B/C, локализация PostgreSQL 26,696/26,696 для RU/KK/EN с `corrupt_values=0`, frontend production build. Предупреждение Vite CJS остаётся информационным и больше не роняет exit-код; предыдущая запись о RED-шлюзе устарела.
+### 2026-08-03: disk usage audit
+
+Удаление не выполнялось. Зафиксированы размеры `backend/models` 49.57 GB и `.runtime` 9.10 GB; добавлен безопасный порядок manifest → verification → archive → optional deletion в `docs/DISK_USAGE_AUDIT_2026_08_03_RU.md`.
+### 2026-08-03: единая нормализация языков
+
+Добавлен `backend/app/services/language.py`: единый mapping RU/KK/EN и legacy-алиасов `kz/kaz`, а также EPVO suffix mapping. Подключено в export API и EPVO API, добавлены два регрессионных теста. После изменения `test.ps1` и полный `acceptance-test.ps1` прошли: 37/37, PostgreSQL smoke, контрольные программы, локализация и frontend build.
+### 2026-08-03: language aliases in AI suggestions
+
+Маршрут предложения целей/РО в `projects.py` теперь использует общий `normalize_language`, поэтому `kz/kaz/kazakh` корректно дают казахский ответ (`kk`). После изменения `test.ps1` и `acceptance-test.ps1` прошли без регрессий.
+### 2026-08-03: единая нормализация языка в LO-анализе
+
+Маршруты анализа достижимости и покрытия LO теперь используют общий `normalize_language`. Алиасы `kz`, `kaz` и `kazakh` корректно приводятся к казахскому `kk`, поэтому ответы AI и локальные fallback-ответы не переключаются ошибочно на русский. После изменения регрессионный набор: 37/37 тестов.
+### 2026-08-03: нормализация языка в утверждении EPVO-кандидатов
+
+Сервис утверждения дисциплин из EPVO теперь нормализует язык инструкции перед созданием локализованного описания. Это устраняет расхождение, при котором алиасы `kz/kaz/kazakh` могли приводить к русскому fallback-тексту. Регрессия: 37/37 тестов.
+### 2026-08-03: единые языковые алиасы во frontend
+
+`LanguageContext` теперь нормализует `ru/rus/russian`, `kk/kz/kaz/kazakh` и `en/eng/english` одинаково с backend. Это устраняет рассинхронизацию интерфейса при сохранённом языке `kaz` или `kz`. Vite build и backend-регрессия пройдены: 37/37.
+### 2026-08-03: полный acceptance после языкового прохода
+
+Полный production acceptance успешно завершён: 37/37 backend-тестов, PostgreSQL smoke, 6 контрольных программ, RU/KK/EN локализация 26 696/26 696 курсов без пропусков и повреждённых значений, frontend production build. Статус: `Full production acceptance passed`.
+### 2026-08-03: канонический язык передаётся всем UI-компонентам
+
+LanguageContext теперь возвращает наружу нормализованный код языка, а не исходный alias из localStorage. Компоненты графа, планировщика и анализа LO одинаково обрабатывают `kz/kaz/kazakh` как `kk`. Production build после изменения успешен.
+### 2026-08-03: структурированные backend-логи
+
+Убраны диагностические `print` из авторизации, bridge-генератора и обработчика сборки плана. Ошибки теперь идут через стандартный logging: fallback LLM остаётся видимым как warning, а ошибка сборки плана получает traceback в серверном логе без дублирования в stdout. Тесты 37/37 и PostgreSQL smoke пройдены.
+### 2026-08-03: отключена ненужная загрузка legacy JSON при scoring
+
+При полном PostgreSQL-репозитории scoring больше не читает 58-МБ `course_translations.json`: JSON вызывается только при явном `LEGACY_TRANSLATIONS_FALLBACK=true`. Проверка `_course_match_text` оставила cache пустым (`misses=0`), регрессия 37/37, данные не менялись. Это уменьшает стартовую память и задержку генерации на чистом PostgreSQL.
+### 2026-08-03: регрессионный тест для memory guard
+
+Добавлен тест `test_localization_fallback.py`: при стандартном PostgreSQL-режиме scoring не должен загружать legacy JSON-каталог. Проверка подтверждает `cache misses=0`; общий набор теперь **38/38**.
+### 2026-08-03: таймауты Docker в launcher
+
+`start.ps1` теперь задаёт безопасные значения `DOCKER_CLIENT_TIMEOUT=10` и `COMPOSE_HTTP_TIMEOUT=30`, если пользователь их не указал. При недоступном Docker Desktop launcher больше не должен зависать бесконечно на клиентском вызове; существующая логика SQLite/PostgreSQL не менялась. Регрессия: 38/38 тестов.
+### 2026-08-03: CI приведён к production Python
+
+GitHub Actions использовал Python 3.11, тогда как `backend/Dockerfile` и production requirements фиксируют Python 3.12. CI переведён на 3.12, чтобы тестовая среда совпадала с production. Локальная регрессия: 38/38.
+### 2026-08-03: проверен Alembic baseline на PostgreSQL shadow
+
+На `127.0.0.1:5433/curriculum_kag_shadow` выполнены `alembic upgrade head` и `alembic current`. Схема находится на `20260802_baseline (head)`, миграций к применению нет. Production startup пока не переключался с `create_all`; это оставлено отдельным безопасным этапом после подготовки следующей forward-миграции.
+### 2026-08-03: очищены дублирующиеся импорты auth
+
+В `app/services/auth.py` удалены повторные импорты `bcrypt` и `OAuth2PasswordBearer`, оставлен один compatibility-патч для Passlib/Bcrypt. Поведение проверки паролей и JWT не менялось; тесты 38/38.
+### 2026-08-03: казахское форматирование дат
+
+Research Dashboard теперь использует `kk-KZ` для дат в казахском интерфейсе вместо русского `ru-RU`. Production build успешен.
+### 2026-08-03: читаемые ошибки API во frontend
+
+Добавлен общий `frontend/src/utils/errors.js`, который корректно отображает строковые, объектные и массивные FastAPI-ошибки вместо `[object Object]`. Подключён к графу, LO-анализу, bridge-операциям и загрузке покрытия. Production build успешен.
+### 2026-08-03: единый форматтер ошибок на страницах
+
+Форматтер API-ошибок подключён также к Course Syllabus, EPVO Comparison, Project Details, Repository и Research Dashboard. Объектные ответы FastAPI теперь отображаются читаемо, а не как `[object Object]`. Frontend build успешен.
+### 2026-08-03: завершена обработка объектных API-ошибок
+
+Форматтер `formatApiError` подключён к Git Versions, Login и Project Details; теперь основные страницы конструктора, аналитики, репозитория и Git не выводят сырые объекты API. Frontend build и static quality gate пройдены.
+### 2026-08-03: локализация Git-ошибок и дат
+
+Git Versions теперь форматирует даты по выбранному языку (`ru-RU`, `kk-KZ`, `en-US`) и использует локализованные fallback-сообщения для ошибок Git, diff и создания ветки. Frontend build успешен.
+### 2026-08-03: локализованы статусы Git-файлов
+
+Метки `Modified/Added/Deleted/Renamed/Conflict/New` в Git Versions теперь отображаются на русском, казахском или английском в зависимости от языка интерфейса. Production build успешен.
+### 2026-08-03: read-only smoke-тест критических UI API
+
+Добавлен `backend/scripts/smoke_core_api.py`: авторизация, `variants`, граф пререквизитов и `lo-achievability`. На рабочем проекте version 14 все три endpoint вернули HTTP 200: варианты 518 KB, граф 316 KB, LO-анализ 544 bytes. Скрипт не изменяет БД.
