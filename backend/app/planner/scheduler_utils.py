@@ -36,6 +36,37 @@ def title_key(title: str | None) -> str:
     return " ".join(re.findall(r"\w+", value, flags=re.UNICODE))
 
 
+def schedule_loads(schedule: Dict[int, List[Dict]]) -> Dict[int, int]:
+    """Return credit load per semester without mutating the schedule."""
+    return {
+        semester: sum(int(item.get("credits") or 0) for item in items)
+        for semester, items in schedule.items()
+    }
+
+
+def semester_by_course(schedule: Dict[int, List[Dict]]) -> Dict[int, int]:
+    """Map each real course id to its current semester."""
+    return {
+        item["course_id"]: semester
+        for semester, items in schedule.items()
+        for item in items
+        if item.get("course_id") is not None
+    }
+
+
+def course_dependents(schedule: Dict[int, List[Dict]]) -> Dict[int, List[int]]:
+    """Build the reverse prerequisite map used by safe semester moves."""
+    result: Dict[int, List[int]] = {}
+    for items in schedule.values():
+        for item in items:
+            course_id = item.get("course_id")
+            if course_id is None:
+                continue
+            for prerequisite_id in item.get("prerequisites") or []:
+                result.setdefault(prerequisite_id, []).append(course_id)
+    return result
+
+
 def move_item(schedule: Dict[int, List[Dict]], source: int, target: int, item: Dict) -> bool:
     """Move an item between semesters without crashing on stale candidates."""
     if source == target:

@@ -27,6 +27,9 @@ from app.planner.goso import merge_goso_items
 from app.planner.scheduler_utils import move_item as _move_item
 from app.planner.scheduler_utils import remove_item_once as _remove_item_once
 from app.planner.scheduler_utils import swap_items as _swap_items
+from app.planner.scheduler_utils import schedule_loads as _schedule_loads
+from app.planner.scheduler_utils import semester_by_course as _semester_by_course
+from app.planner.scheduler_utils import course_dependents as _course_dependents
 from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.scheduler_text import has_domain_term as _has_domain_term
 from app.planner.scheduler_text import short_lo_theme as _short_lo_theme
@@ -899,37 +902,15 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
     lower = nominal_load - 3
     upper = nominal_load + 3
 
-    def loads() -> Dict[int, int]:
-        return {semester: sum(int(item.get("credits") or 0) for item in items) for semester, items in schedule.items()}
-
-    def semester_by_course() -> Dict[int, int]:
-        return {
-            item["course_id"]: semester
-            for semester, items in schedule.items()
-            for item in items
-            if item.get("course_id") is not None
-        }
-
-    def dependents() -> Dict[int, List[int]]:
-        result: Dict[int, List[int]] = {}
-        for items in schedule.values():
-            for item in items:
-                cid = item.get("course_id")
-                if cid is None:
-                    continue
-                for prerequisite_id in item.get("prerequisites") or []:
-                    result.setdefault(prerequisite_id, []).append(cid)
-        return result
-
     for _ in range(40):
-        current_loads = loads()
+        current_loads = _schedule_loads(schedule)
         overloaded = [s for s, load in current_loads.items() if load > upper]
         receivers = [s for s, load in current_loads.items() if load < upper]
         if not overloaded or not receivers:
             break
         moved = False
-        course_semesters = semester_by_course()
-        child_map = dependents()
+        course_semesters = _semester_by_course(schedule)
+        child_map = _course_dependents(schedule)
         for donor in sorted(overloaded, key=lambda s: current_loads[s], reverse=True):
             for target in sorted((s for s in receivers if s != donor), key=lambda s: current_loads[s]):
                 for item in sorted(list(schedule[donor]), key=lambda x: int(x.get("credits") or 0), reverse=True):
@@ -966,14 +947,14 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
         if not moved:
             break
     for _ in range(40):
-        current_loads = loads()
+        current_loads = _schedule_loads(schedule)
         underloaded = [s for s, load in current_loads.items() if load < lower]
         donors = [s for s, load in current_loads.items() if load > lower]
         if not underloaded or not donors:
             break
         moved = False
-        course_semesters = semester_by_course()
-        child_map = dependents()
+        course_semesters = _semester_by_course(schedule)
+        child_map = _course_dependents(schedule)
         for target in sorted(underloaded, key=lambda s: current_loads[s]):
             for donor in sorted((s for s in donors if s != target), key=lambda s: current_loads[s], reverse=True):
                 for item in sorted(list(schedule[donor]), key=lambda x: int(x.get("credits") or 0)):
@@ -1014,12 +995,12 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
     # courses carry 3--5 credits.  Exchange a larger donor course for a smaller
     # receiver course, while preserving every prerequisite and semester bound.
     for _ in range(40):
-        current_loads = loads()
+        current_loads = _schedule_loads(schedule)
         underloaded = [s for s, load in current_loads.items() if load < lower]
         if not underloaded:
             break
-        course_semesters = semester_by_course()
-        child_map = dependents()
+        course_semesters = _semester_by_course(schedule)
+        child_map = _course_dependents(schedule)
         swapped = False
 
         def can_place(item: Dict, target: int, overrides: Dict[int, int]) -> bool:
@@ -1087,9 +1068,9 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
     # deliberately conservative; it never trades away a hard invariant for a
     # better external similarity score.
     for _ in range(60):
-        current_loads = loads()
-        course_semesters = semester_by_course()
-        child_map = dependents()
+        current_loads = _schedule_loads(schedule)
+        course_semesters = _semester_by_course(schedule)
+        child_map = _course_dependents(schedule)
         candidates = sorted(
             ((semester, item) for semester, items in schedule.items() for item in items),
             key=lambda pair: abs(
@@ -1140,36 +1121,14 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
     if max_load <= 0:
         return schedule
 
-    def loads() -> Dict[int, int]:
-        return {semester: sum(int(item.get("credits") or 0) for item in items) for semester, items in schedule.items()}
-
-    def semester_by_course() -> Dict[int, int]:
-        return {
-            item["course_id"]: semester
-            for semester, items in schedule.items()
-            for item in items
-            if item.get("course_id") is not None
-        }
-
-    def dependents() -> Dict[int, List[int]]:
-        result: Dict[int, List[int]] = {}
-        for items in schedule.values():
-            for item in items:
-                cid = item.get("course_id")
-                if cid is None:
-                    continue
-                for prerequisite_id in item.get("prerequisites") or []:
-                    result.setdefault(prerequisite_id, []).append(cid)
-        return result
-
     for _ in range(80):
-        current = loads()
+        current = _schedule_loads(schedule)
         overloaded = [semester for semester, load in current.items() if load > max_load]
         if not overloaded:
             break
         moved = False
-        course_semesters = semester_by_course()
-        child_map = dependents()
+        course_semesters = _semester_by_course(schedule)
+        child_map = _course_dependents(schedule)
         for donor in sorted(overloaded, key=lambda semester: current[semester], reverse=True):
             for item in sorted(list(schedule[donor]), key=lambda row: int(row.get("credits") or 0)):
                 if item.get("regulatory_required"):
@@ -2138,11 +2097,8 @@ def _shift_excess_load_to_balance_modules(
         in {"interdisciplinary", "joint"}
     )
 
-    def loads() -> Dict[int, int]:
-        return {semester: sum(int(item.get("credits") or 0) for item in items) for semester, items in schedule.items()}
-
     for _ in range(20):
-        current = loads()
+        current = _schedule_loads(schedule)
         donors = [semester for semester, load in current.items() if load > upper]
         receivers = [semester for semester, load in current.items() if load < upper]
         if not donors or not receivers:
@@ -2312,12 +2268,6 @@ def _repair_underloaded_semesters_with_bridges(
     """
     lower = nominal_load - 3
 
-    def loads() -> Dict[int, int]:
-        return {
-            semester: sum(int(item.get("credits") or 0) for item in items)
-            for semester, items in schedule.items()
-        }
-
     bridge_ids = {
         int(item["bridge_module_id"])
         for items in schedule.values()
@@ -2339,7 +2289,7 @@ def _repair_underloaded_semesters_with_bridges(
         return "other"
 
     for target_semester in sorted(schedule):
-        current = loads()
+        current = _schedule_loads(schedule)
         need = max(0, lower - current.get(target_semester, 0))
         if need <= 0:
             continue
@@ -2366,7 +2316,7 @@ def _repair_underloaded_semesters_with_bridges(
         if whole_bridge_donors:
             donor_semester, whole_bridge = whole_bridge_donors[0]
             _move_item(schedule, donor_semester, target_semester, whole_bridge)
-            current = loads()
+            current = _schedule_loads(schedule)
             need = max(0, lower - current.get(target_semester, 0))
             if need <= 0:
                 continue
@@ -2396,7 +2346,7 @@ def _repair_underloaded_semesters_with_bridges(
         for donor_semester, donor in donors:
             if need <= 0:
                 break
-            current = loads()
+            current = _schedule_loads(schedule)
             transferable = min(
                 int(donor.get("credits") or 0) - 3,
                 current[donor_semester] - lower,
@@ -2412,7 +2362,7 @@ def _repair_underloaded_semesters_with_bridges(
             need -= transferable
 
         if need > 0:
-            current_total = sum(loads().values())
+            current_total = sum(_schedule_loads(schedule).values())
             increase = min(
                 need,
                 7 - int(receiver.get("credits") or 0),
