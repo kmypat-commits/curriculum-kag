@@ -16,7 +16,6 @@ from app.models.plan import Plan, PlanItem
 from app.models.project import LearningOutcome, ProjectVersion
 from app.models.epvo import EpvoDirection, EpvoDisciplineLoLink, EpvoDisciplineNormalized, EpvoGroup
 from app.services.epvo_repository import epvo_row_matches_education_level, epvo_row_relevance_score
-from app.planner.international_quality import evaluate_international_quality
 from app.planner.verifier import (
     TOTAL_CREDIT_TOLERANCE,
     _ict_competency_audit,
@@ -33,7 +32,10 @@ from app.planner.scheduler_utils import course_dependents as _course_dependents
 from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.scheduler_text import has_domain_term as _has_domain_term
 from app.planner.scheduler_text import short_lo_theme as _short_lo_theme
-from app.planner.scheduler_prerequisites import prerequisite_concepts as _prerequisite_concepts
+from app.planner.prerequisite_inference import (
+    infer_schedule_prerequisites as _infer_schedule_prerequisites,
+)
+from app.planner.plan_metrics import calculate_plan_metrics
 from app.planner.scheduler_domain_rules import (
     course_domain_matches as _course_domain_matches,
     has_foreign_professional_title as _has_foreign_professional_title,
@@ -6041,152 +6043,3 @@ def _fill_schedule_credit_gap(
         schedule[semester].append(item)
         remaining -= module.credits
     return schedule
-
-
-def _infer_schedule_prerequisites(schedule: Dict[int, List[Dict]]) -> Dict[str, float | int]:
-    """Add conservative, explainable prerequisite edges inside one final plan.
-
-    Repository links are often absent in legacy EPVO cards.  The inference is
-    deliberately plan-local: it can only point to an already selected course
-    in an earlier semester and never mutates the shared course repository.
-    """
-    semester_by_course = {
-        int(item["course_id"]): int(semester)
-        for semester, items in schedule.items()
-        for item in items
-        if item.get("course_id") is not None
-    }
-    items_by_course = {
-        int(item["course_id"]): item
-        for items in schedule.values()
-        for item in items
-        if item.get("course_id") is not None
-    }
-    concepts_by_course = {
-        course_id: _prerequisite_concepts(item.get("title"))
-        for course_id, item in items_by_course.items()
-    }
-    regulatory_course_ids = {
-        course_id
-        for course_id, item in items_by_course.items()
-        if item.get("regulatory_required")
-    }
-    dependency_map = {
-        "artificial_intelligence": {"algorithms": 6, "data_analysis": 5, "programming": 4},
-        "security": {"networks": 6, "operating_systems": 5, "programming": 3},
-        "information_systems": {"database": 5, "programming": 3, "data_analysis": 3},
-        "data_analysis": {"database": 4, "algorithms": 4, "research": 3},
-        "validation": {"programming": 4, "research": 5},
-        "project_application": {"project_management": 5, "research": 5, "programming": 3},
-        "distributed_systems": {"networks": 5, "operating_systems": 5, "programming": 3},
-        "robotics": {"algorithms": 5, "programming": 4, "artificial_intelligence": 3},
-        "web": {"programming": 4, "database": 3, "networks": 2},
-    }
-    inferred = 0
-    existing = 0
-    covered_targets: set[int] = set()
-    for course_id, item in items_by_course.items():
-        semester = semester_by_course[course_id]
-        safe_existing = sorted({
-            int(prerequisite_id)
-            for prerequisite_id in (item.get("prerequisites") or [])
-            if int(prerequisite_id) in semester_by_course
-            and semester_by_course[int(prerequisite_id)] < semester
-        })
-        if safe_existing:
-            item["prerequisites"] = safe_existing
-            existing += len(safe_existing)
-            covered_targets.add(course_id)
-            continue
-        target_concepts = concepts_by_course.get(course_id, set())
-        if not target_concepts:
-            item["prerequisites"] = []
-            continue
-        ranked = []
-        for candidate_id, candidate_semester in semester_by_course.items():
-            if candidate_semester >= semester or candidate_id == course_id:
-                continue
-            # ГОСО research/practice/final units keep their explicit normative
-            # chains but must not become inferred foundations for coursework.
-            if candidate_id in regulatory_course_ids:
-                continue
-            candidate_concepts = concepts_by_course.get(candidate_id, set())
-            if not candidate_concepts:
-                continue
-            score = 0
-            shared = target_concepts & candidate_concepts
-            if shared:
-                score += 6 * len(shared)
-            for target_concept in target_concepts:
-                for prerequisite_concept, weight in dependency_map.get(target_concept, {}).items():
-                    if prerequisite_concept in candidate_concepts:
-                        score += weight
-            # Research methodology is a valid foundation for later analytical
-            # or experimental courses, especially at postgraduate levels.
-            target_key = _title_key(item.get("title"))
-            if "research" in candidate_concepts and any(
-                marker in target_key
-                for marker in ("метод", "анализ", "модел", "эксперимент", "исслед")
-            ):
-                score += 3
-            if score < 4:
-                continue
-            ranked.append((
-                score,
-                candidate_semester,
-                int(items_by_course[candidate_id].get("credits") or 0),
-                candidate_id,
-            ))
-        ranked.sort(reverse=True)
-        selected = []
-        used_concepts: set[str] = set()
-        for score, _, _, candidate_id in ranked:
-            candidate_concepts = concepts_by_course[candidate_id]
-            if selected and candidate_concepts <= used_concepts:
-                continue
-            selected.append(candidate_id)
-            used_concepts.update(candidate_concepts)
-            if len(selected) == 2:
-                break
-        item["prerequisites"] = sorted(selected)
-        if selected:
-            item["prerequisite_inference"] = {
-                "method": "plan_local_semantic_ontology",
-                "course_ids": sorted(selected),
-            }
-            inferred += len(selected)
-            covered_targets.add(course_id)
-    total_edges = existing + inferred
-    real_courses = len(items_by_course)
-    return {
-        "edge_count": total_edges,
-        "existing_edge_count": existing,
-        "inferred_edge_count": inferred,
-        "covered_course_count": len(covered_targets),
-        "real_course_count": real_courses,
-        "edge_density": round(total_edges / max(real_courses, 1), 4),
-    }
-
-
-def calculate_plan_metrics(schedule, selected_courses, project_version, db, verification=None) -> Dict:
-    verification = verification or verify_curriculum_plan(schedule, project_version, db)
-    international_quality = evaluate_international_quality(schedule, project_version, db, verification)
-    persisted_items = [
-        item for semester_items in schedule.values() for item in semester_items
-    ]
-    selection_method = "nsga2" if any(
-        item.get("selection_method") == "nsga2" for item in persisted_items
-    ) else "deterministic_bridge_heuristic"
-    optimizer = {
-        "name": "NSGA-II" if selection_method == "nsga2" else "Deterministic bridge heuristic",
-        "selection_method": selection_method,
-    }
-    if selection_method == "nsga2":
-        optimizer.update({
-            "population": settings.NSGA2_POPULATION,
-            "generations": settings.NSGA2_GENERATIONS,
-            "crossover_probability": settings.NSGA2_CROSSOVER_PROBABILITY,
-            "mutation_probability": settings.NSGA2_MUTATION_PROBABILITY,
-            "objectives": ["LO coverage", "redundancy", "domain entropy"],
-        })
-    return {"total_credits": verification["total_credits"], "target_credits": verification["target_credits"], "total_courses": len(persisted_items), "num_bridge_modules": sum(1 for item in persisted_items if item.get("bridge_module_id") is not None), "lo_coverage_percentage": round(verification["average_lo_coverage"] * 100, 1), "min_lo_coverage": verification["min_lo_coverage"], "evidence_count": verification["evidence_count"], "redundancy": verification["redundancy"], "prerequisite_violations": len(verification["prerequisite_violations"]), "semester_load_violations": len(verification["semester_load_violations"]), "feasible": verification["feasible"], "optimizer": optimizer, "international_quality": international_quality, "verification": verification}

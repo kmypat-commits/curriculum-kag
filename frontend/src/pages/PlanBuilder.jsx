@@ -6,6 +6,7 @@ import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import CompactSection from '../components/CompactSection'
+import PlanBuildProgress from '../components/PlanBuildProgress'
 import { useNotifications } from '../contexts/NotificationContext'
 import {
     alreadyRunningText,
@@ -702,30 +703,16 @@ export default function PlanBuilder() {
                         </div>
                     </div>
                 )}
-                {(building || buildStatus.state === 'running') && (
-                    <div className="card" style={{ marginBottom: '20px', borderLeft: '5px solid #366092' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'center' }}>
-                            <div>
-                                <h3 style={{ margin: '0 0 6px' }}>{t('building_plan')}</h3>
-                                <div style={{ color: '#566', fontSize: 14 }}>{buildStageLabel(buildStatus.stage)}</div>
-                                {buildStageDetail() && <div style={{ color: '#789', fontSize: 13, marginTop: 4 }}>{buildStageDetail()}</div>}
-                                {buildElapsedLabel() && <div style={{ color: '#789', fontSize: 13, marginTop: 4 }}>{buildElapsedLabel()}</div>}
-                            </div>
-                            <strong style={{ fontSize: 22, color: '#366092' }}>{buildProgress}%</strong>
-                        </div>
-                        <div style={{ height: 10, background: '#e8edf5', borderRadius: 99, overflow: 'hidden', marginTop: 14 }}>
-                            <div style={{
-                                width: `${Math.max(5, Math.min(100, buildProgress || 0))}%`,
-                                height: '100%',
-                                background: 'linear-gradient(90deg, #366092, #5fc3ff)',
-                                transition: 'width 300ms ease'
-                            }} />
-                        </div>
-                        <p style={{ margin: '10px 0 0', color: '#667', fontSize: 13 }}>
-                            {buildLongRunningHint()}
-                        </p>
-                    </div>
-                )}
+                <PlanBuildProgress
+                    active={building || buildStatus.state === 'running'}
+                    progress={buildProgress}
+                    status={buildStatus}
+                    title={t('building_plan')}
+                    stageLabel={buildStageLabel}
+                    stageDetail={buildStageDetail()}
+                    elapsedLabel={buildElapsedLabel()}
+                    longRunningHint={buildLongRunningHint()}
+                />
                 {changeReport?.available && !building && (
                     <div className="card" style={{ marginBottom: '20px', borderLeft: '5px solid #7b1fa2' }}>
                         <h3 style={{ marginTop: 0 }}>{localText('Что изменилось после перестройки', 'Қайта құрудан кейін не өзгерді', 'What changed after rebuild')}</h3>

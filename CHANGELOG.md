@@ -15,8 +15,11 @@ All notable changes to Curriculum-KAG will be documented in this file. The forma
 ### Changed
 
 - planner course policies and admission audit extracted from the monolithic scheduler;
+- prerequisite inference and plan metrics extracted into independently testable planner modules;
 - deterministic bridge suggestions extracted from the API module;
+- syllabus and evidence-bundle endpoints extracted into a dedicated API router without URL changes;
 - reusable PlanBuilder presentation utilities and disclosure component extracted;
+- long-running plan-build progress extracted into a reusable frontend component;
 - public UI references the expert repository/CEER while internal legacy identifiers remain compatible.
 
 ### Verified
