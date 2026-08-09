@@ -48,6 +48,18 @@ from app.planner.scheduler_catalogue import (
     unique_items_by_title as _unique_items_by_title,
 )
 
+from app.planner.course_policy import (
+    course_curriculum_role as _course_curriculum_role,
+    course_role_rank as _course_role_rank,
+    education_level_course_allowed as _education_level_course_allowed,
+    project_domain_terms as _project_domain_terms,
+)
+from app.planner.admission import (
+    audit_final_course_admission as _audit_final_course_admission,
+    credible_professional_lo_by_course as _credible_professional_lo_by_course,
+    minimum_appropriate_semester as _minimum_appropriate_semester,
+)
+
 
 # Canonical implementations live in the pure semester-rules module.  The
 # aliases keep existing internal callers and external audit scripts stable.
@@ -58,226 +70,6 @@ from app.planner.semester_rules import (
     late_stage_min_semester as _late_stage_min_semester,
     minimum_appropriate_semester as _item_minimum_appropriate_semester,
 )
-
-
-def _project_domain_terms(project_version: ProjectVersion, db: Session) -> List[str]:
-    project = project_version.project
-    constraints = project.constraints_json or {}
-    raw_domains = [project.domain1, project.domain2]
-    scope_sources = [
-        (constraints.get("group_code"), EpvoGroup),
-        (constraints.get("direction_code"), EpvoDirection),
-        (constraints.get("secondary_group_code"), EpvoGroup),
-        (constraints.get("secondary_direction_code"), EpvoDirection),
-    ]
-    terms: list[str] = []
-    for value in raw_domains:
-        if not _is_invalid_project_domain_label(str(value or "")):
-            terms.append(str(value or ""))
-    for code, model in scope_sources:
-        code = str(code or "").strip()
-        if not code:
-            continue
-        row = db.query(model).filter(model.code == code).first()
-        if row:
-            terms.extend([row.title_ru, row.title_kk, row.title_en, row.code])
-        else:
-            terms.append(code)
-    result: list[str] = []
-    seen = set()
-    for term in terms:
-        value = str(term or "").lower().strip()
-        key = _title_key(value)
-        if key and key not in seen and not _is_invalid_project_domain_label(value):
-            seen.add(key)
-            result.append(value)
-    return result
-
-
-def _course_curriculum_role(course: Course, project_domains: List[str]) -> str:
-    title = _title_key(course.title)
-    general_title_terms = (
-        "основы экономики", "финансовой грамотности", "правовые основы",
-        "основы права", "антикорруп", "академическ", "социально политическ",
-        "безопасности жизнедеятельности", "устойчивого развития",
-        "история медицины", "психология управления", "иностранный язык",
-        "foreign language", "введение в профессию", "методология научного исследования",
-        "организация и планирование научных исследований",
-        "экономика устойчивого развития", "история медицины",
-        "правовые основы бизнеса", "педагогика и валеология",
-        "современные проблемы менеджмента", "менеджмент программных проектов",
-        "введение в научные исследования", "medical interview and basics of medical ethics",
-    )
-    if ("язык" in title or "language" in title) and not any(
-        marker in title for marker in ("программ", "programming", "анализа данных", "data analysis")
-    ):
-        return "general"
-    if any(term in title for term in general_title_terms):
-        return "general"
-    if not _course_domain_matches(course, project_domains):
-        return "other"
-    domains = " ".join(project_domains).lower()
-    has_it = "it" in domains or "информ" in domains or "computer" in domains or "кибер" in domains
-    has_forensics = "forensic" in domains or "криминал" in domains or "расслед" in domains
-    if has_it and has_forensics:
-        text = _title_key(" ".join([course.title or "", course.description or ""]))
-        cyber_terms = (
-            "кибер", "безопас", "защит", "сеть", "сетей", "сервер",
-            "forensic", "форензик", "криминалист", "расслед", "доказател",
-            "экспертн", "судеб", "процессу", "инцидент", "угроз", "вредонос",
-            "malware", "киберпреступ", "атак", "уязвим", "osint", "лог", "журнал",
-            "цепочк", "документирован",
-        )
-        if not _has_domain_term(text, cyber_terms):
-            return "general"
-    return "core" if _is_interdisciplinary_title_relevant(course, project_domains) else "general"
-
-
-def _course_role_rank(course: Course | None, project_domains: List[str]) -> int:
-    if course is None:
-        return 0
-    return {"core": 2, "general": 1}.get(_course_curriculum_role(course, project_domains), 0)
-
-
-def _education_level_course_allowed(course: Course, education_level: str | None) -> bool:
-    """Reject courses whose title explicitly belongs to another degree level."""
-    level = str(education_level or "").lower()
-    title = _title_key(course.title)
-    if level in {"bachelor", "undergraduate"}:
-        master_only = (
-            "история и философия науки",
-            "history and philosophy of science",
-            "педагогика высшей школы",
-            "higher education pedagogy",
-            "менеджмент и психология управления",
-        )
-        return not any(marker in title for marker in master_only)
-    if level in {"master", "masters", "magistracy"}:
-        bachelor_only = ("история казахстана", "history of kazakhstan")
-        return not any(marker in title for marker in bachelor_only)
-    return True
-
-
-def _credible_professional_lo_by_course(
-    project_version: ProjectVersion,
-    course_ids: set[int],
-    db: Session,
-) -> Dict[int, set[str]]:
-    """Return programme-specific LO evidence accepted by the final gate."""
-    lo_codes = {lo.id: str(lo.lo_code or "") for lo in project_version.learning_outcomes}
-    credible_professional: Dict[int, set[str]] = {}
-    for match in db.query(MatchScore).filter(
-        MatchScore.project_version_id == project_version.id,
-        MatchScore.course_id.in_(course_ids or [-1]),
-    ).all():
-        expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-        code = lo_codes.get(match.lo_id, "")
-        if code and not code.startswith("LO-GOSO-") and max(float(match.score or 0.0), expert) >= 0.4:
-            credible_professional.setdefault(int(match.course_id), set()).add(code)
-    return credible_professional
-
-
-def _audit_final_course_admission(schedule: Dict, project_version: ProjectVersion, db: Session) -> Dict:
-    """Verify that every persisted real course has auditable admission evidence."""
-    constraints = project_version.project.constraints_json or {}
-    jurisdiction_kz = str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
-    total_semesters = int(constraints.get("total_semesters", 8) or 8)
-    project_domains = _project_domain_terms(project_version, db)
-    real_items = [
-        (int(semester), item)
-        for semester, items in schedule.items()
-        for item in items if item.get("course_id") is not None
-    ]
-    course_ids = {int(item["course_id"]) for _, item in real_items}
-    courses = {course.id: course for course in db.query(Course).filter(Course.id.in_(course_ids or [-1])).all()}
-    credible_professional = _credible_professional_lo_by_course(project_version, course_ids, db)
-
-    scope_pairs = [(
-        str(constraints.get("group_code") or ""), str(constraints.get("direction_code") or ""),
-    )]
-    if str(constraints.get("program_type") or "").lower() in {"interdisciplinary", "joint"}:
-        scope_pairs.append((
-            str(constraints.get("secondary_group_code") or ""),
-            str(constraints.get("secondary_direction_code") or ""),
-        ))
-    scoped_epvo_ids: set[int] = set()
-    if course_ids:
-        rows = db.query(EpvoDisciplineNormalized).filter(
-            EpvoDisciplineNormalized.approved_course_id.in_(course_ids)
-        ).all()
-        for row in rows:
-            if not epvo_row_matches_education_level(row, constraints.get("education_level")):
-                continue
-            row_groups = {str(value or "") for value in (row.group_codes or [])}
-            row_directions = {str(value or "") for value in (row.direction_codes or [])}
-            if any(
-                (group and group in row_groups) or (direction and direction in row_directions)
-                for group, direction in scope_pairs
-            ):
-                scoped_epvo_ids.add(int(row.approved_course_id))
-
-    violations = []
-    for semester, item in real_items:
-        course = courses.get(int(item["course_id"]))
-        if not course:
-            violations.append({"course_id": item["course_id"], "title": item.get("title"), "reason": "missing_course"})
-            continue
-        code = str(course.course_id or "")
-        if code.startswith("GOSO-KZ-") and jurisdiction_kz:
-            continue
-        reason = None
-        minimum_semester = None
-        if code.startswith("GOSO-KZ-"):
-            reason = "goso_outside_kz_mode"
-        elif not _education_level_course_allowed(course, constraints.get("education_level")):
-            reason = "wrong_education_level"
-        elif code.startswith("EPVO-") and course.id not in scoped_epvo_ids:
-            reason = "outside_epvo_scope"
-        elif not credible_professional.get(course.id):
-            reason = "no_credible_professional_lo"
-        elif (
-            course.id not in scoped_epvo_ids
-            and not code.startswith("EPVO-")
-            and not code.startswith(f"AI-CONFIRMED-{project_version.id}-")
-            and not _course_domain_matches(course, project_domains)
-        ):
-            reason = "outside_project_domain"
-        else:
-            minimum_semester = _minimum_appropriate_semester(
-                item, course, total_semesters
-            )
-            if semester < minimum_semester:
-                reason = "too_early_for_complexity"
-        if reason:
-            violations.append({
-                "course_id": course.id, "title": course.title,
-                "semester": semester, "reason": reason,
-                "minimum_semester": minimum_semester,
-                "recommended_semester": (
-                    item.get("recommended_semester")
-                    or course.recommended_semester
-                ),
-                "selection_method": item.get("selection_method"),
-            })
-    return {"checked_real_courses": len(real_items), "passed": not violations, "violations": violations}
-
-
-def _minimum_appropriate_semester(
-    item: Dict,
-    course: Course,
-    num_semesters: int,
-) -> int:
-    """Use one lower-bound rule in scheduling, repairs, verification and admission."""
-    merged = {
-        **item,
-        "title": course.title,
-        "domain": item.get("domain") or course.domain,
-        "type": item.get("type") or course.cycle_component,
-        "recommended_semester": (
-            item.get("recommended_semester") or course.recommended_semester
-        ),
-    }
-    return _item_minimum_appropriate_semester(merged, num_semesters)
 
 
 def _repair_missing_ict_competencies(

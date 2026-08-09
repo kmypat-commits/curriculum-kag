@@ -1,1 +1,18 @@
 backend/data/course_translations.json filter=lfs diff=lfs merge=lfs -text
+
+# Reproducible cross-platform source and documentation encoding.
+* text=auto
+*.py text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.sh text eol=lf
+*.cff text eol=lf
+*.docx binary
+*.png binary
+*.pdf binary

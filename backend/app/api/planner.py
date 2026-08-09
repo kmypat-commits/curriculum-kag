@@ -40,6 +40,7 @@ from app.planner.planner_utils import (
 from app.services.plan_reporting import academic_classification as _academic_classification
 from app.services.plan_reporting import build_change_report as _build_change_report
 from app.services.plan_reporting import plan_snapshot as _plan_snapshot
+from app.planner.bridge_suggestions import bridge_candidate_fallbacks as _bridge_candidate_fallbacks
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,58 +51,6 @@ REPLACEMENT_PREVIEW_MATCH_LIMIT = 3000
 def _set_build_status(project_version_id: int, **payload):
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     _plan_build_status.setdefault(project_version_id, {}).update(payload)
-
-
-def _bridge_candidate_fallbacks(version: ProjectVersion, bridge: BridgeModule, target_los: list[str], semester: int) -> list[str]:
-    domain1 = version.project.domain1 or "область 1"
-    domain2 = version.project.domain2 or "область 2"
-    professional_los = [code for code in target_los if not str(code or "").startswith("LO-GOSO-")]
-    lo_label = _compact_lo_label(target_los)
-    bridge_key = _title_key(bridge.title)
-    bridge_text = " ".join(str(value or "") for value in (bridge.title, bridge.description, bridge.goal)).lower()
-    if "данн" in bridge_key or "data" in bridge_key:
-        focus = "данных и аналитических процессов"
-    elif "интеграц" in bridge_key or "integration" in bridge_key:
-        focus = "интеграции решений"
-    elif "основ" in bridge_key or "foundation" in bridge_key:
-        focus = "профессиональных основ"
-    elif "практик" in bridge_key or "project" in bridge_key:
-        focus = "проектной практики"
-    else:
-        focus = f"компетенций {lo_label}"
-    if professional_los:
-        focus = " и ".join(f"компетенции {code}" for code in professional_los[:2])
-    if any(marker in bridge_text for marker in ("безопас", "риск", "угроз", "защит")):
-        themes = ["Управление цифровыми рисками", "Безопасность и надёжность профессиональных решений", "Практикум анализа угроз и контроля качества"]
-    elif any(marker in bridge_text for marker in ("медицин", "клинич", "пациент", "здоров")):
-        themes = ["Клинические данные и процессы", "Основы медицинской информатики", "Цифровые технологии в здравоохранении"]
-    elif any(marker in bridge_text for marker in ("агро", "сельск", "растен", "почв", "урож")):
-        themes = ["Цифровая агрономия", "Аналитика агропромышленных данных", "Интеллектуальные технологии в АПК"]
-    elif any(marker in bridge_text for marker in ("киберслед", "кримин", "forensic", "расслед", "цифровых доказ")):
-        themes = ["Цифровая криминалистика", "Правовые основы цифровых расследований", "Анализ цифровых доказательств"]
-    elif any(marker in bridge_text for marker in ("робот", "мехатрон", "кинемат")):
-        themes = ["Основы робототехнических систем", "Моделирование и управление роботами", "Интеллектуальная мехатроника"]
-    elif any(marker in bridge_text for marker in ("ии", "ai", "модель", "алгоритм")):
-        themes = ["Прикладной искусственный интеллект", "Аудит и качество ИИ-систем", "Управление данными и моделями"]
-    else:
-        themes = [
-            f"Прикладной анализ области {domain2}",
-            f"Профессиональный практикум {domain1} и {domain2}",
-            f"Проектирование решений для {domain2}",
-        ]
-    rotations = [
-        themes,
-        [themes[1], themes[2], themes[0]],
-        [themes[2], themes[0], themes[1]],
-    ]
-    themes = rotations[int(getattr(bridge, "id", 0) or 0) % len(rotations)]
-    semester_label = f"семестр {semester}"
-    stage_label = f"этап {semester}"
-    return [
-        f"{themes[0]}: {lo_label} ({stage_label})",
-        f"{themes[1]} для программы «{version.project.title}» ({semester_label})",
-        f"{themes[2]} ({semester_label}; {focus})",
-    ]
 
 
 @router.get("/version/{project_version_id}/graph")

@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use Curriculum-KAG, cite the software version and the accompanying article."
+title: "Curriculum-KAG: Evidence-Constrained Knowledge-Augmented Curriculum Design"
+type: software
+authors:
+  - family-names: Kozhanov
+    given-names: Murat
+repository-code: "https://github.com/kmypat-commits/curriculum-kag"
+version: "1.0.0-pre"
+date-released: "2026-08-09"
+license: Apache-2.0
+keywords:
+  - knowledge-augmented generation
+  - curriculum design
+  - artificial intelligence in education
+  - learning outcomes
+  - expert evidence

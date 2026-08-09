@@ -1,177 +1,103 @@
-# Curriculum-KAG Generator
+# Curriculum-KAG
 
-> Выгрузка открытых программ ЕПВО: [EPVO_DATASET_RU.md](EPVO_DATASET_RU.md).
-> План перехода на PostgreSQL/pgvector: [docs/POSTGRESQL_MIGRATION_RU.md](docs/POSTGRESQL_MIGRATION_RU.md).
-> Нормативные практики, НИР и итоговая аттестация ГОСО РК: [docs/GOSO_RK_COMPONENTS_RU.md](docs/GOSO_RK_COMPONENTS_RU.md).
+**Evidence-constrained curriculum design for classical and interdisciplinary higher-education programmes.**
 
-Информационная система для автоматизированного проектирования учебных планов с использованием Knowledge-Augmented Generation (KAG).
+Curriculum-KAG converts a programme idea, education level, subject fields and learning outcomes into one or three explainable curriculum alternatives. It combines Knowledge-Augmented Generation (KAG), multilingual Sentence-BERT retrieval, expert evidence, prerequisite graphs, credit and semester constraints, and independent verification.
 
-## Возможности
+The system is not a thin wrapper around a generative API. Its core planning and verification pipeline works deterministically; an external LLM is optional and is used only for bounded suggestions and explanations.
 
-- 🎓 Автоматический подбор дисциплин по результатам обучения (Learning Outcomes)
-- 🔗 Интеграция дисциплин из разных предметных областей
-- 🌉 Генерация междисциплинарных курсов (bridge modules)
-- 📊 Анализ покрытия результатов обучения
-- 📅 Построение учебного плана по семестрам с учетом пререквизитов
-- 📝 Доказательства и объяснения для каждого решения
-- 🔄 Версионирование и сравнение планов
+Русская документация: [QUICKSTART.md](QUICKSTART.md) · [USER_GUIDE_RU.md](USER_GUIDE_RU.md)
 
-## Технологический стек
+## Research foundation
 
-- **Backend**: Python 3.11+, FastAPI
-- **Database**: PostgreSQL 16 с pgvector
-- **Frontend**: React 18
-- **Embeddings**: Sentence Transformers (multilingual)
-- **LLM**: OpenAI GPT-4 / Anthropic Claude / Local models
-- **Containerization**: Docker Compose
+The public research dataset is called **Curriculum Expert Evidence Repository (CEER)**. CEER is a provenance-preserving research representation of curriculum records and historical expert course–learning-outcome evidence. The name separates the research artefact from any source platform or public authority.
 
-## Быстрый старт
+The reproducible baseline contains:
 
-Для обычной работы Docker и ручной запуск двух терминалов больше не нужны.
+- 21,525+ approved multilingual course cards;
+- 932,483 normalized course–learning-outcome evidence links;
+- Russian, Kazakh and English localization layers;
+- programme-level train/validation/test partitions;
+- graded expert evidence rather than a single synthetic binary label.
 
-1. Дважды щёлкните `start.bat`.
-2. Дождитесь сообщения `Curriculum-KAG is ready`.
-3. Браузер откроет [http://localhost:3001/](http://localhost:3001/) автоматически.
+Source provenance is retained in the Dataset Card. Publication of code does **not** imply that every source record may be redistributed. The full dataset and trained model are versioned separately from the application.
 
-Вход:
+## What the system does
 
-- Email: `admin@curriculum-kag.local`
-- Пароль: `admin123`
+- creates bachelor’s, master’s and doctoral curricula;
+- supports conventional and two-field interdisciplinary programmes;
+- proposes one plan or distinct A/B/C alternatives;
+- selects courses against programme learning outcomes;
+- respects education level, field, programme group and course provenance;
+- balances exact programme credits and semester workload;
+- builds and verifies prerequisite relationships;
+- protects applicable SCES/GOSO RK regulatory components;
+- exposes evidence and selection rationale for expert review;
+- records expert confirmation, weak association or rejection;
+- visualizes learning trajectories and course connections.
 
-Чтобы остановить приложение, запустите `stop.bat`.
+## Architecture
 
-Сценарий запуска сам:
-
-- использует рабочее Python-окружение проекта;
-- пересобирает frontend только после изменения исходников;
-- запускает backend и frontend в фоне;
-- ждёт успешного health check перед открытием браузера;
-- пишет диагностические логи в `.runtime`.
-
-### Первый запуск на новом компьютере
-
-Нужны Python 3.11+ и Node.js 18+. Остальное `start.bat` подготовит автоматически. На первом запуске потребуется интернет для установки зависимостей.
-
-Создайте `backend\.env` на основе корневого `.env.example` и для локальной SQLite-базы укажите:
-
-```env
-DATABASE_URL=sqlite:///./curriculum_kag.db
-SECRET_KEY=replace-with-at-least-32-characters
-LLM_API_KEY=
+```text
+React UI
+   │
+FastAPI application
+   ├── KAG retrieval: SBERT + lexical evidence
+   ├── constrained curriculum planner + repair pipeline
+   ├── independent plan verifier
+   ├── prerequisite and learning-outcome graph
+   └── optional bounded LLM assistance
+   │
+PostgreSQL 16 + pgvector
+   ├── application data
+   ├── CEER normalized evidence
+   └── expert feedback and audit trail
 ```
 
-После этого используйте только `start.bat` и `stop.bat`.
+## Quick start on Windows
 
-Простая инструкция по работе: [USER_GUIDE_RU.md](USER_GUIDE_RU.md).
+Requirements: Docker Desktop, PowerShell, Python 3.12 and Node.js 18+.
 
-Проверка соответствия диссертации: [THESIS_ALIGNMENT_RU.md](THESIS_ALIGNMENT_RU.md).
-
-## Структура проекта
-
-```
-curriculum-kag/
-├── backend/              # FastAPI backend
-│   ├── app/
-│   │   ├── api/         # API endpoints
-│   │   ├── kag/         # KAG engine
-│   │   ├── models/      # SQLAlchemy models
-│   │   ├── services/    # Business logic
-│   │   ├── planner/     # Curriculum planner
-│   │   └── export/      # Export services
-│   ├── migrations/      # Alembic migrations
-│   └── tests/           # Backend tests
-├── frontend/            # React frontend
-│   ├── src/
-│   │   ├── components/  # React components
-│   │   ├── pages/       # Page components
-│   │   ├── contexts/    # React contexts
-│   │   └── utils/       # Utilities
-│   └── public/          # Static assets
-├── demo/                # Demo data
-└── docker-compose.yml   # Docker configuration
+```powershell
+git clone https://github.com/kmypat-commits/curriculum-kag.git
+cd curriculum-kag
+Copy-Item .env.example .env
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Database postgres
 ```
 
-## Разработка
+Open <http://localhost:3001>. Health diagnostics are available at <http://localhost:8000/health>.
 
-### Backend
+The source repository does not contain the full database or model weights. Until public artefact URLs are released, use the demo profile or provide locally authorized artefacts according to [docs/PUBLIC_RELEASE_ARCHITECTURE_RU.md](docs/PUBLIC_RELEASE_ARCHITECTURE_RU.md).
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+## Verification
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\smoke-test.ps1
 ```
 
-### Frontend
+The test gate checks source encoding, planner invariants, localization, course–LO evidence, prerequisites, GOSO isolation and structured AI fallbacks.
 
-```bash
-cd frontend
-npm install
-npm start
-```
+## Public artefacts
 
-### Тестирование
+The academic release is intentionally split into independent, citable artefacts:
 
-```bash
-# Backend tests
-cd backend
-pytest
+1. **GitHub repository** — source code, migrations, tests and documentation.
+2. **Hugging Face model repository** — production SBERT weights and Model Card.
+3. **Hugging Face dataset repository** — distributable CEER tables and Dataset Card.
+4. **Hugging Face Docker Space** — demonstration application.
+5. **PostgreSQL deployment** — mutable institutional data and user projects.
 
-# Frontend tests
-cd frontend
-npm test
-```
+See [PUBLICATION_CHECKLIST.md](PUBLICATION_CHECKLIST.md) before publishing any release.
 
-## Основные сценарии использования
+## Responsible use
 
-### 1. Импорт дисциплин
+Curriculum-KAG is a decision-support system. It does not replace academic councils, programme developers, professional experts, regulators or accreditation bodies. Generated plans must be reviewed against the institution’s current legal, professional and educational requirements.
 
-1. Перейдите в раздел "Репозиторий"
-2. Нажмите "Импорт"
-3. Загрузите файл XLSX/CSV/JSON
-4. Проверьте результаты импорта
+## License
 
-### 2. Создание образовательной программы
+Application source code is licensed under the [Apache License 2.0](LICENSE). Model weights, datasets and third-party materials may have separate licenses stated in their own cards. No rights to redistribute source-platform records are granted by the source-code license.
 
-1. Перейдите в "Новый проект"
-2. Заполните мастер создания:
-   - Название и домены
-   - Результаты обучения (LO)
-   - Ограничения (семестры, кредиты)
-3. Запустите анализ покрытия
+## Citation
 
-### 3. Построение учебного плана
-
-1. Просмотрите покрытие LO
-2. Примите/отклоните предложения по интеграции
-3. Сгенерируйте bridge modules при необходимости
-4. Постройте план (3 варианта)
-5. Выберите оптимальный вариант
-6. Экспортируйте в XLSX
-
-## API Documentation
-
-Полная документация API доступна по адресу: http://localhost:8000/docs
-
-Основные endpoints:
-- `POST /auth/login` - Аутентификация
-- `POST /projects` - Создание проекта
-- `POST /repository/courses/import` - Импорт дисциплин
-- `POST /kag/{project_id}/match` - Подбор дисциплин
-- `POST /planner/{project_id}/build` - Построение плана
-
-## Роли и права доступа
-
-- **Администратор**: полный доступ ко всем функциям
-- **Методист/Эксперт**: создание и редактирование программ
-- **Аналитик**: просмотр метрик и отчетов
-- **Гость**: только просмотр
-
-## Лицензия
-
-[Укажите лицензию]
-
-## Контакты
-
-[Укажите контакты для поддержки]
+The formal citation and DOI will be added after the accompanying article and public artefacts are deposited. Until then, cite the repository version and Git commit hash used in the experiment.

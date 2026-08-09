@@ -2,6 +2,7 @@
     "name": "curriculum-kag-frontend",
     "version": "1.0.0",
     "private": true,
+    "type": "module",
     "dependencies": {
         "@tanstack/react-table": "^8.11.0",
         "axios": "^1.6.2",

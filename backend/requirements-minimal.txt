@@ -1,27 +1,18 @@
-# Core FastAPI
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-python-multipart>=0.0.12
-
-# Database - SQLite ONLY
-sqlalchemy>=2.0.38
-alembic>=1.15.1
-
-# Authentication
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-bcrypt==4.0.1
-python-dotenv>=1.0.1
-
-# Settings management
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
-httpx>=0.27.0
-
-# Data processing
-openpyxl>=3.1.5
-numpy>=1.26.0
-
-# LLM clients
-openai>=1.50.0
-anthropic>=0.34.0
+# Python 3.12 CI profile. Versions intentionally match requirements.txt;
+# only heavy ML/document-export packages are omitted.
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+sqlalchemy==2.0.25
+alembic==1.13.1
+python-jose[cryptography]==3.3.0
+bcrypt>=4.1,<5
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+openpyxl==3.1.2
+numpy==1.26.4
+httpx==0.26.0
+openai==1.10.0
+anthropic==0.8.1

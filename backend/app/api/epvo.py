@@ -584,6 +584,8 @@ async def run_lstm_smoke(
 @router.get("/compare/{project_id}")
 async def compare_project(project_id: int, language: str = Query("ru"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     started = time.perf_counter()
+    language = normalize_language(language)
+    local_text = lambda ru, kk, en: kk if language == "kk" else en if language == "en" else ru
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         from fastapi import HTTPException
@@ -739,20 +741,44 @@ async def compare_project(project_id: int, language: str = Query("ru"), db: Sess
     epvo_quality_score = round(match_percentage * 0.7 + expert_supported_percentage * 0.3, 1)
     if epvo_quality_score >= 75:
         epvo_quality_status = "passed"
-        epvo_quality_label = "Соответствует ориентиру ЕПВО 75%+"
+        epvo_quality_label = local_text(
+            "Соответствует ориентиру CEER 75%+",
+            "CEER 75%+ бағдарына сәйкес",
+            "Meets the CEER 75%+ reference level",
+        )
     elif epvo_quality_score >= 70:
         epvo_quality_status = "borderline"
-        epvo_quality_label = "Близко к ориентиру ЕПВО; нужна экспертная проверка"
+        epvo_quality_label = local_text(
+            "Близко к ориентиру CEER; нужна экспертная проверка",
+            "CEER бағдарына жақын; сараптамалық тексеру қажет",
+            "Close to the CEER reference level; expert review is required",
+        )
     else:
         epvo_quality_status = "needs_improvement"
-        epvo_quality_label = "Ниже ориентира ЕПВО 70–75%"
+        epvo_quality_label = local_text(
+            "Ниже ориентира CEER 70–75%",
+            "CEER 70–75% бағдарынан төмен",
+            "Below the CEER 70–75% reference level",
+        )
     weak_spots = []
     if missing_count:
-        weak_spots.append(f"В плане отсутствуют {missing_count} из {len(typical)} наиболее релевантных типовых дисциплин ЕПВО.")
+        weak_spots.append(local_text(
+            f"В плане отсутствуют {missing_count} из {len(typical)} наиболее релевантных типовых дисциплин CEER.",
+            f"Жоспарда CEER-дің ең өзекті {len(typical)} типтік пәнінің {missing_count} пәні жоқ.",
+            f"The plan is missing {missing_count} of the {len(typical)} most relevant typical CEER courses.",
+        ))
     if not group_code:
-        weak_spots.append("У проекта не выбрана группа ОП; сравнение менее точное.")
+        weak_spots.append(local_text(
+            "У проекта не выбрана группа ОП; сравнение менее точное.",
+            "Жоба үшін ББ тобы таңдалмаған; салыстыру дәлдігі төмен.",
+            "No programme group is selected; the comparison is less precise.",
+        ))
     if not plan:
-        weak_spots.append("Активный учебный план ещё не сформирован.")
+        weak_spots.append(local_text(
+            "Активный учебный план ещё не сформирован.",
+            "Белсенді оқу жоспары әлі құрылмаған.",
+            "The active curriculum has not been generated yet.",
+        ))
     recommendations = []
     missing_priority = sorted(
         [item for item in typical if not item["present"]],
@@ -761,12 +787,24 @@ async def compare_project(project_id: int, language: str = Query("ru"), db: Sess
     )[:10]
     top_missing = [item["title"] for item in missing_priority[:5]]
     if top_missing:
-        recommendations.append("Проверить добавление типовых дисциплин: " + ", ".join(top_missing))
+        recommendations.append(local_text(
+            "Проверить добавление типовых дисциплин: ",
+            "Типтік пәндерді қосуды тексеру: ",
+            "Review adding typical courses: ",
+        ) + ", ".join(top_missing))
     expert_missing = [item["title"] for item in missing_priority if item.get("expert_link_count", 0) > 0][:5]
     if expert_missing:
-        recommendations.append("Особенно проверить дисциплины с экспертными связями ЕПВО: " + ", ".join(expert_missing))
+        recommendations.append(local_text(
+            "Особенно проверить дисциплины с историческими экспертными связями CEER: ",
+            "CEER тарихи сараптамалық байланыстары бар пәндерді ерекше тексеру: ",
+            "Prioritize courses with historical CEER expert evidence: ",
+        ) + ", ".join(expert_missing))
     if typical_los:
-        recommendations.append("Сверить LO программы с наиболее частыми результатами обучения ЕПВО.")
+        recommendations.append(local_text(
+            "Сверить LO программы с наиболее частыми результатами обучения CEER.",
+            "Бағдарламаның LO нәтижелерін CEER-дегі ең жиі оқу нәтижелерімен салыстыру.",
+            "Compare programme LOs with the most frequent CEER learning outcomes.",
+        ))
     result = {
         "project_id": project_id, "scope": scope, "direction_code": direction_code, "group_code": group_code,
         "secondary_direction_code": secondary_direction_code, "secondary_group_code": secondary_group_code,

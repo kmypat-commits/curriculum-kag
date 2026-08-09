@@ -28,6 +28,12 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4}
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
+      ENABLE_SBERT: ${ENABLE_SBERT:-false}
+      SBERT_DEVICE: ${SBERT_DEVICE:-cpu}
+      EPVO_AI_ENABLED: ${EPVO_AI_ENABLED:-false}
+      EPVO_AI_THRESHOLD: ${EPVO_AI_THRESHOLD:-0.3449310730397701}
+      EXPERT_EVIDENCE_REPOSITORY_NAME: ${EXPERT_EVIDENCE_REPOSITORY_NAME:-Curriculum Expert Evidence Repository}
+      EXPERT_EVIDENCE_REPOSITORY_SLUG: ${EXPERT_EVIDENCE_REPOSITORY_SLUG:-ceer}
       OMP_NUM_THREADS: ${OMP_NUM_THREADS:-2}
       MKL_NUM_THREADS: ${MKL_NUM_THREADS:-2}
     ports:
@@ -35,7 +41,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2}
+    volumes:
+      - ${MODEL_DIR:-./backend/models/epvo-sbert-finetuned-40k}:/app/models/epvo-sbert-finetuned-40k:ro
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
 
   proxy:
     image: caddy:2-alpine
@@ -50,9 +74,13 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
 
 volumes:
   postgres_production_data:
   caddy_data:
   caddy_config:
+  backend_uploads:

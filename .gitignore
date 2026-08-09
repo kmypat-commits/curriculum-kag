@@ -88,3 +88,20 @@ alembic/versions/*.pyc
 .runtime/*.log
 .runtime/*.pid
 .runtime/pids.json
+
+# Tool and framework caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.huggingface/
+frontend/.cache/
+frontend/.vite/
+
+# Local PostgreSQL/container state
+pgdata/
+postgres-data/
+
+# Article rendering and review scratch space (source manuscripts stay tracked)
+article_user_qa_before/
+docs/article/qa_*/
+docs/article/source_pdf_extracts/

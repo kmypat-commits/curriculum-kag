@@ -20,7 +20,7 @@ INCLUDE_PATHS = [
     "backend/scripts/legacy/seed_investigator.py", "backend/scripts/legacy/seed_massive_210.py",
     "backend/scripts/legacy/seed_massive_210_en.py", "backend/.env", "backend/curriculum_kag.db",
     "frontend/src", "frontend/index.html", "frontend/package.json",
-    "frontend/package-lock.json", "frontend/pnpm-lock.yaml", "frontend/vite.config.js",
+    "frontend/package-lock.json", "frontend/vite.config.js",
     "frontend/Dockerfile.dev", "start.ps1", "start.bat", "stop.ps1", "stop.bat",
     "docker-compose.yml", "download_epvo.bat", "epvo_status.bat", "epvo_ai_status.bat",
     "README.md", "QUICKSTART.md", "LOCAL_SETUP.md", "USER_GUIDE_RU.md",

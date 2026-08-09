@@ -27,6 +27,9 @@ jobs:
         run: python backend/scripts/ci_static_gate.py
       - name: Release hygiene gate
         run: python backend/scripts/check_release_hygiene.py
+      - name: Public release structure
+        shell: pwsh
+        run: ./scripts/verify-public-release.ps1
       - name: Backend tests
         run: python backend/run_tests.py
 
@@ -45,3 +48,10 @@ jobs:
       - name: Production build
         working-directory: frontend
         run: npm run build
+
+  deployment-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet

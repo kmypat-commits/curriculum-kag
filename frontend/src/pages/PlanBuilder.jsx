@@ -5,23 +5,16 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import CompactSection from '../components/CompactSection'
 import { useNotifications } from '../contexts/NotificationContext'
-
-
-function CompactSection({ title, subtitle, accent = '#366092', defaultOpen = false, children }) {
-    return <details className="card" open={defaultOpen} style={{ marginBottom: 20, borderLeft: `5px solid ${accent}`, padding: 0, overflow: 'hidden' }}>
-        <summary style={{ cursor: 'pointer', listStyle: 'none', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', background: '#fbfdff' }}>
-            <span>
-                <span style={{ display: 'block', fontWeight: 800, color: '#17233b' }}>{title}</span>
-                {subtitle && <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: '#667085', fontWeight: 400 }}>{subtitle}</span>}
-            </span>
-            <span style={{ fontSize: 12, color: '#667085', whiteSpace: 'nowrap' }}>{'\u041e\u0442\u043a\u0440\u044b\u0442\u044c / \u0441\u0432\u0435\u0440\u043d\u0443\u0442\u044c'}</span>
-        </summary>
-        <div style={{ padding: 18 }}>
-            {children}
-        </div>
-    </details>
-}
+import {
+    alreadyRunningText,
+    localizeQualityEvidenceText,
+    longRunningHint,
+    planBuildElapsedLabel,
+    planBuildStageDetail,
+    planBuildStageLabel,
+} from '../utils/planBuilderPresentation'
 
 export default function PlanBuilder() {
     const { notify } = useNotifications()
@@ -90,37 +83,7 @@ export default function PlanBuilder() {
         return detail || err?.message || localText('Неизвестная ошибка', 'Белгісіз қате', 'Unknown error')
     }
 
-    const localizeQualityEvidence = (text = '') => {
-        if (language === 'en') return text
-        const patterns = language === 'kk'
-            ? [
-                [/^Project feedback: (\d+); EPVO expert-supported links: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Кері байланыс: $1; ЕПВО сарапшылары растаған байланыстар: $2; расталған bridge оқиғалары: $3; жоспардағы bridge модульдері: $4.'],
-                [/^(\d+)\/(\d+) courses have direct EPVO scope, programme-LO evidence, domain evidence, or RK mandatory status; domain quota violations: (\d+)\.$/, '$1/$2 пәннің тікелей ЕПВО бағыты, бағдарлама LO дәлелі, пәндік сала дәлелі немесе ҚР міндетті мәртебесі бар; пәндік квота бұзушылықтары: $3.'],
-                [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 оқу нәтижесі қамту шегіне жетті.'],
-                [/^Hard violations: (\d+)\.$/, 'Қатаң бұзушылықтар: $1.'],
-                [/^(\d+)\/(\d+) repository courses match the project domains\.$/, '$1/$2 пән репозиторийі жоба бағыттарына сәйкес келеді.'],
-                [/^(\d+)\/(\d+) courses are supported by the selected EPVO scope, programme LO evidence, or RK mandatory requirements\.$/, '$1/$2 пән ЕПВО бағытымен, ОН байланысымен немесе ҚР міндетті талаптарымен расталды.'],
-                [/^Interdisciplinary\/bridge units: (\d+)\.$/, 'Пәнаралық/bridge модульдер: $1.'],
-                [/^Not applicable: this is a standard single-direction programme\.$/, 'Қолданылмайды: бұл стандартты бір бағытты бағдарлама.'],
-                [/^(\d+)\/(\d+) learning units include assessment methods\.$/, '$1/$2 оқу бірлігі бағалау әдістерін қамтиды.'],
-                [/^Promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Жаңартылған bridge оқиғалары: $1; жоспардағы bridge модульдер: $2.'],
-                [/^Expert feedback: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Сарапшылық кері байланыс: $1; жаңартылған bridge оқиғалары: $2; жоспардағы bridge модульдер: $3.'],
-            ]
-            : [
-                [/^Project feedback: (\d+); EPVO expert-supported links: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Обратная связь по проекту: $1; связей, подтверждённых экспертами ЕПВО: $2; подтверждённых bridge-событий: $3; bridge-модулей в плане: $4.'],
-                [/^(\d+)\/(\d+) courses have direct EPVO scope, programme-LO evidence, domain evidence, or RK mandatory status; domain quota violations: (\d+)\.$/, '$1/$2 дисциплин имеют прямое направление ЕПВО, подтверждение связью с РО программы, подтверждение предметной областью или статус обязательной дисциплины РК; нарушений квот областей: $3.'],
-                [/^(\d+)\/(\d+) learning outcomes meet the coverage threshold\.$/, '$1/$2 результатов обучения достигли порога покрытия.'],
-                [/^Hard violations: (\d+)\.$/, 'Жёстких нарушений: $1.'],
-                [/^(\d+)\/(\d+) repository courses match the project domains\.$/, '$1/$2 дисциплин соответствуют областям проекта.'],
-                [/^(\d+)\/(\d+) courses are supported by the selected EPVO scope, programme LO evidence, or RK mandatory requirements\.$/, '$1/$2 дисциплин подтверждены выбранным направлением ЕПВО, связью с результатами обучения или обязательными требованиями РК.'],
-                [/^Interdisciplinary\/bridge units: (\d+)\.$/, 'Междисциплинарных/bridge-модулей: $1.'],
-                [/^Not applicable: this is a standard single-direction programme\.$/, 'Не применяется: это стандартная программа одного направления.'],
-                [/^(\d+)\/(\d+) learning units include assessment methods\.$/, '$1/$2 учебных единиц содержат методы оценивания.'],
-                [/^Promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Подтверждений bridge-модулей: $1; bridge-модулей в плане: $2.'],
-                [/^Expert feedback: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Экспертных оценок: $1; подтверждений bridge-модулей: $2; bridge-модулей в плане: $3.'],
-            ]
-        return patterns.reduce((value, [pattern, replacement]) => pattern.test(value) ? value.replace(pattern, replacement) : value, text)
-    }
+    const localizeQualityEvidence = (text = '') => localizeQualityEvidenceText(text, language)
 
     const epvoSyncMessage = (sync) => {
         if (!sync) return null
@@ -142,98 +105,14 @@ export default function PlanBuilder() {
         return t('mandatory')
     }
 
-    const buildStageLabel = (stage = 'idle') => {
-        const dictionary = {
-            ru: {
-                idle: 'Ожидание',
-                matching: 'Сопоставляем результаты обучения с дисциплинами',
-                epvo_repository: 'Подтягиваем дисциплины ЕПВО по выбранным направлениям',
-                scoring: 'Оцениваем связи дисциплина–результат обучения',
-                variants: 'Готовим варианты A/B/C',
-                variant_A_start: 'Строим вариант A',
-                variant_A: 'Проверяем вариант A',
-                variant_B_start: 'Строим вариант B',
-                variant_B: 'Проверяем вариант B',
-                variant_C_start: 'Строим вариант C',
-                variant_C: 'Проверяем вариант C',
-                saving: 'Сохраняем новые планы без порчи старого активного',
-                complete: 'Готово',
-                failed: 'Ошибка',
-            },
-            kk: {
-                idle: 'Күту',
-                matching: 'Оқу нәтижелерін пәндермен сәйкестендіру',
-                epvo_repository: 'Таңдалған бағыттар бойынша ЕПВО пәндерін қосу',
-                scoring: 'Пән–оқу нәтижесі байланыстарын бағалау',
-                variants: 'A/B/C нұсқаларын дайындау',
-                variant_A_start: 'A нұсқасын құру',
-                variant_A: 'A нұсқасын тексеру',
-                variant_B_start: 'B нұсқасын құру',
-                variant_B: 'B нұсқасын тексеру',
-                variant_C_start: 'C нұсқасын құру',
-                variant_C: 'C нұсқасын тексеру',
-                saving: 'Ескі белсенді жоспарды бұзбай жаңа жоспарларды сақтау',
-                complete: 'Дайын',
-                failed: 'Қате',
-            },
-            en: {
-                idle: 'Waiting',
-                matching: 'Matching learning outcomes with courses',
-                epvo_repository: 'Adding EPVO courses for selected fields',
-                scoring: 'Scoring course–learning outcome links',
-                variants: 'Preparing A/B/C variants',
-                variant_A_start: 'Building variant A',
-                variant_A: 'Checking variant A',
-                variant_B_start: 'Building variant B',
-                variant_B: 'Checking variant B',
-                variant_C_start: 'Building variant C',
-                variant_C: 'Checking variant C',
-                saving: 'Saving new plans without corrupting the active one',
-                complete: 'Complete',
-                failed: 'Failed',
-            },
-        }
-        const labels = dictionary[language] || dictionary.ru
-        return labels[stage] || stage
-    }
-
-    const buildStageDetail = () => {
-        if (buildStatus.stage === 'scoring' && buildStatus.lo_total) {
-            const linkWord = language === 'kk' ? 'байланыс' : language === 'en' ? 'links' : 'связей'
-            return `LO ${buildStatus.lo_index}/${buildStatus.lo_total}${buildStatus.lo_code ? ` — ${buildStatus.lo_code}` : ''}${buildStatus.matches ? `, ${linkWord}: ${buildStatus.matches}` : ''}`
-        }
-        if (buildStatus.stage?.startsWith?.('variant_')) {
-            if (language === 'kk') return 'Пәндер таңдалып, кредиттер, пререквизиттер және домен шектеулері тексеріліп жатыр.'
-            if (language === 'en') return 'Selecting courses and checking credits, prerequisites, and domain constraints.'
-            return 'Идёт подбор дисциплин, проверка кредитов, пререквизитов и доменных ограничений.'
-        }
-        return null
-    }
-
-    const buildElapsedLabel = () => {
-        const total = Math.max(0, Math.round(Number(buildStatus.elapsed_seconds) || 0))
-        if (!total) return null
-        const minutes = Math.floor(total / 60)
-        const seconds = total % 60
-        const value = minutes ? `${minutes} ${language === 'en' ? 'min' : 'мин'} ${seconds} ${language === 'en' ? 'sec' : 'сек'}` : `${seconds} ${language === 'en' ? 'sec' : 'сек'}`
-        if (language === 'kk') return `Өткен уақыт: ${value}`
-        if (language === 'en') return `Elapsed: ${value}`
-        return `Прошло: ${value}`
-    }
-
-    const buildAlreadyRunningText = () => {
-        if (language === 'kk') return 'Құру процесі жүріп жатыр. Ағымдағы процесс аяқталғанын күтіңіз.'
-        if (language === 'en') return 'Plan generation is already running. Please wait for the current process to finish.'
-        return 'Построение уже идёт. Дождитесь завершения текущего процесса.'
-    }
-
-    const buildLongRunningHint = () => {
-        if (language === 'kk') return 'ЕПВО базасы үлкен болса, бұл кезең бірнеше минутқа созылуы мүмкін. Ескі белсенді жоспар барлық нұсқалар сәтті құрылғанша сақталады.'
-        if (language === 'en') return 'If the EPVO catalogue is large, this step may take several minutes. The old active plan is kept until all variants are built successfully.'
-        return 'Если база ЕПВО большая, этап может идти несколько минут. Старый активный план сохраняется до успешного построения всех вариантов.'
-    }
+    const buildStageLabel = (stage = 'idle') => planBuildStageLabel(stage, language)
+    const buildStageDetail = () => planBuildStageDetail(buildStatus, language)
+    const buildElapsedLabel = () => planBuildElapsedLabel(buildStatus, language)
+    const buildAlreadyRunningText = () => alreadyRunningText(language)
+    const buildLongRunningHint = () => longRunningHint(language)
 
     const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
+    const compactToggleLabel = localText('Открыть / свернуть', 'Ашу / жинау', 'Open / collapse')
     const epvoApplied = searchParams.get('epvoApplied') === '1'
 
     const pollBuildStatus = async (versionId) => {
@@ -977,7 +856,7 @@ export default function PlanBuilder() {
                         )}
 
                         {currentPlan?.metrics?.verification && (
-                            <CompactSection title={t('verification')} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
+                            <CompactSection title={t('verification')} toggleLabel={compactToggleLabel} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
                                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                                     <span>{t('feasible')}: <strong>{currentPlan.metrics.verification.feasible ? t('yes') : t('no')}</strong></span>
                                     <span>{t('total_credits')}: <strong>{currentPlan.metrics.total_credits}/{currentPlan.metrics.target_credits}</strong></span>
@@ -1392,7 +1271,7 @@ export default function PlanBuilder() {
                         )}
                         {currentPlan?.metrics?.verification?.goso_compliance?.applicable && (() => {
                             const goso = currentPlan.metrics.verification.goso_compliance
-                            return <CompactSection title={localText('\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0413\u041e\u0421\u041e \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0438 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d', '\u049a\u0430\u0437\u0430\u049b\u0441\u0442\u0430\u043d \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0441\u044b\u043d\u044b\u04a3 \u041c\u0416\u041c\u0411\u0421 \u0441\u04d9\u0439\u043a\u0435\u0441\u0442\u0456\u0433\u0456', 'Kazakhstan state-standard compliance')} accent={goso.compliant ? '#2e7d32' : '#c62828'} defaultOpen={false}>
+                            return <CompactSection title={localText('\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0413\u041e\u0421\u041e \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0438 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d', '\u049a\u0430\u0437\u0430\u049b\u0441\u0442\u0430\u043d \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0441\u044b\u043d\u044b\u04a3 \u041c\u0416\u041c\u0411\u0421 \u0441\u04d9\u0439\u043a\u0435\u0441\u0442\u0456\u0433\u0456', 'Kazakhstan state-standard compliance')} toggleLabel={compactToggleLabel} accent={goso.compliant ? '#2e7d32' : '#c62828'} defaultOpen={false}>
                                 <h3 style={{ marginTop: 0 }}>{localText('Соответствие ГОСО Республики Казахстан', 'Қазақстан Республикасының МЖМБС сәйкестігі', 'Kazakhstan state-standard compliance')}</h3>
                                 <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
                                     <span>{localText('Статус', 'Күйі', 'Status')}: <strong>{goso.compliant ? localText('соответствует', 'сәйкес', 'compliant') : localText('есть нарушения', 'бұзушылықтар бар', 'violations found')}</strong></span>
@@ -1407,7 +1286,7 @@ export default function PlanBuilder() {
                         })()}
                         {currentPlan?.metrics?.verification?.pedagogical_audit && (() => {
                             const audit = currentPlan.metrics.verification.pedagogical_audit
-                            return <CompactSection title={localText('\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043b\u0430\u043d\u0430', '\u0416\u043e\u0441\u043f\u0430\u0440 \u0441\u0430\u043f\u0430\u0441\u044b\u043d \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0442\u044b \u0442\u0435\u043a\u0441\u0435\u0440\u0443', 'Automatic curriculum quality audit')} accent={audit.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
+                            return <CompactSection title={localText('\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043b\u0430\u043d\u0430', '\u0416\u043e\u0441\u043f\u0430\u0440 \u0441\u0430\u043f\u0430\u0441\u044b\u043d \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0442\u044b \u0442\u0435\u043a\u0441\u0435\u0440\u0443', 'Automatic curriculum quality audit')} toggleLabel={compactToggleLabel} accent={audit.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
                                 <div style={{ fontSize: 13, color: '#566', marginBottom: 10 }}>{audit.engine}</div>
                                 <strong style={{ color: audit.passed ? '#1b5e20' : '#9a5b00' }}>
                                     {audit.passed
@@ -1435,7 +1314,7 @@ export default function PlanBuilder() {
                             </CompactSection>
                         })()}
                         {currentPlan?.metrics?.optimizer && (
-                            <CompactSection title={t('optimizer')} accent={'#3949ab'} defaultOpen={false}>
+                            <CompactSection title={t('optimizer')} toggleLabel={compactToggleLabel} accent={'#3949ab'} defaultOpen={false}>
                                 <strong>{currentPlan.metrics.optimizer.name}</strong>
                                 {currentPlan.metrics.optimizer.selection_method === 'nsga2' && (
                                     <span style={{ marginLeft: '12px', color: '#555' }}>
@@ -1447,7 +1326,7 @@ export default function PlanBuilder() {
                             </CompactSection>
                         )}
                         {currentPlan?.metrics?.international_quality && (
-                            <CompactSection title={t('international_quality')} subtitle={'OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences'} accent={currentPlan.metrics.international_quality.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
+                            <CompactSection title={t('international_quality')} toggleLabel={compactToggleLabel} subtitle={'OBE / ABET-style continuous improvement / CDIO integrated curriculum / Tuning competences'} accent={currentPlan.metrics.international_quality.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '12px' }}>
                                     <div>
                                         <p style={{ margin: '6px 0 0', color: '#666', fontSize: '14px' }}>

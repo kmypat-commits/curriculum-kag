@@ -86,7 +86,7 @@ app.include_router(repository.router, prefix="/repository", tags=["Repository"])
 app.include_router(kag.router, prefix="/kag", tags=["KAG Engine"])
 app.include_router(planner.router, prefix="/planner", tags=["Planner"])
 app.include_router(export_api.router, prefix="/export", tags=["Export"])
-app.include_router(epvo_api.router, prefix="/epvo", tags=["EPVO"])
+app.include_router(epvo_api.router, prefix="/epvo", tags=["Expert Evidence Repository (legacy API)"])
 app.include_router(git_versions.router, prefix="/git", tags=["Git Versions"])
 
 
@@ -95,7 +95,11 @@ async def root():
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
+        "expert_evidence_repository": {
+            "name": settings.EXPERT_EVIDENCE_REPOSITORY_NAME,
+            "slug": settings.EXPERT_EVIDENCE_REPOSITORY_SLUG,
+        },
     }
 
 

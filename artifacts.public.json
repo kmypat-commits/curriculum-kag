@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "application_version": "1.0.0-pre",
+  "dataset": {
+    "public_name": "Curriculum Expert Evidence Repository",
+    "slug": "ceer",
+    "version": "pending-publication",
+    "repository": null,
+    "sha256": null,
+    "redistribution_status": "legal-review-required"
+  },
+  "model": {
+    "public_name": "Curriculum-KAG CEER SBERT 40k",
+    "local_path": "backend/models/epvo-sbert-finetuned-40k",
+    "repository": null,
+    "sha256": null,
+    "status": "local-production-candidate"
+  },
+  "demo_space": {
+    "repository": null,
+    "status": "not-published"
+  }
+}

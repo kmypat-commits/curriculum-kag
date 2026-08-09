@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "production": {
+    "path": "backend/models/epvo-sbert-finetuned-40k",
+    "action": "keep-and-publish",
+    "required_files": [
+      "model.safetensors",
+      "config.json",
+      "modules.json",
+      "tokenizer.json",
+      "tokenizer_config.json",
+      "config_sentence_transformers.json",
+      "sentence_bert_config.json",
+      "1_Pooling/config.json"
+    ]
+  },
+  "rules": [
+    {
+      "pattern": "*-checkpoints",
+      "action": "archive-after-manifest"
+    },
+    {
+      "pattern": "*smoke*",
+      "action": "remove-after-verified-archive"
+    },
+    {
+      "pattern": "paraphrase-multilingual-mpnet-base-v2",
+      "action": "archive-or-redownload-from-pinned-upstream"
+    },
+    {
+      "pattern": "*",
+      "action": "review-experiment-metrics-before-removal"
+    }
+  ]
+}

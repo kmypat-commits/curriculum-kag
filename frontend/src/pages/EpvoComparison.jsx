@@ -8,10 +8,10 @@ import { formatApiError } from '../utils/errors'
 
 const labels = {
     ru: {
-        epvo_match: 'Полнота типовых дисциплин ЕПВО',
-        epvo_quality_notes: 'Замечания и рекомендации ЕПВО',
-        similar_epvo_programs: 'Похожие программы ЕПВО',
-        typical_epvo_los: 'Типовые результаты обучения ЕПВО',
+        epvo_match: 'Полнота типовых дисциплин экспертной базы',
+        epvo_quality_notes: 'Замечания и рекомендации экспертной базы',
+        similar_epvo_programs: 'Похожие программы экспертной базы',
+        typical_epvo_los: 'Типовые результаты обучения экспертной базы',
         disciplines: 'Дисциплины',
         similarity: 'Сходство',
         expert_support: 'Экспертная поддержка',
@@ -22,9 +22,9 @@ const labels = {
         apply_priority: 'Добавить выбранные дисциплины',
         rebuild_hint: 'После добавления перестройте варианты A/B/C в конструкторе плана.',
         open_plan_builder: 'Открыть конструктор плана',
-        quality_formula: 'Формула: 70% полнота относительно типовых дисциплин ЕПВО + 30% экспертная поддержка связей дисциплина–LO.',
-        epvo_match_hint: 'Это показывает, сколько типовых дисциплин из референсного набора ЕПВО уже есть в плане.',
-        plan_from_epvo: 'Дисциплины плана из ЕПВО',
+        quality_formula: 'Формула: 70% полнота относительно типовых дисциплин CEER + 30% экспертная поддержка связей дисциплина–LO.',
+        epvo_match_hint: 'Это показывает, сколько типовых дисциплин из экспертного референсного набора CEER уже есть в плане.',
+        plan_from_epvo: 'Дисциплины плана из экспертной базы',
         repository_status: 'Статус',
         status_in_plan: 'уже в плане',
         status_in_repository: 'есть в репозитории',
@@ -37,14 +37,14 @@ const labels = {
         added_details: 'Результат добавления',
         compare_ready: 'Сравнение готово',
         light_mode: 'лёгкий режим',
-        reference_limits: 'Показана быстрая выборка, чтобы страница не зависала. Для планировщика используются полные данные ЕПВО.',
-        loading_compare: 'Сравниваю с ЕПВО. Это может занять несколько секунд…',
+        reference_limits: 'Показана быстрая выборка, чтобы страница не зависала. Планировщик использует полный разрешённый слой CEER.',
+        loading_compare: 'Сравниваю с экспертной базой. Это может занять несколько секунд…',
     },
     kk: {
-        epvo_match: 'ЕПВО типтік пәндерінің толықтығы',
-        epvo_quality_notes: 'ЕПВО ескертулері мен ұсыныстары',
-        similar_epvo_programs: 'Ұқсас ЕПВО бағдарламалары',
-        typical_epvo_los: 'ЕПВО типтік оқу нәтижелері',
+        epvo_match: 'Сараптамалық базадағы типтік пәндердің толықтығы',
+        epvo_quality_notes: 'Сараптамалық базаның ескертулері мен ұсыныстары',
+        similar_epvo_programs: 'Сараптамалық базадағы ұқсас бағдарламалар',
+        typical_epvo_los: 'Сараптамалық базадағы типтік оқу нәтижелері',
         disciplines: 'Пәндер',
         similarity: 'Ұқсастық',
         expert_support: 'Сараптамалық қолдау',
@@ -55,9 +55,9 @@ const labels = {
         apply_priority: 'Таңдалған пәндерді қосу',
         rebuild_hint: 'Қосқаннан кейін жоспар құрастырғышта A/B/C нұсқаларын қайта құрыңыз.',
         open_plan_builder: 'Жоспар құрастырғышын ашу',
-        quality_formula: 'Формула: 70% ЕПВО типтік пәндерімен сәйкестік + 30% пән–LO байланыстарының сараптамалық қолдауы.',
-        epvo_match_hint: 'Бұл ЕПВО референстік жинағындағы типтік пәндердің қаншасы жоспарда бар екенін көрсетеді.',
-        plan_from_epvo: 'Жоспардағы ЕПВО пәндері',
+        quality_formula: 'Формула: 70% CEER типтік пәндерімен сәйкестік + 30% пән–LO байланыстарының сараптамалық қолдауы.',
+        epvo_match_hint: 'Бұл CEER сараптамалық референстік жинағындағы типтік пәндердің қаншасы жоспарда бар екенін көрсетеді.',
+        plan_from_epvo: 'Жоспардағы сараптамалық база пәндері',
         repository_status: 'Мәртебе',
         status_in_plan: 'жоспарда бар',
         status_in_repository: 'репозиторийде бар',
@@ -70,14 +70,14 @@ const labels = {
         added_details: 'Қосу нәтижесі',
         compare_ready: 'Салыстыру дайын',
         light_mode: 'жеңіл режим',
-        reference_limits: 'Бет тоқтап қалмауы үшін жылдам таңдау көрсетілді. Жоспарлағыш толық ЕПВО деректерін пайдаланады.',
-        loading_compare: 'ЕПВО-мен салыстырып жатырмын. Бұл бірнеше секунд алуы мүмкін…',
+        reference_limits: 'Бет тоқтап қалмауы үшін жылдам таңдау көрсетілді. Жоспарлағыш CEER-дің толық рұқсат етілген қабатын пайдаланады.',
+        loading_compare: 'Сараптамалық базамен салыстырып жатырмын. Бұл бірнеше секунд алуы мүмкін…',
     },
     en: {
-        epvo_match: 'Typical EPVO course completeness',
-        epvo_quality_notes: 'EPVO quality notes',
-        similar_epvo_programs: 'Similar EPVO programmes',
-        typical_epvo_los: 'Typical EPVO learning outcomes',
+        epvo_match: 'Typical expert-repository course completeness',
+        epvo_quality_notes: 'Expert-repository quality notes',
+        similar_epvo_programs: 'Similar programmes in the expert repository',
+        typical_epvo_los: 'Typical learning outcomes in the expert repository',
         disciplines: 'Disciplines',
         similarity: 'Similarity',
         expert_support: 'Expert support',
@@ -88,9 +88,9 @@ const labels = {
         apply_priority: 'Add selected courses',
         rebuild_hint: 'After adding them, rebuild A/B/C variants in the plan builder.',
         open_plan_builder: 'Open plan builder',
-        quality_formula: 'Formula: 70% completeness against typical EPVO courses + 30% expert support for course–LO links.',
-        epvo_match_hint: 'This shows how many typical courses from the EPVO reference set are already present in the plan.',
-        plan_from_epvo: 'Plan courses from EPVO',
+        quality_formula: 'Formula: 70% completeness against typical CEER courses + 30% expert support for course–LO links.',
+        epvo_match_hint: 'This shows how many typical courses from the CEER expert reference set are already present in the plan.',
+        plan_from_epvo: 'Plan courses from the expert repository',
         repository_status: 'Status',
         status_in_plan: 'already in plan',
         status_in_repository: 'in repository',
@@ -103,8 +103,8 @@ const labels = {
         added_details: 'Apply result',
         compare_ready: 'Comparison ready',
         light_mode: 'light mode',
-        reference_limits: 'A fast sample is shown so the page does not freeze. The planner still uses the full EPVO dataset.',
-        loading_compare: 'Comparing with EPVO. This can take a few seconds…',
+        reference_limits: 'A fast sample is shown so the page does not freeze. The planner uses the full authorized CEER layer.',
+        loading_compare: 'Comparing with the expert repository. This can take a few seconds…',
     },
 }
 
@@ -118,6 +118,7 @@ export default function EpvoComparison() {
     const [statusFilter, setStatusFilter] = useState('all')
     const [selectedPriorityIds, setSelectedPriorityIds] = useState([])
     const l = key => (labels[language] || labels.ru)[key] || key
+    const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const dash = '—'
 
     const repositoryStatusLabel = status => {
@@ -208,7 +209,11 @@ export default function EpvoComparison() {
                         <h2>{l('quality_verdict')}</h2>
                         <span className={`status-pill ${data.epvo_quality_status === 'passed' ? 'status-active' : 'status-draft'}`}>{data.epvo_quality_score || 0}%</span>
                     </div>
-                    <p style={{ marginTop: 0 }}>{data.epvo_quality_label}</p>
+                    <p style={{ marginTop: 0 }}>{data.epvo_quality_status === 'passed'
+                        ? localText('Соответствует ориентиру CEER 75%+', 'CEER 75%+ бағдарына сәйкес', 'Meets the CEER 75%+ reference level')
+                        : data.epvo_quality_status === 'borderline'
+                            ? localText('Близко к ориентиру CEER; нужна экспертная проверка', 'CEER бағдарына жақын; сараптамалық тексеру қажет', 'Close to the CEER reference level; expert review is required')
+                            : localText('Ниже ориентира CEER 70–75%', 'CEER 70–75% бағдарынан төмен', 'Below the CEER 70–75% reference level')}</p>
                     <p style={{ color: '#667', fontSize: 13 }}>{l('quality_formula')}</p>
                 </div>
 
@@ -226,7 +231,11 @@ export default function EpvoComparison() {
                     <div className="section-head"><h2>{l('epvo_quality_notes')}</h2><span className="status-pill status-draft">{data.group_code || data.direction_code || t('all_domains')}</span></div>
                     {data.weak_spots?.map((item, index) => <p key={`w-${index}`}>⚠️ {item}</p>)}
                     {data.recommendations?.map((item, index) => <p key={`r-${index}`}>💡 {item}</p>)}
-                    <p style={{ color: '#667', fontSize: 13 }}>{l('expert_support')}: {data.expert_supported_matches}/{data.total_plan_matches} LO-связей в плане имеют поддержку экспертной разметки ЕПВО.</p>
+                    <p style={{ color: '#667', fontSize: 13 }}>{localText(
+                        `${l('expert_support')}: ${data.expert_supported_matches}/${data.total_plan_matches} связей с LO поддержаны исторической экспертной разметкой CEER.`,
+                        `${l('expert_support')}: ${data.expert_supported_matches}/${data.total_plan_matches} LO байланысы CEER тарихи сараптамалық бағаларымен расталған.`,
+                        `${l('expert_support')}: ${data.expert_supported_matches}/${data.total_plan_matches} LO links are supported by historical CEER expert evidence.`
+                    )}</p>
                 </div>}
 
                 {notice && <div className="card" style={{ borderLeft: `5px solid ${notice.type === 'success' ? '#2e7d32' : '#c62828'}` }}>
@@ -278,8 +287,8 @@ export default function EpvoComparison() {
                 </div>}
 
                 {data.similar_programs?.length > 0 && <div className="card">
-                    <div className="section-head"><h2>{localText('Сравнение программы с аналогичными ОП ЕПВО', 'Бағдарламаны ұқсас ЕПВО ББ-мен салыстыру', 'Compare with similar EPVO programmes')}</h2></div>
-                    <p style={{ color: '#667', fontSize: 13, marginTop: 0 }}>{localText('Здесь показаны похожие программы из выбранного направления ЕПВО, их типовые дисциплины и результаты обучения.', 'Мұнда таңдалған ЕПВО бағыты бойынша ұқсас бағдарламалар, типтік пәндер және оқу нәтижелері көрсетіледі.', 'This section shows similar programmes from the selected EPVO scope, their typical courses and learning outcomes.')}</p>
+                    <div className="section-head"><h2>{localText('Сравнение с аналогичными программами экспертной базы', 'Сараптамалық базадағы ұқсас бағдарламалармен салыстыру', 'Compare with similar expert-repository programmes')}</h2></div>
+                    <p style={{ color: '#667', fontSize: 13, marginTop: 0 }}>{localText('Показаны похожие программы выбранного направления CEER, их типовые дисциплины и результаты обучения.', 'Таңдалған CEER бағыты бойынша ұқсас бағдарламалар, типтік пәндер және оқу нәтижелері көрсетіледі.', 'This section shows similar programmes from the selected CEER scope, their typical courses and learning outcomes.')}</p>
                     <div className="table-wrap"><table className="table"><thead><tr><th>{t('title')}</th><th>{t('credits')}</th><th>{l('disciplines')}</th><th>LO</th><th>{l('similarity')}</th></tr></thead><tbody>
                         {data.similar_programs.map(item => <tr key={item.source_id}><td><b>{item.title}</b><div style={{ fontSize: 12, color: '#667' }}>{item.goal}</div></td><td>{item.credits || dash}</td><td>{item.discipline_count}</td><td>{item.lo_count}</td><td>{Math.round((item.similarity || 0) * 100)}%</td></tr>)}
                     </tbody></table></div>

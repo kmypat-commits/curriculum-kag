@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Frozen A/B decision 2026-07-17: validation selected weight 0.0.
     # A non-zero value is experimental and must be justified by a new report.
     EPVO_RANKER_WEIGHT: float = 0.0
+
+    # Public research identity. Legacy EPVO_* setting names remain supported
+    # internally for backward compatibility and source-provenance tracing.
+    EXPERT_EVIDENCE_REPOSITORY_NAME: str = "Curriculum Expert Evidence Repository"
+    EXPERT_EVIDENCE_REPOSITORY_SLUG: str = "ceer"
     
     # LLM Configuration
     LLM_PROVIDER: str = "openai"  # openai, anthropic, local
