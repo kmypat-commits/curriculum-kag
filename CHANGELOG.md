@@ -18,8 +18,11 @@ All notable changes to Curriculum-KAG will be documented in this file. The forma
 - prerequisite inference and plan metrics extracted into independently testable planner modules;
 - deterministic bridge suggestions extracted from the API module;
 - syllabus and evidence-bundle endpoints extracted into a dedicated API router without URL changes;
+- planner API split into graph, build, coverage and replacement routers behind one stable facade;
+- curriculum scheduling split into course selection, semester repair and credit balancing phases;
 - reusable PlanBuilder presentation utilities and disclosure component extracted;
 - long-running plan-build progress extracted into a reusable frontend component;
+- PlanBuilder quality, bridge replacement and LO coverage panels extracted as reusable components;
 - public UI references the expert repository/CEER while internal legacy identifiers remain compatible.
 
 ### Verified

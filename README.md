@@ -38,6 +38,8 @@ Source provenance is retained in the Dataset Card. Publication of code does **no
 
 ## Architecture
 
+The current module boundaries and verification gates are documented in [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md).
+
 ```text
 React UI
    │

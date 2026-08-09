@@ -7,6 +7,7 @@ import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import CompactSection from '../components/CompactSection'
 import PlanBuildProgress from '../components/PlanBuildProgress'
+import PlanQualityPanel from '../components/PlanQualityPanel'
 import { useNotifications } from '../contexts/NotificationContext'
 import {
     alreadyRunningText,
@@ -842,420 +843,54 @@ export default function PlanBuilder() {
                             </div>
                         )}
 
-                        {currentPlan?.metrics?.verification && (
-                            <CompactSection title={t('verification')} toggleLabel={compactToggleLabel} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
-                                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-                                    <span>{t('feasible')}: <strong>{currentPlan.metrics.verification.feasible ? t('yes') : t('no')}</strong></span>
-                                    <span>{t('total_credits')}: <strong>{currentPlan.metrics.total_credits}/{currentPlan.metrics.target_credits}</strong></span>
-                                    <span>{t('prerequisite_violations')}: <strong>{currentPlan.metrics.prerequisite_violations}</strong></span>
-                                    <span>{t('load_violations')}: <strong>{currentPlan.metrics.semester_load_violations}</strong></span>
-                                    <span>{t('min_lo_coverage')}: <strong>{Math.round((currentPlan.metrics.min_lo_coverage || 0) * 100)}%</strong></span>
-                                    <span>{t('evidence_count')}: <strong>{currentPlan.metrics.evidence_count || 0}</strong></span>
-                                    <span>{t('redundancy')}: <strong>{currentPlan.metrics.redundancy || 0}</strong></span>
-                                </div>
-                                {currentPlanHasHardViolations && (
-                                    <button
-                                        className="btn btn-primary"
-                                        onClick={handleApplyQualityImprovements}
-                                        disabled={applyingQuality || building}
-                                        style={{ marginTop: 12 }}
-                                    >
-                                        {applyingQuality ? t('applying_quality_improvements') : localText('Исправить порядок, нагрузку и кредиты', 'Ретті, жүктемені және кредиттерді түзету', 'Fix order, load, and credits')}
-                                    </button>
-                                )}
-                                {(currentPlan.metrics.num_bridge_modules || 0) > 0 && (
-                                    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082', color: '#6d4c41' }}>
-                                        <strong>{localText('Bridge-модули требуют экспертного решения', 'Bridge-модульдер сараптамалық шешімді қажет етеді', 'Bridge modules require expert review')}: {currentPlan.metrics.num_bridge_modules}</strong>
-                                        <div style={{ fontSize: 12, marginTop: 4 }}>
-                                            {localText(
-                                                'Это значит, что реальных дисциплин ЕПВО не хватило для части LO или нагрузки. Лучше перенастроить ЕПВО-направление или заменить bridge реальными дисциплинами.',
-                                                'Бұл кейбір LO немесе жүктеме үшін нақты ЕПВО пәндері жеткіліксіз екенін білдіреді. ЕПВО бағытын қайта баптау немесе bridge орнына нақты пәндерді таңдау ұсынылады.',
-                                                'This means real EPVO courses were insufficient for some LOs or workload. Reconfigure the EPVO scope or replace bridges with real courses.'
-                                            )}
-                                        </div>
-                                        <button className="btn btn-secondary" onClick={loadBridgePreview} disabled={loadingBridgePreview} style={{ marginTop: 8 }}>
-                                            {loadingBridgePreview ? localText('Поиск…', 'Іздеу…', 'Searching…') : localText('Найти реальные дисциплины вместо bridge', 'Bridge орнына нақты пәндерді табу', 'Find real courses instead of bridges')}
-                                        </button>
-                                        {bridgePreview?.variant === activeVariant && (
-                                            Object.keys(selectedBridgeReplacements).length > 0
-                                            || (bridgePreview.suggestions || []).some(row =>
-                                                (row.candidates || []).some(c => c.strong_candidate)
-                                            )
-                                        ) && (
-                                            <button
-                                                className="btn btn-primary"
-                                                onClick={applyAllBridgeReplacements}
-                                                disabled={replacingAllBridges || Boolean(replacingBridge)}
-                                                style={{ marginTop: 8, marginLeft: 8 }}
-                                            >
-                                                {replacingAllBridges
-                                                    ? localText('Замена…', 'Ауыстыру…', 'Replacing…')
-                                                    : Object.keys(selectedBridgeReplacements).length
-                                                        ? localText(`Подтвердить выбранные: ${Object.keys(selectedBridgeReplacements).length}`, `Таңдалғандарды растау: ${Object.keys(selectedBridgeReplacements).length}`, `Confirm selected: ${Object.keys(selectedBridgeReplacements).length}`)
-                                                        : localText('Заменить все подходящие bridge', 'Барлық қолайлы bridge-модульдерді ауыстыру', 'Replace all suitable bridges')}
-                                            </button>
-                                        )}
-                                        {bridgePreview?.variant === activeVariant && (bridgePreview.suggestions || []).some(row => (row.candidates || []).some(c => c.quality_level === 'medium' || c.medium_candidate)) && (
-                                            <button
-                                                className="btn btn-secondary"
-                                                onClick={selectMediumBridgeReplacements}
-                                                disabled={replacingAllBridges || Boolean(replacingBridge)}
-                                                style={{ marginTop: 8, marginLeft: 8, borderColor: '#c17b00', color: '#8a5a00' }}
-                                            >
-                                                {localText('Выбрать все средние замены', 'Барлық орташа ауыстыруларды таңдау', 'Select all medium replacements')}
-                                            </button>
-                                        )}
-                                        {bridgePreview?.variant === activeVariant && (
-                                            <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                                                {bridgePreview.summary && (
-                                                    <div style={{ padding: '8px 10px', borderRadius: 8, background: '#fff3cd', border: '1px solid #ffecb5', color: '#6d4c00', fontSize: 12 }}>
-                                                        <strong>{localText('Итог поиска замен', 'Ауыстыру іздеу қорытындысы', 'Replacement search summary')}:</strong>{' '}
-                                                        {localText(
-                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредитов · сильных: ${bridgePreview.summary.with_strong_candidate} · средних: ${bridgePreview.summary.with_medium_candidate || 0} · без сильной: ${bridgePreview.summary.without_strong_candidate}.`,
-                                                            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредит · күшті: ${bridgePreview.summary.with_strong_candidate} · орташа: ${bridgePreview.summary.with_medium_candidate || 0} · күштісіз: ${bridgePreview.summary.without_strong_candidate}.`,
-                                                            `${bridgePreview.summary.bridge_count} bridges · ${bridgePreview.summary.bridge_credits} credits · strong: ${bridgePreview.summary.with_strong_candidate} · medium: ${bridgePreview.summary.with_medium_candidate || 0} · without strong: ${bridgePreview.summary.without_strong_candidate}.`
-                                                        )}
-                                                        <div style={{ marginTop: 4 }}>
-                                                            {bridgePreview.summary.diagnosis}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {bridgePreview.elapsed_seconds !== undefined && (
-                                                    <div style={{ fontSize: 12, color: '#6d4c41' }}>
-                                                        {localText(`Поиск замен выполнен за ${bridgePreview.elapsed_seconds}s.`, `Ауыстыруларды іздеу ${bridgePreview.elapsed_seconds}s ішінде орындалды.`, `Replacement search completed in ${bridgePreview.elapsed_seconds}s.`)}
-                                                    </div>
-                                                )}
-                                                {(bridgePreview.suggestions || []).map(row => {
-                                                    const good = (row.candidates || []).filter(c => c.strong_candidate || c.medium_candidate)
-                                                    return (
-                                                        <div key={row.bridge_item_id} style={{ fontSize: 12, padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #f3d27a' }}>
-                                                            <b>{row.bridge_title}</b> · {row.credits} {t('credits')} · LO: {(row.target_los || []).join(', ')}
-                                                            {good.length > 0 ? (
-                                                                <div style={{ marginTop: 4 }}>
-                                                                    {good.slice(0, 3).map(c => (
-                                                                        <div key={c.course_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', padding: '8px 0', borderTop: '1px solid #f3ead2' }}>
-                                                                            <span>
-                                                                                <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
-                                                                                    <input
-                                                                                        type="radio"
-                                                                                        name={`bridge-replacement-${row.bridge_item_id}`}
-                                                                                        checked={Number(selectedBridgeReplacements[row.bridge_item_id]) === Number(c.course_id)}
-                                                                                        onChange={() => setSelectedBridgeReplacements(current => ({ ...current, [row.bridge_item_id]: c.course_id }))}
-                                                                                    />
-                                                                                    <strong>→ {localizedCourseField(c.title_translations, c.title)}</strong>
-                                                                                </label> · {c.credits} {t('credits')} · {c.quality_level === 'strong' ? localText('сильная', 'күшті', 'strong') : localText('средняя, нужно подтвердить', 'орташа, растау керек', 'medium, needs confirmation')} · AI {Math.round((c.model_score || 0) * 100)}% · EPVO {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
-                                                                                <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{c.description}</div>
-                                                                            </span>
-                                                                            <button
-                                                                                className="btn btn-primary"
-                                                                                style={{ padding: '5px 9px', fontSize: 11, whiteSpace: 'nowrap' }}
-                                                                                disabled={Boolean(replacingBridge) || replacingAllBridges}
-                                                                                onClick={() => applyBridgeReplacement(row.bridge_item_id, c.course_id)}
-                                                                            >
-                                                                                {replacingBridge === `${row.bridge_item_id}:${c.course_id}`
-                                                                                    ? localText('Добавление…', 'Қосу…', 'Adding…')
-                                                                                    : localText('Подтвердить замену', 'Ауыстыруды растау', 'Confirm replacement')}
-                                                                            </button>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <div style={{ marginTop: 4, color: '#8a5a00' }}>{localText('Сильной замены пока нет. Автозамена требует подтверждение ЕПВО ≥ 50%, покрытие ≥ 75% профессиональных LO, близкие кредиты и область выбранного направления.', 'Әзірше күшті ауыстыру жоқ. Автоауыстыру үшін ЕПВО растауы ≥ 50%, кәсіби ОН қамтуы ≥ 75%, жақын кредиттер және таңдалған бағыт қажет.', 'No strong replacement yet. Automatic replacement requires EPVO evidence ≥ 50%, coverage of ≥ 75% of professional LOs, similar credits, and the selected programme scope.')}</div>
-                                                            )}
-                                                            <button
-                                                                className="btn btn-secondary"
-                                                                style={{ marginTop: 8, padding: '6px 10px', fontSize: 11 }}
-                                                                disabled={loadingAiBridge === row.bridge_item_id || Boolean(confirmingAiBridge)}
-                                                                onClick={() => loadAiBridgeCandidates(row.bridge_item_id)}
-                                                            >
-                                                                {loadingAiBridge === row.bridge_item_id
-                                                                    ? localText('ИИ подбирает 3 варианта…', 'ЖИ 3 нұсқа таңдауда…', 'AI is generating 3 options…')
-                                                                    : localText('Подобрать 3 дисциплины через ИИ', 'ЖИ арқылы 3 пән ұсыну', 'Generate 3 courses with AI')}
-                                                            </button>
-                                                            {aiBridgeCandidates[row.bridge_item_id] && (
-                                                                <div style={{ marginTop: 8, display: 'grid', gap: 7 }}>
-                                                                    {(aiBridgeCandidates[row.bridge_item_id].candidates || []).map(candidate => (
-                                                                        <div key={candidate.candidate_id} style={{ padding: 8, borderRadius: 6, background: '#f7f9fc', border: '1px solid #dce5ef' }}>
-                                                                            <strong>{localizedCourseField({ ru: candidate.title_ru, kk: candidate.title_kk, en: candidate.title_en }, candidate.title_ru)}</strong> · {row.credits} {t('credits')}
-                                                                            <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{localizedCourseField({ ru: candidate.description_ru, kk: candidate.description_kk, en: candidate.description_en }, candidate.description_ru)}</div>
-                                                                            <div style={{ marginTop: 4, color: '#53657a' }}>LO: {(candidate.target_los || []).join(', ')}</div>
-                                                                            <button
-                                                                                className="btn btn-primary"
-                                                                                style={{ marginTop: 6, padding: '5px 9px', fontSize: 11 }}
-                                                                                disabled={Boolean(confirmingAiBridge)}
-                                                                                onClick={() => confirmAiBridgeCandidate(row.bridge_item_id, candidate)}
-                                                                            >
-                                                                                {confirmingAiBridge === `${row.bridge_item_id}:${candidate.candidate_id}`
-                                                                                    ? localText('Подтверждение…', 'Растау…', 'Confirming…')
-                                                                                    : localText('Подтвердить и заменить bridge', 'Растау және bridge ауыстыру', 'Confirm and replace bridge')}
-                                                                            </button>
-                                                                        </div>
-                                                                    ))}
-                                                                    <div style={{ fontSize: 11, color: '#7a6570' }}>
-                                                                        {localText('Это предложение ИИ. В план оно попадёт только после вашего подтверждения.', 'Бұл ЖИ ұсынысы. Жоспарға тек сіз растағаннан кейін енгізіледі.', 'This is an AI proposal. It enters the plan only after your confirmation.')}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        )}
-                                        {requiresRegeneration && (
-                                            <button className="btn btn-primary" onClick={handleBuild} disabled={building} style={{ marginTop: 10 }}>
-                                                {building
-                                                    ? localText('Перестроение…', 'Қайта құру…', 'Rebuilding…')
-                                                    : localText('Перегенерировать A/B/C с изменениями', 'Өзгерістермен A/B/C қайта құру', 'Regenerate A/B/C with changes')}
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                                {currentPlan.domain_breakdown && (
-                                    <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
-                                        {Object.entries(currentPlan.domain_breakdown).filter(([, item]) => item.credits > 0 || item.min_percent > 0).map(([key, item]) => (
-                                            <div key={key} style={{ padding: '8px 10px', borderRadius: 8, background: '#f6f9fc', border: '1px solid #e1e8f0' }}>
-                                                <div style={{ fontSize: 12, color: '#667' }}>{localizeDomain(item.label || key)}</div>
-                                                <strong>{item.credits} {t('credits')}</strong>
-                                                <span style={{ marginLeft: 6, color: '#666', fontSize: 12 }}>{item.percent}%</span>
-                                                {item.min_percent > 0 && <div style={{ fontSize: 11, color: item.percent + 0.01 >= item.min_percent ? '#2e7d32' : '#c62828' }}>{t('minimum')}: {item.min_percent}%</div>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {currentPlan.epvo_plan_quality && (
-                                    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f5fbff', border: '1px solid #d7ecfb' }}>
-                                        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                                            <strong>{localText('Дисциплины плана из ЕПВО', 'Жоспардағы ЕПВО пәндері', 'Plan courses from EPVO')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
-                                            <span style={{ color: '#566' }}>
-                                                {localText('типовых дисциплин', 'типтік пәндер', 'typical courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
-                                            </span>
-                                            <span style={{ color: '#566' }}>
-                                                {localText('экспертных связей', 'сараптамалық байланыстар', 'expert links')}: {currentPlan.epvo_plan_quality.expert_links}
-                                            </span>
-                                            </div>
-                                            <Link to={`/projects/${id}/epvo`} className="btn btn-secondary" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                                                {localText('Полный анализ ЕПВО', 'ЕПВО толық талдауы', 'Full EPVO analysis')}
-                                            </Link>
-                                        </div>
-                                    </div>
-                                )}
-                                <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f8fbff', border: '1px solid #dce9f7' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                                        <div>
-                                            <strong>{localText('Источники покрытия LO', 'LO қамту көздері', 'LO coverage sources')}</strong>
-                                            <div style={{ fontSize: 12, color: '#566', marginTop: 2 }}>
-                                                {localText('Показывает, какие результаты закрыты реальными дисциплинами, а какие только bridge-модулями.', 'Қай нәтижелер нақты пәндермен, қайсысы bridge-модульдермен жабылғанын көрсетеді.', 'Shows which outcomes are covered by real courses and which only by bridge modules.')}
-                                            </div>
-                                        </div>
-                                        <button className="btn btn-secondary" onClick={loadLoCoverageSources} disabled={loadingLoCoverageSources}>
-                                            {loadingLoCoverageSources ? localText('Загрузка…', 'Жүктеу…', 'Loading…') : localText('Показать LO-источники', 'LO көздерін көрсету', 'Show LO sources')}
-                                        </button>
-                                    </div>
-                                    {loCoverageSources?.variant === activeVariant && (
-                                        <div style={{ marginTop: 10 }}>
-                                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
-                                                <span>{localText('Всего LO', 'Барлық LO', 'Total LOs')}: <b>{loCoverageSources.summary?.los || 0}</b></span>
-                                                <span style={{ color: '#2e7d32' }}>{localText('реальные дисциплины', 'нақты пәндер', 'real courses')}: <b>{loCoverageSources.summary?.real_confirmed || 0}</b></span>
-                                                <span style={{ color: '#8a5a00' }}>bridge: <b>{loCoverageSources.summary?.bridge_supported || 0}</b></span>
-                                                <span style={{ color: '#c62828' }}>{localText('слабые', 'әлсіз', 'weak')}: <b>{loCoverageSources.summary?.weak || 0}</b></span>
-                                            </div>
-                                            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #dfeaf6' }}>
-                                                <div style={{ fontWeight: 700, marginBottom: 6, color: '#17233b' }}>
-                                                    {localText('\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f \u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0445 \u043f\u043e\u043a\u0440\u044b\u0432\u0430\u044e\u0442', '\u041e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u043b\u0435\u0440\u0456 \u0436\u04d9\u043d\u0435 \u043e\u043b\u0430\u0440\u0434\u044b \u049b\u0430\u043c\u0442\u0438\u0442\u044b\u043d \u043f\u04d9\u043d\u0434\u0435\u0440', 'Learning outcomes and covering courses')}
-                                                </div>
-                                                <div style={{ fontSize: 12, color: '#566', marginBottom: 8 }}>
-                                                    {localText('\u041f\u043e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0433\u0430\u043b\u043e\u0447\u043a\u0443 \u043d\u0430\u043f\u0440\u043e\u0442\u0438\u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430 \u043e\u0431\u0443\u0447\u0435\u043d\u0438\u044f, \u0447\u0442\u043e\u0431\u044b \u0443\u0432\u0438\u0434\u0435\u0442\u044c \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u043f\u043b\u0430\u043d\u0430, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044e\u0442 \u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0438\u0436\u0435\u043d\u0438\u0435.', '\u041e\u049b\u0443 \u043d\u04d9\u0442\u0438\u0436\u0435\u0441\u0456\u043d\u0456\u04a3 \u049b\u0430\u0441\u044b\u043d\u0430 \u0431\u0435\u043b\u0433\u0456 \u049b\u043e\u0439\u0441\u0430\u04a3\u044b\u0437, \u043e\u043d\u044b \u0440\u0430\u0441\u0442\u0430\u0439\u0442\u044b\u043d \u0436\u043e\u0441\u043f\u0430\u0440 \u043f\u04d9\u043d\u0434\u0435\u0440\u0456 \u043a\u04e9\u0440\u0441\u0435\u0442\u0456\u043b\u0435\u0434\u0456.', 'Tick a learning outcome to see the plan courses that support it.')}
-                                                </div>
-                                                {false && <div style={{ display: 'grid', gap: 7 }}>
-                                                    {(loCoverageSources.items || []).map(row => {
-                                                        const loKey = `${activeVariant}:${row.lo_code}`
-                                                        const checked = Boolean(expandedLoCourses[loKey])
-                                                        const real = row.real_sources || []
-                                                        const bridges = row.bridge_sources || []
-                                                        return <div key={`lo-course-map-${row.lo_code}`} style={{ padding: '8px 10px', borderRadius: 8, background: checked ? '#f8fbff' : '#fbfcfe', border: '1px solid #e4edf7' }}>
-                                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={checked}
-                                                                    onChange={() => setExpandedLoCourses(current => ({ ...current, [loKey]: !current[loKey] }))}
-                                                                    style={{ marginTop: 3 }}
-                                                                />
-                                                                <span>
-                                                                    <strong>{row.lo_code}</strong> ? {Math.round((row.coverage || 0) * 100)}% ? {row.status === 'real_confirmed' ? localText('\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u043c\u0438 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u0430\u043c\u0438', '\u043d\u0430\u049b\u0442\u044b \u043f\u04d9\u043d\u0434\u0435\u0440\u043c\u0435\u043d \u0440\u0430\u0441\u0442\u0430\u043b\u0493\u0430\u043d', 'confirmed by real courses') : row.status === 'bridge_supported' ? localText('\u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0430\u043d\u043e bridge-\u043c\u043e\u0434\u0443\u043b\u0435\u043c', 'bridge-\u043c\u043e\u0434\u0443\u043b\u044c\u043c\u0435\u043d \u049b\u043e\u043b\u0434\u0430\u0443 \u0442\u0430\u043f\u049b\u0430\u043d', 'supported by a bridge module') : localText('\u043d\u0443\u0436\u043d\u043e \u0443\u0441\u0438\u043b\u0438\u0442\u044c', '\u043a\u04af\u0448\u0435\u0439\u0442\u0443 \u049b\u0430\u0436\u0435\u0442', 'needs strengthening')}
-                                                                    <span style={{ display: 'block', marginTop: 2, color: '#667085', fontSize: 12 }}>{row.lo_text}</span>
-                                                                </span>
-                                                            </label>
-                                                            {checked && <div style={{ marginTop: 8, paddingLeft: 25, display: 'grid', gap: 5, fontSize: 12 }}>
-                                                                {real.length > 0 && real.map(src => (
-                                                                    <div key={`lo-real-${row.lo_code}-${src.course_id}`} style={{ color: '#1b5e20' }}>
-                                                                        ? {src.title} ? {src.credits} {t('credits')} ? AI {Math.round((src.score || 0) * 100)}% ? EPVO {Math.round((src.expert_score || 0) * 100)}%
-                                                                    </div>
-                                                                ))}
-                                                                {bridges.length > 0 && bridges.map(src => (
-                                                                    <div key={`lo-bridge-${row.lo_code}-${src.bridge_id || src.title}`} style={{ color: '#8a5a00' }}>
-                                                                        ? bridge: {src.title} ? {src.credits} {t('credits')} ? {t('semester')} {src.semester}
-                                                                    </div>
-                                                                ))}
-                                                                {real.length === 0 && bridges.length === 0 && <div style={{ color: '#b71c1c' }}>
-                                                                    {localText('\u0412 \u0442\u0435\u043a\u0443\u0449\u0435\u043c \u043f\u043b\u0430\u043d\u0435 \u043d\u0435\u0442 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0443\u0432\u0435\u0440\u0435\u043d\u043d\u043e \u043f\u043e\u043a\u0440\u044b\u0432\u0430\u044e\u0442 \u044d\u0442\u043e\u0442 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442.', '\u0410\u0493\u044b\u043c\u0434\u0430\u0493\u044b \u0436\u043e\u0441\u043f\u0430\u0440\u0434\u0430 \u0431\u04b1\u043b \u043d\u04d9\u0442\u0438\u0436\u0435\u043d\u0456 \u0441\u0435\u043d\u0456\u043c\u0434\u0456 \u049b\u0430\u043c\u0442\u0438\u0442\u044b\u043d \u043f\u04d9\u043d\u0434\u0435\u0440 \u0436\u043e\u049b.', 'No courses in the current plan confidently cover this outcome.')}
-                                                                </div>}
-                                                            </div>}
-                                                        </div>
-                                                    })}
-                                                </div>}
-                                            </div>
-                                            <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
-                                                {(loCoverageSources.items || []).map(row => (
-                                                    <details key={row.lo_code} style={{ padding: 8, borderRadius: 7, background: '#fff', border: '1px solid #e2edf7' }}>
-                                                        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
-                                                            {row.lo_code}: {Math.round((row.coverage || 0) * 100)}%
-                                                            <span style={{
-                                                                marginLeft: 8,
-                                                                padding: '2px 7px',
-                                                                borderRadius: 999,
-                                                                fontSize: 11,
-                                                                background: row.status === 'real_confirmed' ? '#e8f5e9' : row.status === 'bridge_supported' ? '#fff8e1' : '#ffebee',
-                                                                color: row.status === 'real_confirmed' ? '#1b5e20' : row.status === 'bridge_supported' ? '#8a5a00' : '#b71c1c'
-                                                            }}>
-                                                                {row.status === 'real_confirmed' ? localText('реальная дисциплина', 'нақты пән', 'real course') : row.status === 'bridge_supported' ? 'bridge' : localText('слабое покрытие', 'әлсіз қамту', 'weak')}
-                                                            </span>
-                                                        </summary>
-                                                        <div style={{ marginTop: 6, fontSize: 12, color: '#455' }}>{row.lo_text}</div>
-                                                        <div style={{ marginTop: 5, padding: '6px 8px', borderRadius: 6, background: row.coverage_kind === 'bridge_target_assumption' ? '#fff8e1' : '#f5f8fb', fontSize: 11, color: '#5d6470' }}>
-                                                            {row.coverage_explanation || (row.status === 'bridge_supported'
-                                                                ? localText('75% — служебная оценка проектного bridge, а не экспертная оценка реальной дисциплины ЕПВО.', '75% — жобалық bridge қызметтік бағасы, нақты ЕПВО пәнінің сараптамалық бағасы емес.', '75% is a planning assumption for a proposed bridge, not an expert EPVO course score.')
-                                                                : '')}
-                                                        </div>
-                                                        <div style={{ marginTop: 8, display: 'grid', gap: 4, fontSize: 12 }}>
-                                                            {(row.real_sources || []).slice(0, 3).map(src => (
-                                                                <div key={`real-${row.lo_code}-${src.course_id}`}>✓ {src.title} · {src.credits} {t('credits')} · AI {Math.round((src.score || 0) * 100)}% · EPVO {Math.round((src.expert_score || 0) * 100)}%</div>
-                                                            ))}
-                                                            {(row.bridge_sources || []).slice(0, 3).map(src => (
-                                                                <div key={`bridge-${row.lo_code}-${src.bridge_id}`} style={{ color: '#8a5a00' }}>
-                                                                    ↳ bridge в плане: {src.title} · {src.credits} {t('credits')} · {t('semester')} {src.semester}
-                                                                    <button className="btn btn-secondary" style={{ marginLeft: 7, padding: '3px 7px', fontSize: 10 }} onClick={() => document.querySelector(`[data-plan-semester="${src.semester}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                                                                        {localText('Показать в плане', 'Жоспарда көрсету', 'Show in plan')}
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </details>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                {currentPlan.suspicious_courses?.length > 0 && (
-                                    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082' }}>
-                                        <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <strong>{localText('Сомнительные дисциплины', 'Күмәнді пәндер', 'Suspicious courses')}: {currentPlan.suspicious_courses.length}</strong>
-                                            <button
-                                                className="btn btn-secondary"
-                                                style={{ padding: '5px 9px', fontSize: 11, borderColor: '#c17b00' }}
-                                                disabled={loadingCourseReplacement === 'all'}
-                                                onClick={loadAllVisibleCourseReplacements}
-                                            >
-                                                {loadingCourseReplacement === 'all'
-                                                    ? localText('Ищем замены…', 'Ауыстырулар ізделуде…', 'Searching replacements…')
-                                                    : localText('Подобрать замены для всех видимых', 'Көрінетіндердің бәріне ауыстыру табу', 'Find replacements for all visible')}
-                                            </button>
-                                        </div>
-                                        <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                                            {currentPlan.suspicious_courses.slice(0, 6).map((row, idx) => (
-                                                <div key={`${row.course_id}-${idx}`} style={{ fontSize: 12, color: '#6d4c41' }}>
-                                                    <strong>{row.title}</strong> · {t('semester')} {row.semester} · {Math.round((row.max_score || 0) * 100)}%
-                                                    <span style={{ marginLeft: 6 }}>
-                                                        {row.reasons?.map(reason => localText(
-                                                            reason === 'wrong_education_level' ? 'не соответствует уровню образования' : reason === 'not_core_for_program' ? 'не ядро программы' : reason === 'weak_lo_evidence' ? 'слабое LO-доказательство' : 'слишком рано',
-                                                            reason === 'wrong_education_level' ? 'білім деңгейіне сәйкес емес' : reason === 'not_core_for_program' ? 'бағдарлама өзегі емес' : reason === 'weak_lo_evidence' ? 'LO дәлелі әлсіз' : 'тым ерте',
-                                                            reason === 'wrong_education_level' ? 'wrong degree level' : reason === 'not_core_for_program' ? 'not programme core' : reason === 'weak_lo_evidence' ? 'weak LO evidence' : 'too early',
-                                                        )).join('; ')}
-                                                    </span>
-                                                    {row.top_lo_code && <div style={{ marginTop: 4, color: '#5d6470' }} title={row.top_lo_text || row.top_lo_code}>
-                                                        {localText('Лучшая связь', 'Ең жақсы байланыс', 'Best link')}: {row.top_lo_code} · {Math.round((row.max_score || 0) * 100)}%
-                                                    </div>}
-                                                    {row.reason_details?.length > 0 && (
-                                                        <div style={{ marginTop: 4, color: '#6d4c41', lineHeight: 1.35 }}>
-                                                            {row.reason_details.map((reason, reasonIndex) => (
-                                                                <div key={reasonIndex}>• {reason}</div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {row.recommendation && (
-                                                        <div style={{ marginTop: 4, color: '#39704c', lineHeight: 1.35 }}>
-                                                            {row.recommendation}
-                                                        </div>
-                                                    )}
-                                                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 6 }}>
-                                                        {row.top_lo_id && <button
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '5px 8px', fontSize: 11 }}
-                                                            disabled={matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'saving'}
-                                                            onClick={() => handleMatchFeedback(row.course_id, row.top_lo_id, 'confirmed')}
-                                                        >
-                                                            {matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'confirmed' ? '✓ ' : ''}
-                                                            {localText('Подтвердить связь', 'Байланысты растау', 'Confirm link')}
-                                                        </button>}
-                                                        <button
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '5px 8px', fontSize: 11, borderColor: '#2e7d32', color: '#2e7d32' }}
-                                                            onClick={() => confirmSuspiciousCourse(row.course_id, row.title)}
-                                                        >
-                                                            {localText('Оставить в плане', 'Жоспарда қалдыру', 'Keep in plan')}
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '5px 8px', fontSize: 11, borderColor: '#c17b00' }}
-                                                            onClick={() => toggleCourseExclusion(row.course_id, row.title)}
-                                                        >
-                                                            {excludedCourses[row.course_id]
-                                                                ? localText('✓ Заменить при перегенерации', '✓ Қайта құруда ауыстыру', '✓ Replace on regeneration')
-                                                                : localText('Отметить на замену', 'Ауыстыруға белгілеу', 'Mark for replacement')}
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-primary"
-                                                            style={{ padding: '5px 8px', fontSize: 11 }}
-                                                            disabled={loadingCourseReplacement === row.course_id}
-                                                            onClick={() => loadCourseReplacements(row.course_id)}
-                                                        >
-                                                            {loadingCourseReplacement === row.course_id
-                                                                ? localText('Поиск…', 'Іздеу…', 'Searching…')
-                                                                : localText('Подобрать 3 замены', '3 ауыстыруды таңдау', 'Find 3 replacements')}
-                                                        </button>
-                                                    </div>
-                                                    {courseReplacementPreviews[row.course_id] && <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                                                        {courseReplacementPreviews[row.course_id].elapsed_seconds !== undefined && (
-                                                            <div style={{ color: '#6d4c41', fontSize: 12 }}>
-                                                                {localText(`Подбор замен выполнен за ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`, `Ауыстыруды таңдау ${courseReplacementPreviews[row.course_id].elapsed_seconds}s ішінде орындалды.`, `Replacement preview completed in ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`)}
-                                                            </div>
-                                                        )}
-                                                        {(courseReplacementPreviews[row.course_id].candidates || []).length ? (courseReplacementPreviews[row.course_id].candidates || []).map(candidate => (
-                                                            <div key={candidate.course_id} style={{ padding: 8, borderRadius: 7, background: '#fff', border: '1px solid #ead49e' }}>
-                                                                <strong>{localize(candidate.title_translations || candidate.title)}</strong> · {candidate.credits} {t('credits')}
-                                                                <div style={{ color: '#667', marginTop: 3 }}>AI {Math.round((candidate.model_score || 0) * 100)}% · ЕПВО {Math.round((candidate.expert_score || 0) * 100)}% · LO {candidate.covered_lo_count}</div>
-                                                                {candidate.covered_los?.length > 0 && <div style={{ color: '#46566a', marginTop: 3 }}>
-                                                                    {localText('Профессиональные LO', 'Кәсіби ОН', 'Professional LOs')}: {candidate.covered_los.join(', ')}
-                                                                    {candidate.recommended_semester ? ` · ${localText('рекомендуемый семестр', 'ұсынылатын семестр', 'recommended semester')} ${candidate.recommended_semester}` : ''}
-                                                                </div>}
-                                                                {candidate.selection_reason && <div style={{ color: '#39704c', marginTop: 3 }}>{localize(candidate.selection_reason_translations || candidate.selection_reason)}</div>}
-                                                                {candidate.description && <div style={{ color: '#667', marginTop: 3 }}>{candidate.description}</div>}
-                                                                <button className="btn btn-primary" style={{ marginTop: 6, padding: '5px 8px', fontSize: 11 }} disabled={Boolean(applyingCourseReplacement)} onClick={() => applyCourseReplacement(row.course_id, candidate.course_id)}>
-                                                                    {applyingCourseReplacement === `${row.course_id}:${candidate.course_id}` ? localText('Замена…', 'Ауыстыру…', 'Replacing…') : localText('Подтвердить замену', 'Ауыстыруды растау', 'Confirm replacement')}
-                                                                </button>
-                                                            </div>
-                                                        )) : <div style={{ color: '#8a5a00' }}>{courseReplacementPreviews[row.course_id].no_candidate_reason || localText('Подходящей равноценной замены пока нет.', 'Сәйкес балама әлі жоқ.', 'No equivalent replacement found yet.')}</div>}
-                                                    </div>}
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div style={{ marginTop: 6, fontSize: 12, color: '#795548' }}>
-                                            {localText('Система не блокирует просмотр, но такие дисциплины нужно заменить или подтвердить экспертом.', 'Жүйе қарауды бұғаттамайды, бірақ мұндай пәндерді ауыстыру немесе сарапшымен растау керек.', 'The system does not block viewing, but these courses should be replaced or expert-confirmed.')}
-                                        </div>
-                                    </div>
-                                )}
-                            </CompactSection>
-                        )}
+                        <PlanQualityPanel
+                            activeVariant={activeVariant}
+                            aiBridgeCandidates={aiBridgeCandidates}
+                            applyAllBridgeReplacements={applyAllBridgeReplacements}
+                            applyBridgeReplacement={applyBridgeReplacement}
+                            applyCourseReplacement={applyCourseReplacement}
+                            applyingCourseReplacement={applyingCourseReplacement}
+                            applyingQuality={applyingQuality}
+                            bridgePreview={bridgePreview}
+                            building={building}
+                            compactToggleLabel={compactToggleLabel}
+                            confirmAiBridgeCandidate={confirmAiBridgeCandidate}
+                            confirmSuspiciousCourse={confirmSuspiciousCourse}
+                            confirmingAiBridge={confirmingAiBridge}
+                            courseReplacementPreviews={courseReplacementPreviews}
+                            currentPlan={currentPlan}
+                            currentPlanHasHardViolations={currentPlanHasHardViolations}
+                            excludedCourses={excludedCourses}
+                            expandedLoCourses={expandedLoCourses}
+                            handleApplyQualityImprovements={handleApplyQualityImprovements}
+                            handleBuild={handleBuild}
+                            handleMatchFeedback={handleMatchFeedback}
+                            id={id}
+                            loCoverageSources={loCoverageSources}
+                            loadAiBridgeCandidates={loadAiBridgeCandidates}
+                            loadAllVisibleCourseReplacements={loadAllVisibleCourseReplacements}
+                            loadBridgePreview={loadBridgePreview}
+                            loadCourseReplacements={loadCourseReplacements}
+                            loadLoCoverageSources={loadLoCoverageSources}
+                            loadingAiBridge={loadingAiBridge}
+                            loadingBridgePreview={loadingBridgePreview}
+                            loadingCourseReplacement={loadingCourseReplacement}
+                            loadingLoCoverageSources={loadingLoCoverageSources}
+                            localText={localText}
+                            localize={localize}
+                            localizeDomain={localizeDomain}
+                            localizedCourseField={localizedCourseField}
+                            matchFeedbackState={matchFeedbackState}
+                            replacingAllBridges={replacingAllBridges}
+                            replacingBridge={replacingBridge}
+                            requiresRegeneration={requiresRegeneration}
+                            selectMediumBridgeReplacements={selectMediumBridgeReplacements}
+                            selectedBridgeReplacements={selectedBridgeReplacements}
+                            setExpandedLoCourses={setExpandedLoCourses}
+                            setSelectedBridgeReplacements={setSelectedBridgeReplacements}
+                            t={t}
+                            toggleCourseExclusion={toggleCourseExclusion}
+                        />
                         {currentPlan?.metrics?.verification?.goso_compliance?.applicable && (() => {
                             const goso = currentPlan.metrics.verification.goso_compliance
                             return <CompactSection title={localText('\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0413\u041e\u0421\u041e \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0438 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d', '\u049a\u0430\u0437\u0430\u049b\u0441\u0442\u0430\u043d \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0441\u044b\u043d\u044b\u04a3 \u041c\u0416\u041c\u0411\u0421 \u0441\u04d9\u0439\u043a\u0435\u0441\u0442\u0456\u0433\u0456', 'Kazakhstan state-standard compliance')} toggleLabel={compactToggleLabel} accent={goso.compliant ? '#2e7d32' : '#c62828'} defaultOpen={false}>
