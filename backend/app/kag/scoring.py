@@ -21,6 +21,12 @@ import math
 
 
 LARGE_CATALOG_THRESHOLD = 3000
+# A large EPVO catalogue is scored through a lexical frontier.  In an
+# interdisciplinary programme each selected scope needs its own sufficiently
+# wide frontier; the old 30-row secondary frontier could hide valid medical or
+# agricultural courses behind the much larger ICT catalogue.  Keep this
+# bounded so generation remains finite while preserving both domains.
+INTERDISCIPLINARY_SCOPE_LIMIT = 80
 
 
 def _expert_level_score(level: str | None, strength: float | None) -> float:
@@ -484,7 +490,10 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             # stratification, a large primary catalogue can occupy all lexical
             # top-K positions and the second interdisciplinary area disappears.
             by_course_id = {int(row["course_id"]): row for row in top_courses}
-            per_scope_limit = max(30, settings.TOP_K_RETRIEVAL // max(1, len(scoped_course_sets)))
+            per_scope_limit = max(
+                INTERDISCIPLINARY_SCOPE_LIMIT if len(scoped_course_sets) > 1 else 30,
+                settings.TOP_K_RETRIEVAL // max(1, len(scoped_course_sets)),
+            )
             for scoped_courses in scoped_course_sets:
                 for row in _lightweight_candidate_courses(
                     lo, scoped_courses, limit=per_scope_limit, localizations=localizations

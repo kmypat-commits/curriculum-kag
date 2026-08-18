@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from check_text_encoding import looks_like_mojibake
 from app.kag.bridge_generator import call_llm, parse_llm_response
+from app.kag.scoring import INTERDISCIPLINARY_SCOPE_LIMIT
 from app.planner.scheduler import (
     _complexity_min_semester,
     _credible_professional_lo_by_course,
@@ -65,6 +66,12 @@ def test_epvo_domain_aliases_match_localized_labels_without_cross_domain_leakage
     assert domain_label_matches("Healthcare", ["6B101 Здравоохранение"])
     assert domain_label_matches("Agriculture", ["Агрономия"])
     assert not domain_label_matches("Finance", ["Здравоохранение"])
+
+
+def test_interdisciplinary_scoring_keeps_a_wide_secondary_scope_frontier():
+    # The secondary EPVO direction must not disappear behind the much larger
+    # primary catalogue in large-catalogue mode.
+    assert INTERDISCIPLINARY_SCOPE_LIMIT >= 80
 
 
 def test_research_methods_are_early_but_not_locked_to_semester_three_postgraduate():
