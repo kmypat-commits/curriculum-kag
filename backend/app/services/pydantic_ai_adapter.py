@@ -39,7 +39,7 @@ def _run(prompt: str, output_type: Type[Any], system_prompt: str) -> Any | None:
         except TypeError:  # compatibility with older PydanticAI releases
             result = agent.run_sync(prompt)
         return getattr(result, "output", getattr(result, "data", None))
-    except Exception:
+    except (OSError, RuntimeError, TypeError, ValueError):
         # Optional orchestration must never turn a working endpoint into 500.
         return None
 
@@ -55,7 +55,7 @@ def run_suggestions(prompt: str, required_terms: Iterable[str] = ()) -> dict | N
     data = output.model_dump() if hasattr(output, "model_dump") else dict(output)
     try:
         return validate_suggestions(data, required_terms=required_terms).model_dump()
-    except Exception:
+    except (TypeError, ValueError, KeyError):
         return None
 
 
@@ -70,5 +70,5 @@ def run_achievability(prompt: str) -> dict | None:
     data = output.model_dump() if hasattr(output, "model_dump") else dict(output)
     try:
         return validate_achievability(data).model_dump()
-    except Exception:
+    except (TypeError, ValueError, KeyError):
         return None

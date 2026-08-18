@@ -2,6 +2,8 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 
 TRANSLATIONS_FILE = Path(__file__).resolve().parents[2] / "data" / "course_translations.json"
 
@@ -133,7 +135,7 @@ def course_localization_payload(db, course_id):
                 status = "verified"
             elif not status:
                 status = row.status
-    except Exception:
+    except (ImportError, SQLAlchemyError, AttributeError):
         pass
     if len(titles) < 3 and _legacy_fallback_enabled():
         legacy_titles = course_translations(course_id, "title")
@@ -177,7 +179,7 @@ def course_localization_map(db, course_ids, include_descriptions=True):
                 payload["translation_status"] = "verified"
             elif not payload.get("translation_status"):
                 payload["translation_status"] = row.status
-    except Exception:
+    except (ImportError, SQLAlchemyError, AttributeError):
         pass
     missing_ids = [
         course_id for course_id, payload in result.items()
@@ -231,7 +233,7 @@ def course_localization_map(db, course_ids, include_descriptions=True):
                 if legacy and _legacy_fallback_enabled():
                     for language, title in legacy.items():
                         payload["title_translations"].setdefault(language, title)
-    except Exception:
+    except (ImportError, SQLAlchemyError, AttributeError):
         # Localization must never make the plan endpoint unavailable. The
         # database/local JSON values collected above remain valid fallbacks.
         pass
@@ -259,7 +261,7 @@ def _legacy_fallback_enabled():
     try:
         from app.config import settings
         return bool(settings.LEGACY_TRANSLATIONS_FALLBACK)
-    except Exception:
+    except (ImportError, AttributeError):
         return False
 
 
