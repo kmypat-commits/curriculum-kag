@@ -267,7 +267,11 @@ def _limit_general_course_items(
     for index, item in enumerate(normalized):
         course_id = item.get("course_id")
         course = courses.get(course_id)
-        if course and _course_curriculum_role(course, project_domains) == "general":
+        if (
+            course
+            and not item.get("epvo_exact_scope")
+            and _course_curriculum_role(course, project_domains) == "general"
+        ):
             credits = int(item.get("credits") or course.credits or 0)
             general_credits += credits
             if course_id not in protected_ids:

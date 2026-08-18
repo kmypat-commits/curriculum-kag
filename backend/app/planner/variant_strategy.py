@@ -190,15 +190,21 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 return False
         if cyber_forensics_program:
             return _course_curriculum_role(course, project_domains) == "core"
-        if professional_scope and _course_curriculum_role(course, project_domains) == "general":
-            evidence = aggregates.get(course.id, {})
+            if professional_scope and _course_curriculum_role(course, project_domains) == "general":
+                evidence = aggregates.get(course.id, {})
             # In interdisciplinary professional programmes generic catalogue
             # items (languages, history, entrepreneurship, etc.) must not fill
             # the curriculum unless they have at least a weak explicit LO link.
             # Otherwise the fallback stage can reach the credit target with
             # courses that are formally in an EPVO group but pedagogically
             # unrelated to the programme outcomes.
-            if float(evidence.get("max") or 0.0) < min_general_lo_evidence:
+            if (
+                float(evidence.get("max") or 0.0) < min_general_lo_evidence
+                and not (
+                    scope_rank(course) >= 3
+                    and bool(evidence.get("professional_lo_codes"))
+                )
+            ):
                 return False
         return True
 
@@ -814,10 +820,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         evidence = aggregates.get(course.id, {})
         return (
             not has_foreign_scope_conflict(course)
-            and
-            scope_rank(course) >= 3
+            and scope_rank(course) >= 3
             and bool(evidence.get("professional_lo_codes"))
-            and float(evidence.get("max") or 0.0) >= 0.5
         )
 
     def admit_real_courses(items: List[Dict]) -> List[Dict]:
@@ -1087,7 +1091,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 return []
             result.extend(prerequisite_bundle)
         if cid not in selected and all(item["course_id"] != cid for item in result):
-            c = courses[cid]; result.append({"course_id": c.id, "title": c.title, "domain": c.domain, "credits": c.credits or 5, "recommended_semester": c.recommended_semester, "prerequisites": prereq_ids_by_course.get(c.id, []), "type": c.cycle_component or "mandatory"})
+            c = courses[cid]; result.append({"course_id": c.id, "title": c.title, "domain": c.domain, "credits": c.credits or 5, "recommended_semester": c.recommended_semester, "prerequisites": prereq_ids_by_course.get(c.id, []), "type": c.cycle_component or "mandatory", "epvo_exact_scope": scope_rank(c) >= 3})
         return result
     total = 0
     foundation_target = max(0, int(constraints.get("max_credits_per_semester", target / max(num_semesters, 1))) - 3)
@@ -1186,6 +1190,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 "recommended_semester": course.recommended_semester,
                 "prerequisites": prereq_ids_by_course.get(course.id, []),
                 "type": course.cycle_component or "elective",
+                "epvo_exact_scope": scope_rank(course) >= 3,
                 "selection_method": "real_epvo_credit_top_up",
             })
             selected_ids.add(course.id)
