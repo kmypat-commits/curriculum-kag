@@ -70,8 +70,8 @@ from app.planner.semester_repair import (
     _repair_final_admission_misplacements,
     _repair_final_domain_quotas,
     _repair_semester_appropriateness,
-    schedule_courses,
 )
+from app.planner.course_scheduling import schedule_courses
 from app.planner.scheduler_domain_rules import (
     course_domain_matches as _course_domain_matches,
     has_foreign_professional_title as _has_foreign_professional_title,
