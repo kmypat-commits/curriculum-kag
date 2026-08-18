@@ -56,6 +56,7 @@ from app.planner.course_selection import (
     select_courses_for_variant,
 )
 from app.planner.bridge_policy import bridge_module_limit
+from app.planner.domain_evidence import domain_label_matches
 from app.planner.credit_balancing import (
     _rebalance_semester_load,
     _relocate_bounded_bridges,
@@ -302,7 +303,10 @@ def build_curriculum_plan(
             return False
         if not _education_level_course_allowed(course, constraints.get("education_level")):
             return False
-        if not _course_domain_matches(course, project_domains):
+        if not (
+            _course_domain_matches(course, project_domains)
+            or domain_label_matches(course.domain, project_domains)
+        ):
             return False
         if cyber_forensics_program:
             return _course_curriculum_role(course, project_domains) == "core"
@@ -740,7 +744,7 @@ def build_curriculum_plan(
             item_has_project_domain = any(
                 domain and (domain in item_domain or item_domain in domain)
                 for domain in project_domains
-            )
+            ) or domain_label_matches(item_domain, project_domains)
             # The selector rewrites canonical EPVO labels to the exact
             # project-specific direction. Trust that evidence here; canonical
             # Course.domain may come from the first programme that used the

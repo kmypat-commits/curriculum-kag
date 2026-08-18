@@ -331,6 +331,17 @@ def test_ict_competency_audit_detects_missing_security_block():
     assert audit["missing"] == ["information_security"]
 
 
+def test_ict_competency_audit_accepts_automated_information_systems():
+    courses = [
+        SimpleNamespace(title="Автоматизированные системы управления"),
+    ]
+    audit = _ict_competency_audit(
+        courses,
+        {"education_level": "bachelor", "direction_code": "6B061", "group_code": "B057"},
+    )
+    assert "systems_and_networks" not in audit["missing"]
+
+
 def test_final_admission_evidence_excludes_weak_and_goso_only_matches():
     version = SimpleNamespace(
         id=7,

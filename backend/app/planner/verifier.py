@@ -120,7 +120,16 @@ def _ict_competency_requirements(constraints: Dict) -> Dict:
         return {
             "programming_and_algorithms": (("программир",), ("алгоритм",)),
             "data_and_databases": (("баз", "данн"), ("анализ", "данн"), ("database",)),
-            "systems_and_networks": (("операцион", "систем"), ("компьютер", "сет"), ("системн", "программ")),
+            "systems_and_networks": (
+                ("операцион", "систем"),
+                ("компьютер", "сет"),
+                ("системн", "программ"),
+                ("автоматизированн", "систем"),
+                ("информационн", "систем"),
+                ("систем", "управлен"),
+                ("information", "system"),
+                ("computer", "network"),
+            ),
             "information_security": (("безопас",), ("кибер",), ("security",)),
             "ai_and_analytics": (("искусствен", "интеллект"), ("машин", "обуч"), ("аналитик",)),
             "project_and_research": (("проект",), ("научн", "исслед"), ("academic writing",)),
