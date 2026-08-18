@@ -35,6 +35,10 @@ def main() -> None:
         "--no-backup", action="store_true",
         help="Audit the live database read-only without duplicating the large EPVO tables.",
     )
+    parser.add_argument(
+        "--reuse-backup", action="store_true",
+        help="Use an already copied curriculum_kag.db in --output; avoids a second 10+ GB copy.",
+    )
     parser.add_argument("--skip-quick-check", action="store_true")
     parser.add_argument("--skip-sha256", action="store_true")
     args = parser.parse_args()
@@ -43,7 +47,12 @@ def main() -> None:
     output.mkdir(parents=True, exist_ok=True)
     backup_db = output / "curriculum_kag.db"
 
-    if not args.no_backup:
+    if args.no_backup and args.reuse_backup:
+        raise SystemExit("--no-backup and --reuse-backup cannot be used together.")
+    if args.reuse_backup:
+        if not backup_db.exists():
+            raise SystemExit(f"No reusable backup found: {backup_db}")
+    elif not args.no_backup:
         with sqlite3.connect(SOURCE_DB) as source, sqlite3.connect(backup_db) as target:
             source.backup(target)
     audited_db = SOURCE_DB if args.no_backup else backup_db
@@ -101,6 +110,8 @@ def main() -> None:
                             if prerequisite in semester_by_course and semester_by_course[prerequisite] >= row["semester"]:
                                 prerequisite_violations.append([prerequisite, row["course_id"]])
                     metrics = parsed(plan["metrics_json"], {})
+                    verification = metrics.get("verification") or {}
+                    admission = metrics.get("course_admission") or {}
                     target = int(constraints.get("total_credits", 0) or 0)
                     total = sum(loads.values())
                     variants.append({
@@ -108,7 +119,12 @@ def main() -> None:
                         "credits": total, "credit_delta": total - target, "semester_loads": loads,
                         "duplicate_titles": len(titles) - len(set(titles)),
                         "prerequisite_violations": prerequisite_violations,
-                        "foreign_domain_courses": sorted(set(filter(None, foreign))),
+                        # Retained only as a legacy diagnostic. Course.domain can
+                        # reflect the first source programme, whereas the current
+                        # planner uses EPVO scope and admission evidence.
+                        "legacy_domain_title_mismatches": sorted(set(filter(None, foreign))),
+                        "domain_quota_violations": verification.get("domain_quota_violations") or [],
+                        "course_admission_passed": admission.get("passed"),
                         "lo_coverage_percentage": metrics.get("lo_coverage_percentage"),
                         "min_lo_coverage": metrics.get("min_lo_coverage"),
                         "feasible": (metrics.get("verification") or {}).get("feasible"),
@@ -134,7 +150,8 @@ def main() -> None:
             "projects_with_non_distinct_abc": sum(p["abc_distinct"] is False for p in projects),
             "plans_with_duplicates": sum(v["duplicate_titles"] > 0 for p in projects for v in p["variants"]),
             "plans_with_prerequisite_violations": sum(bool(v["prerequisite_violations"]) for p in projects for v in p["variants"]),
-            "plans_with_foreign_domains": sum(bool(v["foreign_domain_courses"]) for p in projects for v in p["variants"]),
+            "plans_with_domain_quota_violations": sum(bool(v["domain_quota_violations"]) for p in projects for v in p["variants"]),
+            "plans_without_admission_evidence": sum(v["course_admission_passed"] is not True for p in projects for v in p["variants"]),
         },
         "projects": projects,
     }

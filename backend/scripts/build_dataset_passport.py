@@ -1,9 +1,11 @@
 """Build a reproducible Dataset Passport and model benchmark summary."""
 import hashlib
 import json
-import sqlite3
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+from sqlalchemy import create_engine, text
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +27,30 @@ def read(path):
 
 
 def main():
-    manifest = read(LABELS / "manifest.json")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build a CEER Dataset Passport from the selected database.")
+    parser.add_argument(
+        "--database-url",
+        default=os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'backend' / 'curriculum_kag.db'}"),
+        help="SQLAlchemy URL; defaults to DATABASE_URL or the local SQLite rollback database.",
+    )
+    parser.add_argument(
+        "--labels-dir",
+        type=Path,
+        default=LABELS,
+        help="Frozen CEER JSONL export containing manifest.json and pair files.",
+    )
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    args = parser.parse_args()
+    labels_dir = args.labels_dir.resolve()
+    manifest_path = labels_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise SystemExit(
+            f"Frozen CEER export is required: {manifest_path}. "
+            "Pass --labels-dir with the archived or released CEER export; no passport was created."
+        )
+    manifest = read(manifest_path)
     benchmark_paths = {
         "sbert_finetuned_40k": RESULTS / "epvo-sbert-finetuned-40k-benchmark" / "metrics.json",
         "sbert_base": RESULTS / "epvo-sbert-benchmark" / "metrics.json",
@@ -49,9 +74,10 @@ def main():
             "mrr": ranking.get("mrr") if name == "sbert_finetuned_40k" else None,
             "ndcg_at_10": ranking.get("ndcg_at_10") if name == "sbert_finetuned_40k" else None,
         })
-    with sqlite3.connect(ROOT / "backend" / "curriculum_kag.db") as db:
+    engine = create_engine(args.database_url)
+    with engine.connect() as db:
         def count(table):
-            return db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            return int(db.execute(text(f"SELECT count(*) FROM {table}")).scalar_one())
         normalized = {
             "raw_programs": count("raw_epvo_programs"), "raw_disciplines": count("raw_epvo_disciplines"),
             "raw_learning_outcomes": count("raw_epvo_learning_outcomes"), "raw_expert_checks": count("raw_epvo_expert_checks"),
@@ -61,18 +87,24 @@ def main():
         }
     files = []
     for name in ("course_lo_pairs.jsonl", "programs.jsonl"):
-        path = LABELS / name
+        path = labels_dir / name
+        if not path.exists():
+            raise SystemExit(
+                f"Frozen CEER export is incomplete: {path}. No passport was created."
+            )
         files.append({"name": name, "bytes": path.stat().st_size, "sha256": sha256(path)})
     passport = {
-        "created_at": datetime.now(timezone.utc).isoformat(), "dataset": "EPVO expert discipline-LO links",
+        "created_at": datetime.now(timezone.utc).isoformat(), "dataset": "CEER graded discipline-LO evidence",
+        "database_dialect": engine.dialect.name,
         "seed": manifest.get("seed"), "counts": manifest.get("counts"), "normalized": normalized,
         "files": files, "split_policy": "program-level train/validation/test split from the frozen EPVO manifest",
         "benchmarks": benchmarks,
         "ranking_metrics_status": "measured" if ranking else "not_measured",
         "ranking_metrics_note": "Ranking metrics use a deterministic sample of frozen test programmes and are not inferred from classification metrics.",
     }
-    OUTPUT.write_text(json.dumps(passport, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"output": str(OUTPUT), "benchmarks": len(benchmarks), "files": len(files), **normalized}, ensure_ascii=False))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(passport, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({"output": str(args.output), "benchmarks": len(benchmarks), "files": len(files), **normalized}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

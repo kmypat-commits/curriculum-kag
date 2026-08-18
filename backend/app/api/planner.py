@@ -12,6 +12,7 @@ from app.api.planner_build import router as build_router
 from app.api.planner_coverage import router as coverage_router
 from app.api.planner_graph import router as graph_router
 from app.api.planner_replacements import router as replacements_router
+from app.api.planner_replacement_courses import router as course_replacements_router
 from app.api.planner_state import plan_build_status as _plan_build_status
 from app.api.planner_state import set_build_status as _set_build_status
 from app.api.planner_syllabus import router as syllabus_router
@@ -23,6 +24,7 @@ router.include_router(syllabus_router)
 router.include_router(build_router)
 router.include_router(coverage_router)
 router.include_router(replacements_router)
+router.include_router(course_replacements_router)
 
 
 __all__ = ["router", "_plan_build_status", "_set_build_status"]

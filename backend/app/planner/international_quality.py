@@ -9,6 +9,7 @@ from app.models.course import Course
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
+from app.planner.bridge_policy import bridge_module_limit
 
 
 def _is_kz_regulatory_course(course: Course) -> bool:
@@ -227,6 +228,13 @@ def evaluate_international_quality(
 
     relevant_ratio = len(relevance["relevant_ids"]) / max(len(courses), 1)
     domain_quota_violations = verification.get("domain_quota_violations") or []
+    bridge_limit = bridge_module_limit(project_version)
+    # A bridge is a controlled fallback, not a substitute for the repository.
+    # Keep the hard cap separately, but also lower the quality score when a
+    # plan consumes most of its bridge budget. Three of five slots is the
+    # maximum accepted without a penalty; four or five requires remediation.
+    bridge_quality_limit = min(bridge_limit, max(1, int(bridge_limit * 0.6))) if bridge_limit else 0
+    bridge_quality_passed = len(bridges) <= bridge_quality_limit
 
     checks = [
         _score_item(
@@ -276,6 +284,12 @@ def evaluate_international_quality(
             ),
             "Confirm or correct AI-proposed course–LO links to document the next improvement cycle.",
         ),
+        _score_item(
+            bridge_quality_passed,
+            "Bridge-module economy",
+            f"Bridge modules in plan: {len(bridges)}; quality allowance: {bridge_quality_limit} of hard limit {bridge_limit}.",
+            "Replace avoidable bridge modules with scoped EPVO disciplines or confirm why the bridge is indispensable.",
+        ),
     ]
 
     score = round(sum(item["score"] for item in checks) / len(checks) * 100, 1)
@@ -290,4 +304,10 @@ def evaluate_international_quality(
             "Tuning competences",
         ],
         "checks": checks,
+        "bridge_quality": {
+            "count": len(bridges),
+            "hard_limit": bridge_limit,
+            "quality_limit": bridge_quality_limit,
+            "penalty": max(0, len(bridges) - bridge_quality_limit),
+        },
     }

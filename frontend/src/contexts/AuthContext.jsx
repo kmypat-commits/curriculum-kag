@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
+import { useLanguage } from './LanguageContext'
 
 const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
+    const { t } = useLanguage()
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
 
@@ -81,7 +83,7 @@ export const AuthProvider = ({ children }) => {
     // restored and validated. Otherwise direct links can race the auth check
     // and issue their first API request without the Authorization header.
     if (loading) {
-        return <div style={{ padding: '40px', textAlign: 'center' }}>Загрузка...</div>
+        return <div style={{ padding: '40px', textAlign: 'center' }}>{t('loading')}</div>
     }
 
     return (

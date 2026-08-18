@@ -25,7 +25,7 @@ from app.config import settings
 from app.api import auth, projects, repository, kag, planner, export_api, epvo as epvo_api, git_versions
 from app.database import engine, Base
 # Import all models to register them with Base
-from app.models import user, project, course, plan, embedding, audit, bridge_module, syllabus, epvo
+from app.models import user, project, course, plan, embedding, audit, bridge_module, syllabus, epvo, plan_build_status
 
 logger = logging.getLogger("curriculum.performance")
 
@@ -48,8 +48,10 @@ class SlowRequestMiddleware(BaseHTTPMiddleware):
         response.headers["Server-Timing"] = f"app;dur={elapsed * 1000:.1f}"
         return response
 
-# Ensure all tables are created (required for SQLite if migrations aren't run)
-Base.metadata.create_all(bind=engine)
+# SQLite remains a local rollback/development mode. PostgreSQL schema changes
+# are applied only through Alembic revisions, never implicitly at API startup.
+if str(settings.DATABASE_URL).startswith("sqlite"):
+    Base.metadata.create_all(bind=engine)
 with engine.begin() as connection:
     connection.execute(text(
         "CREATE INDEX IF NOT EXISTS ix_epvo_disciplines_normalized_approved_course_id "

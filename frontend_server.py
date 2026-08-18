@@ -6,6 +6,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import unquote
 from urllib.request import Request, urlopen
 import mimetypes
+import socket
+import threading
 
 
 DIST = Path(__file__).resolve().parent / ".runtime" / "dist"
@@ -81,4 +83,25 @@ class Handler(BaseHTTPRequestHandler):
     do_DELETE = do_POST
 
 
-ThreadingHTTPServer(("127.0.0.1", 3001), Handler).serve_forever()
+class IPv6LoopbackHTTPServer(ThreadingHTTPServer):
+    """Serve localhost IPv6 without exposing the development proxy to LAN."""
+
+    address_family = socket.AF_INET6
+
+
+def serve() -> None:
+    """Serve both loopback families so ``localhost`` has no IPv6 fallback delay."""
+    ipv4_server = ThreadingHTTPServer(("127.0.0.1", 3001), Handler)
+    try:
+        ipv6_server = IPv6LoopbackHTTPServer(("::1", 3001), Handler)
+    except OSError:
+        # Some older Windows configurations disable the IPv6 loopback socket.
+        # IPv4 remains a fully functional, local-only fallback.
+        ipv6_server = None
+    if ipv6_server is not None:
+        threading.Thread(target=ipv6_server.serve_forever, daemon=True).start()
+    ipv4_server.serve_forever()
+
+
+if __name__ == "__main__":
+    serve()

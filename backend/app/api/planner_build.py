@@ -20,12 +20,53 @@ from app.planner.scheduler import build_curriculum_plan, calculate_plan_metrics
 from app.services.auth import get_current_user
 from app.services.plan_reporting import build_change_report as _build_change_report
 from app.services.plan_reporting import plan_snapshot as _plan_snapshot
-from app.api.planner_state import plan_build_status as _plan_build_status
-from app.api.planner_state import set_build_status as _set_build_status
+from app.api.planner_state import (
+    claim_build_status as _claim_build_status,
+    get_build_status as _get_build_status,
+    replace_build_status as _replace_build_status,
+    set_build_status as _set_build_status,
+)
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def must_reject_variant(verification: dict | None) -> bool:
+    """Return whether a generated variant is unsafe to persist.
+
+    This rule deliberately does not depend on the programme jurisdiction.
+    Regulatory components can explain an advisory warning, but they can never
+    make an infeasible plan, a hard violation, or an LO without a real-course
+    confirmation safe to replace the previously saved plan.
+    """
+    verification = verification or {}
+    quality_reasons = {
+        str(item.get("reason"))
+        for item in (verification.get("quality_violations") or [])
+        if isinstance(item, dict)
+    }
+    return bool(
+        not verification.get("feasible")
+        or int(verification.get("hard_violation_count") or 0) > 0
+        or "lo_without_real_course" in quality_reasons
+    )
+
+
+def activate_only_plan(plan_rows: list, active_plan_id: int | None):
+    """Mark exactly one plan active and return it.
+
+    Partial rebuilds retain non-requested B/C variants.  Their former active
+    flag must still be cleared when a newly built variant becomes active.
+    """
+    active_plan = None
+    for plan in plan_rows:
+        is_active = bool(active_plan_id is not None and plan.id == active_plan_id)
+        plan.is_active = 1 if is_active else 0
+        if is_active:
+            active_plan = plan
+    return active_plan
+
 
 @router.post("/{project_version_id}/apply-quality-improvements")
 async def apply_quality_improvements(
@@ -172,14 +213,10 @@ def build_plan(
     current_user: User = Depends(get_current_user)
 ):
     """Build all three curriculum plan variants"""
-    current = _plan_build_status.get(project_version_id, {})
-    if current.get("state") == "running":
-        raise HTTPException(status_code=409, detail="Построение вариантов уже выполняется")
     build_started = time.perf_counter()
     stage_started = build_started
     timings = {}
-    _plan_build_status[project_version_id] = {}
-    _set_build_status(
+    claimed = _claim_build_status(
         project_version_id,
         state="running",
         stage="matching",
@@ -188,6 +225,8 @@ def build_plan(
         elapsed_seconds=0,
         timings=timings,
     )
+    if claimed is None:
+        raise HTTPException(status_code=409, detail="Построение вариантов уже выполняется")
     try:
         from app.models.plan import Plan, PlanItem
         from app.kag.scoring import compute_all_matches
@@ -260,14 +299,17 @@ def build_plan(
             requested_variants = [item.strip().upper() for item in requested.split(",")]
         else:
             requested_variants = [str(item).strip().upper() for item in requested]
-        requested_variants = [item for item in requested_variants if item in {"A", "B", "C"}]
+        requested_variants = list(dict.fromkeys(
+            item for item in requested_variants if item in {"A", "B", "C"}
+        ))
         if not requested_variants:
             raise HTTPException(status_code=422, detail="Выберите хотя бы один вариант плана: A, B или C")
 
         variants = {}
         for variant_type in requested_variants:
             variant_started = time.perf_counter()
-            _plan_build_status[project_version_id].update(
+            _set_build_status(
+                project_version_id,
                 stage=f"variant_{variant_type}_start", progress={"A": 25, "B": 50, "C": 75}[variant_type]
             )
             # Every requested variant must pass through the selector.  Cloning
@@ -327,21 +369,10 @@ def build_plan(
             # Only hard feasibility violations may prevent replacing the old
             # plans; otherwise a valid plan could never be saved when one
             # advisory international-quality check is below its threshold.
-            jurisdiction = str((version.project.constraints_json or {}).get("jurisdiction") or "INTERNATIONAL").upper()
-            quality_reasons = {
-                str(item.get("reason"))
-                for item in (verification.get("quality_violations") or [])
-                if isinstance(item, dict)
-            }
             # Regulatory KZ plans may retain advisory quality warnings, but
-            # never a plan where a programme LO has no real-course evidence.
-            must_reject_real_lo_gap = "lo_without_real_course" in quality_reasons
-            if (
-                (
-                    not verification.get("feasible")
-                    or int(verification.get("hard_violation_count") or 0) > 0
-                ) and jurisdiction != "KZ"
-            ) or must_reject_real_lo_gap:
+            # no jurisdiction may bypass a hard feasibility failure or a
+            # programme LO without real-course evidence.
+            if must_reject_variant(verification):
                 rejected_variants.append({
                     "variant": variant_name,
                     "hard": int(verification.get("hard_violation_count") or 0),
@@ -386,11 +417,11 @@ def build_plan(
             )
 
         best_variant = max(variants.items(), key=_variant_quality_key)[0] if variants else active_variant
-        new_active_plan = db.query(Plan).filter(
-            Plan.id == variants[best_variant]["plan_id"]
-        ).first() if best_variant and best_variant in variants else None
-        if new_active_plan:
-            new_active_plan.is_active = 1
+        active_plan_id = variants[best_variant]["plan_id"] if best_variant and best_variant in variants else None
+        remaining_plans = db.query(Plan).filter(
+            Plan.project_version_id == project_version_id
+        ).all()
+        new_active_plan = activate_only_plan(remaining_plans, active_plan_id)
 
         new_active_snapshot = _plan_snapshot(new_active_plan, db)
         change_report = _build_change_report(old_active_snapshot, new_active_snapshot)
@@ -400,7 +431,7 @@ def build_plan(
             register_course_translations(epvo_translations, db)
         db.commit()
         timings["saving"] = round(time.perf_counter() - stage_started, 2)
-        _plan_build_status[project_version_id] = {
+        _replace_build_status(project_version_id, **{
             "state": "complete",
             "stage": "complete",
             "progress": 100,
@@ -408,7 +439,7 @@ def build_plan(
             "active_variant": best_variant,
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
-        }
+        })
 
         return {
             "variants": variants,
@@ -423,11 +454,11 @@ def build_plan(
         }
     except Exception as e:
         db.rollback()
-        _plan_build_status[project_version_id] = {
+        _replace_build_status(project_version_id, **{
             "state": "failed", "stage": "failed", "progress": 0, "error": str(e),
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
-        }
+        })
         logger.exception("Plan build failed for project version %s", project_version_id)
         raise HTTPException(status_code=500, detail=f"Не удалось сформировать учебный план: {str(e)}")
 
@@ -437,9 +468,7 @@ async def get_build_status(
     project_version_id: int,
     current_user: User = Depends(get_current_user),
 ):
-    status = dict(_plan_build_status.get(
-        project_version_id, {"state": "idle", "stage": "idle", "progress": 0}
-    ))
+    status = _get_build_status(project_version_id)
     if status.get("state") == "running" and status.get("started_at"):
         try:
             started_at = datetime.fromisoformat(status["started_at"])
@@ -458,13 +487,12 @@ def recompute_matches(
     current_user: User = Depends(get_current_user),
 ):
     """Recompute discipline-to-LO links after course descriptions/translations change."""
-    current = _plan_build_status.get(project_version_id, {})
-    if current.get("state") == "running":
-        raise HTTPException(status_code=409, detail="Построение или пересчёт уже выполняется")
     version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
     if not version:
         raise HTTPException(status_code=404, detail="Версия проекта не найдена")
-    _plan_build_status[project_version_id] = {"state": "running", "stage": "scoring", "progress": 5}
+    claimed = _claim_build_status(project_version_id, state="running", stage="scoring", progress=5)
+    if claimed is None:
+        raise HTTPException(status_code=409, detail="Построение или пересчёт уже выполняется")
     try:
         from app.kag.scoring import compute_all_matches
         from app.planner.goso import ensure_goso_learning_outcomes
@@ -475,20 +503,20 @@ def recompute_matches(
         ensure_goso_learning_outcomes(version, db)
 
         def update_scoring_progress(payload: dict):
-            _plan_build_status[project_version_id].update(payload)
+            _set_build_status(project_version_id, **payload)
 
         result = compute_all_matches(project_version_id, db, progress_callback=update_scoring_progress)
         remember_cache(
             db, version, SCORING_CACHE_ACTION, scoring_input_signature(version, db), current_user.id,
             {"total_matches": result.get("total_matches", 0), "total_los": result.get("total_los", 0)},
         )
-        _plan_build_status[project_version_id] = {
+        _replace_build_status(project_version_id, **{
             "state": "complete",
             "stage": "complete",
             "progress": 100,
             "matches": result.get("total_matches", 0),
             "total_los": result.get("total_los", 0),
-        }
+        })
         db.add(AuditEvent(
             user_id=current_user.id,
             action="recompute_course_lo_matches",
@@ -504,9 +532,9 @@ def recompute_matches(
         return result
     except Exception as e:
         db.rollback()
-        _plan_build_status[project_version_id] = {
+        _replace_build_status(project_version_id, **{
             "state": "failed", "stage": "failed", "progress": 0, "error": str(e)
-        }
+        })
         raise HTTPException(status_code=500, detail=f"Не удалось пересчитать связи дисциплина–LO: {str(e)}")
 
 

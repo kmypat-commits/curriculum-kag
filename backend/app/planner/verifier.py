@@ -9,6 +9,8 @@ from app.models.project import ProjectVersion
 from app.models.epvo import EpvoDisciplineNormalized
 from app.kag.embedding_service import embedding_service
 from app.planner.goso import GOSO_COURSE_LO_CODES, evaluate_goso_compliance
+from app.planner.bridge_policy import bridge_module_limit
+from app.planner.domain_evidence import domain_credit_shares
 LOAD_TOLERANCE = 3
 TOTAL_CREDIT_TOLERANCE = 5
 MATCH_THRESHOLD = 0.4
@@ -216,7 +218,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     secondary_group = str(constraints.get("secondary_group_code") or "").strip()
     primary_direction = str(constraints.get("direction_code") or "").strip()
     secondary_direction = str(constraints.get("secondary_direction_code") or "").strip()
-    scoped_domain_by_course: Dict[int, int] = {}
+    scoped_domain_by_course: Dict[int, tuple[float, float]] = {}
     if selected_course_ids and (primary_group or secondary_group or primary_direction or secondary_direction):
         normalized_rows = db.query(EpvoDisciplineNormalized).filter(
             EpvoDisciplineNormalized.approved_course_id.in_(selected_course_ids)
@@ -232,14 +234,16 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 evidence[0] = max(evidence[0], primary_scope)
                 evidence[1] = max(evidence[1], secondary_scope)
         scoped_domain_by_course = {
-            course_id: 1 if secondary_scope > primary_scope else 0
+            course_id: domain_credit_shares(primary_scope, secondary_scope)
             for course_id, (primary_scope, secondary_scope) in scope_evidence.items()
         }
     for items in schedule.values():
         for item in items:
-            scoped_index = scoped_domain_by_course.get(item.get("course_id"))
-            if scoped_index is not None:
-                domain_credits[scoped_index] += int(item.get("credits") or 0)
+            scoped_shares = scoped_domain_by_course.get(item.get("course_id"))
+            if scoped_shares is not None:
+                credits = float(item.get("credits") or 0)
+                domain_credits[0] += credits * scoped_shares[0]
+                domain_credits[1] += credits * scoped_shares[1]
                 continue
             item_domain = str(item.get("domain") or "").casefold().strip()
             for index, domain in enumerate(project_domains):
@@ -421,7 +425,17 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                     semantic_maximum,
                     min(num_semesters, recommended + 2 if recommended else num_semesters),
                 )
-            recommended_minimum = max(1, recommended - 1) if recommended else 1
+            # EPVO's typical semester is a placement preference. It becomes
+            # a lower bound only for an explicitly locked source item; this
+            # mirrors ``semester_rules.minimum_appropriate_semester`` used
+            # by the scheduler and avoids the verifier rejecting a valid
+            # prerequisite-ready course solely because another programme
+            # taught it later.
+            recommended_minimum = (
+                max(1, recommended - 1)
+                if recommended and item.get("source_semester_required")
+                else 1
+            )
             title_key = str(course.title or "").casefold().strip()
             explicit_foundation = title_key.startswith(
                 ("основы ", "введение ", "fundamentals", "introduction")
@@ -475,6 +489,21 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             "reason": "missing_core_competency_blocks",
             "missing": competency_audit["missing"],
         })
+    bridge_count = sum(
+        1
+        for items in schedule.values()
+        for item in items
+        if item.get("bridge_module_id") is not None
+    )
+    bridge_limit = bridge_module_limit(project_version)
+    bridge_overflow = max(0, bridge_count - bridge_limit)
+    if bridge_overflow:
+        quality_violations.append({
+            "reason": "bridge_module_limit_exceeded",
+            "count": bridge_count,
+            "limit": bridge_limit,
+            "overflow": bridge_overflow,
+        })
     pedagogical_audit = {
         "passed": (
             not lo_without_real_course
@@ -499,8 +528,8 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     # admission condition so a 100% aggregate bridge score is never presented
     # as a production-ready plan.
     real_lo_violations = len(lo_without_real_course)
-    hard_count = len(prerequisite_violations) + len(load_violations) + len(credit_violations) + len(domain_quota_violations) + len(goso_compliance["violations"]) + course_lo_violations + real_lo_violations
-    return {"feasible": hard_count == 0, "quality_passed": not quality_violations and goso_compliance["compliant"], "hard_violation_count": hard_count, "course_lo_violations": course_lo_violations, "prerequisite_violations": prerequisite_violations, "semester_load_violations": load_violations, "credit_violations": credit_violations, "domain_quota_violations": domain_quota_violations, "domain_credits": {"domain1": round(domain_credits[0], 2), "domain2": round(domain_credits[1], 2)}, "domain_quota_base_credits": domain_quota_base_credits, "domain_quota_tolerance_credits": domain_quota_tolerance, "goso_compliance": goso_compliance, "pedagogical_audit": pedagogical_audit, "semester_loads": semester_loads, "nominal_semester_load": round(nominal_load, 2), "allowed_semester_load": {"min": round(min_load, 2), "max": round(max_load, 2)}, "target_credits": target_credits, "total_credits": total_credits, "credit_tolerance": credit_tolerance, "maximum_total_credits": target_credits + credit_tolerance, "min_lo_coverage": round(min_coverage, 4), "average_lo_coverage": round(average_coverage, 4), "coverage_threshold": settings.COVERAGE_THRESHOLD, "coverage_by_lo": coverage_by_lo, "evidence_count": evidence_count, "redundancy": redundancy, "redundancy_threshold": redundancy_threshold, "strict_redundancy_threshold": REDUNDANCY_THRESHOLD, "embedding_mode": embedding_mode, "quality_violations": quality_violations}
+    hard_count = len(prerequisite_violations) + len(load_violations) + len(credit_violations) + len(domain_quota_violations) + len(goso_compliance["violations"]) + course_lo_violations + real_lo_violations + bridge_overflow
+    return {"feasible": hard_count == 0, "quality_passed": not quality_violations and goso_compliance["compliant"], "hard_violation_count": hard_count, "course_lo_violations": course_lo_violations, "bridge_module_count": bridge_count, "bridge_module_limit": bridge_limit, "bridge_module_overflow": bridge_overflow, "prerequisite_violations": prerequisite_violations, "semester_load_violations": load_violations, "credit_violations": credit_violations, "domain_quota_violations": domain_quota_violations, "domain_credits": {"domain1": round(domain_credits[0], 2), "domain2": round(domain_credits[1], 2)}, "domain_quota_base_credits": domain_quota_base_credits, "domain_quota_tolerance_credits": domain_quota_tolerance, "goso_compliance": goso_compliance, "pedagogical_audit": pedagogical_audit, "semester_loads": semester_loads, "nominal_semester_load": round(nominal_load, 2), "allowed_semester_load": {"min": round(min_load, 2), "max": round(max_load, 2)}, "target_credits": target_credits, "total_credits": total_credits, "credit_tolerance": credit_tolerance, "maximum_total_credits": target_credits + credit_tolerance, "min_lo_coverage": round(min_coverage, 4), "average_lo_coverage": round(average_coverage, 4), "coverage_threshold": settings.COVERAGE_THRESHOLD, "coverage_by_lo": coverage_by_lo, "evidence_count": evidence_count, "redundancy": redundancy, "redundancy_threshold": redundancy_threshold, "strict_redundancy_threshold": REDUNDANCY_THRESHOLD, "embedding_mode": embedding_mode, "quality_violations": quality_violations}
 
 
 def _mean_pairwise_cosine_redundancy(course_ids: List[int], db: Session) -> float:

@@ -64,7 +64,7 @@ Requirements: Docker Desktop, PowerShell, Python 3.12 and Node.js 18+.
 git clone https://github.com/kmypat-commits/curriculum-kag.git
 cd curriculum-kag
 Copy-Item .env.example .env
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Database postgres
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 ```
 
 Open <http://localhost:3001>. Health diagnostics are available at <http://localhost:8000/health>.
@@ -76,9 +76,14 @@ The source repository does not contain the full database or model weights. Until
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\smoke-test.ps1
+python backend/scripts/smoke_core_api.py --base-url http://127.0.0.1:8000
 ```
 
-The test gate checks source encoding, planner invariants, localization, course–LO evidence, prerequisites, GOSO isolation and structured AI fallbacks.
+The core API smoke is read-only and checks build progress, variants, evaluation
+and the prerequisite graph within a latency budget. It does not call an external
+LLM unless `--include-ai` is explicitly supplied. The test gate checks source
+encoding, planner invariants, localization, course–LO evidence, prerequisites,
+GOSO isolation and structured AI fallbacks.
 
 ## Public artefacts
 

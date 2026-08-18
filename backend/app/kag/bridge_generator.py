@@ -171,9 +171,22 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
     if has_real_key and settings.LLM_PROVIDER == "openai":
         try:
             from openai import OpenAI
-            kwargs = {"api_key": api_key}
+            kwargs = {
+                "api_key": api_key,
+                "timeout": settings.LLM_TIMEOUT_SECONDS,
+                "max_retries": 0,
+            }
             if settings.LLM_BASE_URL: kwargs["base_url"] = settings.LLM_BASE_URL
-            response = OpenAI(**kwargs).chat.completions.create(model=settings.LLM_MODEL_NAME, messages=[{"role": "system", "content": "Return valid JSON only."}, {"role": "user", "content": prompt}], temperature=0.5, max_tokens=2500, response_format={"type": "json_object"})
+            response = OpenAI(**kwargs).chat.completions.create(
+                model=settings.LLM_MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": "Return valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                max_tokens=2500,
+                response_format={"type": "json_object"},
+            )
             normalized = _normalize_bridge_response(response.choices[0].message.content, fallback_context or {})
             if normalized:
                 return normalized
@@ -182,7 +195,16 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
     elif has_real_key and settings.LLM_PROVIDER == "anthropic":
         try:
             from anthropic import Anthropic
-            response = Anthropic(api_key=api_key).messages.create(model=settings.LLM_MODEL_NAME or "claude-sonnet-4-6", max_tokens=2500, system="Return valid JSON only.", messages=[{"role": "user", "content": prompt}])
+            response = Anthropic(
+                api_key=api_key,
+                timeout=settings.LLM_TIMEOUT_SECONDS,
+                max_retries=0,
+            ).messages.create(
+                model=settings.LLM_MODEL_NAME or "claude-sonnet-4-6",
+                max_tokens=2500,
+                system="Return valid JSON only.",
+                messages=[{"role": "user", "content": prompt}],
+            )
             normalized = _normalize_bridge_response(response.content[0].text, fallback_context or {})
             if normalized:
                 return normalized

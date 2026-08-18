@@ -24,7 +24,7 @@ def complexity_min_semester(item: Dict, num_semesters: int) -> int:
     if item.get("regulatory_required") and str(item.get("type") or "").startswith("goso_"):
         return 1
     text = _title_key(" ".join([item.get("title") or "", item.get("type") or ""]))
-    clinical = ("хирург", "surgery", "кардио", "гастро", "онколог", "уролог", "невролог", "паразитолог", "психиатр", "офтальм", "реаним", "терапи", "педиатр", "акуш", "гинек", "дермат", "клиническ")
+    clinical = ("хирург", "surgery", "кардио", "гастро", "онколог", "уролог", "невролог", "паразитолог", "психиатр", "офтальм", "реаним", "терапи", "педиатр", "акуш", "гинек", "дермат", "клиническ", "внутренние болезни", "internal medicine")
     systems = ("диагност", "надежност", "надёжност", "систем автоматизац", "diagnostic", "reliability of automation")
     research = ("методология науч", "scientific methodology", "доказательная медицина", "evidence based medicine", "научных исследований", "research methods")
     advanced = ("kafka", "mqtt", "spark", "hadoop", "stream", "потоков", "микросервис", "microservice", "devops", "kubernetes", "docker", "облач", "cloud", "distributed", "распредел", "big data", "machine learning", "deep learning", "нейросет", "malware", "реверс", "reverse", "форензик", "forensic", "siem", "soc")
@@ -72,9 +72,25 @@ def minimum_appropriate_semester(item: Dict, num_semesters: int) -> int:
     semantic_upper = foundation_max_semester(item.get("title"), num_semesters)
     if item.get("prerequisites") and recommended:
         semantic_upper = max(semantic_upper, min(num_semesters, recommended + 2))
-    recommended_lower = max(1, recommended - 1) if recommended else 1
+    # ``typical_semester`` in EPVO is an observed placement across source
+    # programmes, not a regulatory prerequisite. It guides the scheduler's
+    # preference but must not make a well-prepared course inadmissible merely
+    # because another university taught it later. A caller may opt into a
+    # genuinely fixed source window (for a regulatory or explicitly locked
+    # item); semantic depth and real prerequisite edges remain hard rules.
+    recommended_lower = (
+        max(1, recommended - 1)
+        if recommended and item.get("source_semester_required")
+        else 1
+    )
     key = _title_key(item.get("title"))
     if key.startswith(("основы ", "введение ", "fundamentals", "introduction")) and not any(marker in key for marker in ("хирург", "surgery", "кардио", "гастро", "онколог", "уролог", "невролог", "терапи", "педиатр", "клиническ")):
+        recommended_lower = 1
+    # Plan-local semantic inference proves that a selected earlier course can
+    # supply the prerequisite concept.  It must not turn an advisory EPVO
+    # source semester into a hard lower bound after the timetable has already
+    # been built.  Explicit catalogue prerequisites keep the stricter rule.
+    if item.get("prerequisite_inference"):
         recommended_lower = 1
     if recommended_lower > semantic_upper:
         recommended_lower = 1

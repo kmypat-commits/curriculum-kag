@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
-import { LanguageProvider } from './contexts/LanguageContext'
+import { LanguageProvider, useLanguage } from './contexts/LanguageContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -16,18 +16,18 @@ const PrerequisiteGraph = lazy(() => import('./pages/PrerequisiteGraph'))
 const CourseSyllabus = lazy(() => import('./pages/CourseSyllabus'))
 const GitVersions = lazy(() => import('./pages/GitVersions'))
 
-function App() {
+function ApplicationRoutes() {
+    const { t } = useLanguage()
     return (
-        <LanguageProvider>
-            <AuthProvider>
-                <NotificationProvider>
-                <Router>
-                    <Suspense fallback={
-                        <div style={{ padding: 40, textAlign: 'center', color: '#4f5d6b' }}>
-                            <div style={{ fontWeight: 700, marginBottom: 6 }}>Загрузка…</div>
-                            <div style={{ fontSize: 13 }}>Большие графы и отчёты могут открываться несколько секунд.</div>
-                        </div>
-                    }><Routes>
+        <AuthProvider>
+            <NotificationProvider>
+            <Router>
+                <Suspense fallback={
+                    <div style={{ padding: 40, textAlign: 'center', color: '#4f5d6b' }}>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('loading')}</div>
+                        <div style={{ fontSize: 13 }}>{t('large_views_loading_hint')}</div>
+                    </div>
+                }><Routes>
                         <Route path="/login" element={<Login />} />
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/repository" element={<Repository />} />
@@ -40,10 +40,17 @@ function App() {
                         <Route path="/versions" element={<GitVersions />} />
                         <Route path="/projects/:id/graph" element={<PrerequisiteGraph />} />
                         <Route path="/projects/:id/syllabus/:kind/:entityId" element={<CourseSyllabus />} />
-                    </Routes></Suspense>
-                </Router>
-                </NotificationProvider>
-            </AuthProvider>
+                </Routes></Suspense>
+            </Router>
+            </NotificationProvider>
+        </AuthProvider>
+    )
+}
+
+function App() {
+    return (
+        <LanguageProvider>
+            <ApplicationRoutes />
         </LanguageProvider>
     )
 }

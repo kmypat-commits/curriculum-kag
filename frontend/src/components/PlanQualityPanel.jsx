@@ -23,7 +23,6 @@ export default function PlanQualityPanel({
     currentPlan,
     currentPlanHasHardViolations,
     excludedCourses,
-    expandedLoCourses,
     handleApplyQualityImprovements,
     handleBuild,
     handleMatchFeedback,
@@ -48,13 +47,27 @@ export default function PlanQualityPanel({
     requiresRegeneration,
     selectMediumBridgeReplacements,
     selectedBridgeReplacements,
-    setExpandedLoCourses,
     setSelectedBridgeReplacements,
     t,
     toggleCourseExclusion,
 }) {
     return (
         <>
+            {currentPlan && currentPlan.metrics_current === false && (
+            <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082', color: '#6d4c41' }}>
+                <strong>{localText('Метрики плана требуют обновления', 'Жоспар метрикаларын жаңарту қажет', 'Plan metrics need refresh')}</strong>
+                <div style={{ marginTop: 4, fontSize: 13 }}>
+                    {localText(
+                        'Этот вариант создан предыдущей версией валидатора. Перестройте вариант, чтобы заново проверить кредиты, нагрузку, пререквизиты и доказательства LO.',
+                        'Бұл нұсқа валидатордың алдыңғы нұсқасымен жасалған. Кредиттерді, жүктемені, пререквизиттерді және LO дәлелдерін қайта тексеру үшін нұсқаны қайта құрыңыз.',
+                        'This variant was created by an earlier validator. Rebuild it to recheck credits, workload, prerequisites, and LO evidence.',
+                    )}
+                </div>
+                <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={handleBuild} disabled={building}>
+                    {localText('Перестроить и проверить', 'Қайта құрып, тексеру', 'Rebuild and verify')}
+                </button>
+            </div>
+            )}
             {currentPlan?.metrics?.verification && (
             <CompactSection title={t('verification')} toggleLabel={compactToggleLabel} accent={currentPlan.metrics.verification.feasible ? '#2e7d32' : '#c62828'} defaultOpen={false}>
             <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
@@ -133,12 +146,10 @@ export default function PlanQualityPanel({
             )}
             <LoCoveragePanel
             activeVariant={activeVariant}
-            expandedLoCourses={expandedLoCourses}
             loCoverageSources={loCoverageSources}
             loadLoCoverageSources={loadLoCoverageSources}
             loadingLoCoverageSources={loadingLoCoverageSources}
             localText={localText}
-            setExpandedLoCourses={setExpandedLoCourses}
             t={t}
             />
             {currentPlan.suspicious_courses?.length > 0 && (

@@ -38,6 +38,7 @@ export default function PlanBuilder() {
     const [activeVariant, setActiveVariant] = useState('A')
     const [buildVariants, setBuildVariants] = useState('all')
     const [showCourseDescriptions, setShowCourseDescriptions] = useState(false)
+    const [showSelectionDetails, setShowSelectionDetails] = useState(false)
     const [matchFeedbackState, setMatchFeedbackState] = useState({})
     const [bridgePreview, setBridgePreview] = useState(null)
     const [loadingBridgePreview, setLoadingBridgePreview] = useState(false)
@@ -46,7 +47,6 @@ export default function PlanBuilder() {
     const [selectedBridgeReplacements, setSelectedBridgeReplacements] = useState({})
     const [loCoverageSources, setLoCoverageSources] = useState(null)
     const [loadingLoCoverageSources, setLoadingLoCoverageSources] = useState(false)
-    const [expandedLoCourses, setExpandedLoCourses] = useState({})
     const [requiresRegeneration, setRequiresRegeneration] = useState(false)
     const [excludedCourses, setExcludedCourses] = useState({})
     const [aiBridgeCandidates, setAiBridgeCandidates] = useState({})
@@ -69,9 +69,9 @@ export default function PlanBuilder() {
     }
 
     // These labels bypass legacy mojibake entries in the translation bundle.
-    const cycleLabel = language === 'en' ? 'Cycle' : 'Цикл'
+    const cycleLabel = language === 'en' ? 'Cycle' : language === 'kk' ? 'Пәндер циклі' : 'Цикл'
     const cycleEstimateLabel = language === 'en' ? 'system estimate' : language === 'kk' ? 'жүйе есебі' : 'расчёт системы'
-    const componentLabelText = language === 'en' ? 'Component' : 'Компонент'
+    const componentLabelText = language === 'en' ? 'Component' : language === 'kk' ? 'Компоненті' : 'Компонент'
     const sourceLabel = language === 'en' ? 'Source' : language === 'kk' ? 'Дереккөз' : 'Источник'
 
     const errorMessage = (err) => {
@@ -176,10 +176,17 @@ export default function PlanBuilder() {
         }
     }
 
-    const fetchVariants = async (versionId, includeDescriptions = showCourseDescriptions) => {
+    const fetchVariants = async (
+        versionId,
+        includeDescriptions = showCourseDescriptions,
+        includeExplanations = showSelectionDetails,
+    ) => {
         try {
             const variantsRes = await axios.get(`/api/planner/${versionId}/variants`, {
-                params: { include_descriptions: includeDescriptions },
+                params: {
+                    include_descriptions: includeDescriptions,
+                    include_explanations: includeExplanations,
+                },
             })
             if (variantsRes.data && variantsRes.data.length > 0) {
                 const variantsObj = {}
@@ -203,6 +210,12 @@ export default function PlanBuilder() {
         setShowCourseDescriptions(checked)
         const versionId = project?.latest_version?.id
         if (checked && versionId) await fetchVariants(versionId, checked)
+    }
+
+    const handleShowSelectionDetailsChange = async (checked) => {
+        setShowSelectionDetails(checked)
+        const versionId = project?.latest_version?.id
+        if (versionId) await fetchVariants(versionId, showCourseDescriptions, checked)
     }
 
     const handleBuild = async () => {
@@ -818,7 +831,7 @@ export default function PlanBuilder() {
                             )}
                         </div>
 
-                        <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#4f5d6b', cursor: 'pointer' }}>
                                 <input
                                     type="checkbox"
@@ -829,6 +842,18 @@ export default function PlanBuilder() {
                                     '\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u044f \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d',
                                     '\u041f\u04d9\u043d \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430\u043b\u0430\u0440\u044b\u043d \u043a\u04e9\u0440\u0441\u0435\u0442\u0443',
                                     'Show course descriptions',
+                                )}
+                            </label>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#4f5d6b', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={showSelectionDetails}
+                                    onChange={(event) => handleShowSelectionDetailsChange(event.target.checked)}
+                                />
+                                {localText(
+                                    'Показывать подробные обоснования выбора',
+                                    'Таңдаудың толық негіздемесін көрсету',
+                                    'Show detailed selection reasons',
                                 )}
                             </label>
                         </div>
@@ -861,7 +886,6 @@ export default function PlanBuilder() {
                             currentPlan={currentPlan}
                             currentPlanHasHardViolations={currentPlanHasHardViolations}
                             excludedCourses={excludedCourses}
-                            expandedLoCourses={expandedLoCourses}
                             handleApplyQualityImprovements={handleApplyQualityImprovements}
                             handleBuild={handleBuild}
                             handleMatchFeedback={handleMatchFeedback}
@@ -886,7 +910,6 @@ export default function PlanBuilder() {
                             requiresRegeneration={requiresRegeneration}
                             selectMediumBridgeReplacements={selectMediumBridgeReplacements}
                             selectedBridgeReplacements={selectedBridgeReplacements}
-                            setExpandedLoCourses={setExpandedLoCourses}
                             setSelectedBridgeReplacements={setSelectedBridgeReplacements}
                             t={t}
                             toggleCourseExclusion={toggleCourseExclusion}

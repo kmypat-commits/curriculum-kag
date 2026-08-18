@@ -65,12 +65,17 @@ def main() -> int:
         hard = int(verification.get("hard_violation_count") or 0)
         feasible = bool(verification.get("feasible"))
         admission_passed = admission.get("passed")
+        quality_passed = verification.get("quality_passed")
         score = quality.get("score")
-        status = "OK" if feasible and hard == 0 and admission_passed is not False else "CHECK"
+        # Missing evidence is not evidence of a passing plan. Older plans may
+        # predate the admission/quality fields and must be recomputed instead
+        # of being silently accepted by this regression gate.
+        status = "OK" if feasible and hard == 0 and admission_passed is True and quality_passed is True else "CHECK"
         print(
             f"{status} plan={row['id']} pv={row['project_version_id']} "
             f"variant={row['variant_type']} active={row['is_active']} "
-            f"feasible={feasible} hard={hard} admission={admission_passed} iq={score}"
+            f"feasible={feasible} hard={hard} admission={admission_passed} "
+            f"quality={quality_passed} iq={score}"
         )
         if status != "OK":
             failures.append(row["id"])

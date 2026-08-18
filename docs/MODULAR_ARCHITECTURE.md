@@ -11,11 +11,24 @@ The public `/planner` contract is composed in `backend/app/api/planner.py` from 
 - `planner_coverage.py` — variants, LO evidence and evaluation reports;
 - `planner_replacements.py` — bridge/course replacement and expert decisions;
 - `planner_syllabus.py` — syllabus drafts, export and evidence bundles;
-- `planner_state.py` — transitional single-worker build progress state.
+- `planner_state.py` — durable progress state and atomic per-version build claim.
 
-Existing URLs remain unchanged. Build progress is intentionally isolated behind `planner_state.py` so it can later be moved to PostgreSQL or Redis without changing endpoint code.
+Existing URLs remain unchanged. Build progress is persisted in PostgreSQL, with a
+small in-process fallback only for local recovery. A row lock prevents two API
+workers from starting the same plan build; polling resumes after a restart.
 
 ## Curriculum planner
+
+Course selection is split behind the stable `course_selection.py` facade:
+`candidate_retrieval.py` retrieves and filters scoped courses,
+`variant_strategy.py` builds deterministic A/B/C variants, and
+`bridge_creation.py` owns bridge and credit-gap construction.
+
+Plan-build progress is persisted in PostgreSQL table `plan_build_status`, so a
+polling client can resume after an API restart without committing the caller's
+plan transaction. Alembic migration `20260817_plan_build_status` creates the
+table and its lookup index; `start.ps1` and Docker run `alembic upgrade head`
+before they start the backend.
 
 `backend/app/planner/scheduler.py` is now the orchestration facade. Its computational phases are:
 
@@ -47,3 +60,26 @@ Every structural extraction must pass:
 3. frontend production build;
 4. OpenAPI route-preservation check;
 5. PostgreSQL runtime smoke-test.
+
+`backend/tests/test_planner_router_contracts.py` protects the composed route
+contract for build, coverage, graph, replacement, and syllabus routers.
+It also protects the duplicate-build fallback: a temporary status-store outage
+must not permit a second build for the same version in one worker.
+
+For an initial non-generative latency baseline, run
+`backend/scripts/profile_local_api.py` after authentication. It measures health,
+project list and repository statistics, and reports the backend `Server-Timing`
+header separately from browser rendering time.
+
+`/planner/{version}/variants` deliberately excludes detailed course–LO
+explanations and in-plan prerequisite lists by default. The Plan Builder
+requests them only when the user enables detailed selection reasons. This keeps
+the initial A/B/C response small without removing explainability.
+
+Persisted plan metrics carry `metrics_schema_version`. API consumers receive
+`metrics_current`; a false value means the plan must be previewed or refreshed
+with `recalculate_plan_metrics.py` before its quality summary is relied upon.
+
+For an authenticated HTTP check against a dedicated PostgreSQL database, run
+`backend/tests/run_postgres_endpoint_contracts.py` with
+`CURRICULUM_KAG_TEST_DATABASE_URL` set to a database name ending in `_test`.

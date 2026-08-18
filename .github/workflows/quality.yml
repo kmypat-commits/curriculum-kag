@@ -25,6 +25,8 @@ jobs:
         run: python backend/check_text_encoding.py
       - name: Static quality and toast gate
         run: python backend/scripts/ci_static_gate.py
+      - name: Dependency profile compatibility
+        run: python backend/scripts/check_dependency_profiles.py
       - name: Release hygiene gate
         run: python backend/scripts/check_release_hygiene.py
       - name: Public release structure
@@ -48,6 +50,35 @@ jobs:
       - name: Production build
         working-directory: frontend
         run: npm run build
+
+  postgres-endpoint-contracts:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-only-secret
+      CURRICULUM_KAG_TEST_DATABASE_URL: postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5432/curriculum_kag_endpoint_test
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: curriculum_user
+          POSTGRES_PASSWORD: curriculum_pass
+          POSTGRES_DB: curriculum_kag_endpoint_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U curriculum_user -d curriculum_kag_endpoint_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL contract dependencies
+        run: pip install -r backend/requirements-minimal.txt
+      - name: Run authenticated PostgreSQL endpoint contracts
+        run: python backend/tests/run_postgres_endpoint_contracts.py
 
   deployment-config:
     runs-on: ubuntu-latest

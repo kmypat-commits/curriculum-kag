@@ -321,7 +321,11 @@ export default function ProjectWizard() {
                                 </div>)}
                             </div>}
                             <h3>{t('direction_code')}</h3>
-                            <p style={{ color: '#666', fontSize: 13 }}>Направления и группы ЕПВО определяют, из каких дисциплин система будет строить программу.</p>
+                            <p style={{ color: '#666', fontSize: 13 }}>{localText(
+                                'Направления и группы ЕПВО определяют, из каких дисциплин система будет строить программу.',
+                                'ЕПВО бағыттары мен топтары жүйе бағдарламаны қандай пәндерден құратынын анықтайды.',
+                                'EPVO fields and programme groups define which courses the system may use to build the curriculum.'
+                            )}</p>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
                                 <div className="form-group"><label className="form-label">{localText('Страна и стандарт', 'Ел және стандарт', 'Country and standard')} *</label><select className="form-control" value={formData.constraints.jurisdiction} onChange={e => handleConstraintChange('jurisdiction', e.target.value)}><option value="KZ">{localText('Республика Казахстан — ГОСО', 'Қазақстан Республикасы — МЖМБС', 'Republic of Kazakhstan — State standard')}</option><option value="INTERNATIONAL">{localText('Международная программа', 'Халықаралық бағдарлама', 'International programme')}</option></select></div>
                                 <div className="form-group"><label className="form-label">{t('education_level')} *</label><select className="form-control" value={formData.constraints.education_level} onChange={e => changeEducationLevel(e.target.value)}><option value="bachelor">{t('bachelor')}</option><option value="master">{t('master')}</option><option value="doctorate">{t('doctorate')}</option></select></div>
@@ -444,11 +448,11 @@ export default function ProjectWizard() {
                                         onChange={(e) => handleConstraintChange('total_credits', parseInt(e.target.value))}
                                     />
                                     <div style={{ color: '#667085', fontSize: '12px', marginTop: '5px' }}>
-                                        План должен набрать {formData.constraints.total_credits} кредитов. Допуск технического балансирования: +{formData.constraints.credit_tolerance ?? 3} кредита.
+                                        {t('program_credit_target_hint').replace('{credits}', formData.constraints.total_credits).replace('{tolerance}', formData.constraints.credit_tolerance ?? 3)}
                                     </div>
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Допуск итоговых кредитов</label>
+                                    <label className="form-label">{t('credit_tolerance')}</label>
                                     <input
                                         type="number"
                                         className="form-control"
@@ -457,7 +461,7 @@ export default function ProjectWizard() {
                                         value={formData.constraints.credit_tolerance ?? 3}
                                         onChange={(e) => handleConstraintChange('credit_tolerance', Math.max(0, parseInt(e.target.value) || 0))}
                                     />
-                                    <div style={{ color: '#667085', fontSize: '12px', marginTop: '5px' }}>Для стандартной ОП обычно достаточно 3 кредитов; система стремится к точному объёму.</div>
+                                    <div style={{ color: '#667085', fontSize: '12px', marginTop: '5px' }}>{t('credit_tolerance_hint')}</div>
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">{t('max_credits_semester')}</label>
@@ -549,7 +553,7 @@ export default function ProjectWizard() {
                             </button>
                         ) : (
                             <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
-                                {submitting ? 'Создание…' : t('create_project')}
+                                {submitting ? t('creating') : t('create_project')}
                             </button>
                         )}
                     </div>

@@ -12,6 +12,7 @@ export default function LOCoverageDashboard() {
     const { id } = useParams()
     const { t, language } = useI18n()
     const { notify } = useNotifications()
+    const localText = (ru, kk, en) => ({ ru, kk, en })[language] || ru
     const [project, setProject] = useState(null)
     const [coverage, setCoverage] = useState(null)
     const [planVariants, setPlanVariants] = useState([])
@@ -70,7 +71,7 @@ export default function LOCoverageDashboard() {
             }
         } catch (err) {
             console.error('Error fetching project:', err)
-            setError('Error loading project data')
+            setError(localText('Не удалось загрузить данные программы', 'Бағдарлама деректерін жүктеу мүмкін болмады', 'Could not load programme data'))
         } finally {
             setLoading(false)
         }
@@ -87,7 +88,7 @@ export default function LOCoverageDashboard() {
             setLoSources(sourceRes.data)
         } catch (err) {
             console.error('Error fetching coverage:', err)
-            setError(formatApiError(err, t('Error loading analytics')))
+            setError(formatApiError(err, localText('Не удалось загрузить анализ', 'Талдауды жүктеу мүмкін болмады', 'Could not load analytics')))
         } finally {
             setCoverageLoading(false)
         }

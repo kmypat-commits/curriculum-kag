@@ -37,6 +37,36 @@ def _invalid_epvo_codes(constraints: Dict) -> List[str]:
     return invalid
 
 
+def _validate_curriculum_volume(constraints: Dict) -> None:
+    """Reject incomplete or physically impossible programme-volume settings."""
+    years = int(constraints.get("duration_years") or 0)
+    semesters = int(constraints.get("total_semesters") or 0)
+    credits = int(constraints.get("total_credits") or 0)
+    max_per_semester = int(constraints.get("max_credits_per_semester") or 0)
+    tolerance = int(constraints.get("credit_tolerance") or 0)
+    if years <= 0 or semesters <= 0 or credits <= 0 or max_per_semester <= 0:
+        raise ValueError("Срок обучения, кредиты и семестровая нагрузка должны быть положительными")
+    if semesters != years * 2:
+        raise ValueError("Количество семестров должно соответствовать сроку обучения")
+    if tolerance < 0 or tolerance > 10:
+        raise ValueError("Допуск итоговых кредитов должен быть от 0 до 10")
+    expected_credits = years * 60
+    if abs(credits - expected_credits) > tolerance:
+        raise ValueError(
+            f"Объём программы {credits} кредитов не соответствует сроку {years} лет "
+            f"({expected_credits} ± {tolerance})"
+        )
+    if credits > max_per_semester * semesters + tolerance:
+        raise ValueError("Семестровая нагрузка не позволяет набрать заданное число кредитов")
+    for key in ("min_domain1_percent", "min_domain2_percent"):
+        value = int(constraints.get(key) or 0)
+        if not 0 <= value <= 100:
+            raise ValueError("Минимальная доля области должна быть от 0 до 100 процентов")
+    if str(constraints.get("program_type") or "standard").lower() in {"interdisciplinary", "joint"}:
+        if int(constraints.get("min_domain1_percent") or 0) + int(constraints.get("min_domain2_percent") or 0) > 100:
+            raise ValueError("Сумма минимальных долей двух областей не должна превышать 100 процентов")
+
+
 class LearningOutcomeCreate(BaseModel):
     lo_code: str
     lo_text: str
@@ -83,10 +113,7 @@ class ProjectCreate(BaseModel):
                 self.constraints.pop(key, None)
             self.domain2 = ""
             self.constraints["min_domain2_percent"] = 0
-        if int(self.constraints["total_semesters"]) != int(self.constraints.get("duration_years", 0)) * 2:
-            raise ValueError("Количество семестров должно соответствовать сроку обучения")
-        if int(self.constraints["total_credits"]) <= 0 or int(self.constraints.get("max_credits_per_semester", 0)) <= 0:
-            raise ValueError("Кредиты и семестровая нагрузка должны быть положительными")
+        _validate_curriculum_volume(self.constraints)
         return self
 
 
@@ -132,8 +159,7 @@ class ProjectConstraintsUpdate(BaseModel):
             for key in ("secondary_education_area", "secondary_direction_code", "secondary_group_code"):
                 constraints.pop(key, None)
             constraints["min_domain2_percent"] = 0
-        if int(constraints["total_semesters"]) != int(constraints.get("duration_years", 0)) * 2:
-            raise ValueError("Количество семестров должно соответствовать сроку обучения")
+        _validate_curriculum_volume(constraints)
         self.constraints = constraints
         return self
 
@@ -389,11 +415,8 @@ async def delete_project(
     """Delete a project and all its versions"""
     # SQLite permits one writer at a time. Deleting any project while a plan
     # build writes hundreds of match rows can lock both operations.
-    from app.api.planner import _plan_build_status
-    running = [
-        version_id for version_id, status in _plan_build_status.items()
-        if status.get("state") == "running"
-    ]
+    from app.api.planner_state import running_build_version_ids
+    running = running_build_version_ids()
     if running:
         raise HTTPException(
             status_code=409,

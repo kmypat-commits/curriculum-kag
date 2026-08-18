@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_MODEL_NAME: str = "gpt-4"
     LLM_BASE_URL: str = ""  # For local models
+    # External AI assistance must never block deterministic plan construction
+    # indefinitely. A timeout returns a documented local fallback instead.
+    LLM_TIMEOUT_SECONDS: float = 15.0
     # Optional typed LLM orchestration. Disabled by default so the production
     # environment does not need an additional dependency.
     PYDANTIC_AI_ENABLED: bool = False

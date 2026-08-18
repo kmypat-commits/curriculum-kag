@@ -55,6 +55,7 @@ from app.planner.course_selection import (
     ensure_secondary_domain_bridge_modules,
     select_courses_for_variant,
 )
+from app.planner.bridge_policy import bridge_module_limit
 from app.planner.credit_balancing import (
     _rebalance_semester_load,
     _relocate_bounded_bridges,
@@ -201,11 +202,22 @@ def build_curriculum_plan(
     )
     selector_has_bridges = any(item.get("bridge_module_id") is not None for item in selected_courses)
     if not selector_has_complete_real_lo or selector_has_bridges:
-        selected_courses = _normalize_selected_courses_for_quality(selected_courses, project_version, db, variant_type)
+        selected_courses = _normalize_selected_courses_for_quality(
+            selected_courses, project_version, db, variant_type
+        )
     selected_courses = merge_goso_items(selected_courses, project_version, db)
-    selected_courses = _fit_real_professional_block_after_goso(
-        selected_courses, project_version, db, variant_type
-    )
+    # The selector already runs a fractional two-domain quota repair for an
+    # interdisciplinary programme.  The historical one-domain exact fitter
+    # below is valuable for ordinary KZ plans, but it rebuilds the remainder
+    # after ГОСО with a single domain label and can discard those reservations.
+    # Keep the quota-aware selection intact; later validation still rejects a
+    # real deficit rather than masking it with bridges.
+    if str(constraints.get("program_type") or "standard").lower() not in {
+        "interdisciplinary", "joint"
+    }:
+        selected_courses = _fit_real_professional_block_after_goso(
+            selected_courses, project_version, db, variant_type
+        )
     selected_courses = _repair_missing_ict_competencies(
         selected_courses, project_version, db
     )
@@ -401,16 +413,14 @@ def build_curriculum_plan(
             for item in selected_courses
             if item.get("bridge_module_id") is not None
         }
-        configured_bridge_slots = int(constraints.get("max_new_courses", 5))
-        credit_gap = max(0, target_credits - total_before_gap_fill)
-        maximum_bridge_slots = max(configured_bridge_slots, len(existing_bridge_ids) + math.ceil(credit_gap / 7))
+        maximum_bridge_slots = bridge_module_limit(project_version)
         available_slots = max(0, maximum_bridge_slots - len(existing_bridge_ids))
         for module in ensure_credit_bridge_modules(
             project_version,
             db,
             min(maximum_credits - total_before_gap_fill, target_credits - total_before_gap_fill),
-            maximum_bridge_slots,
-            desired_count=maximum_bridge_slots,
+            available_slots,
+            desired_count=available_slots,
         ):
             if module.id in existing_bridge_ids:
                 continue
@@ -592,8 +602,12 @@ def build_curriculum_plan(
     repair_credits = min(7, repair_credits)
     if 0 < repair_credits < 3:
         repair_credits = 0
+    bridge_count = sum(
+        1 for items in schedule.values() for item in items
+        if item.get("bridge_module_id") is not None
+    )
     if (repair_credits > 0 and total_now + repair_credits <= maximum_credits
-            and constraints.get("allow_new_courses", True)):
+            and bridge_count < bridge_module_limit(project_version)):
         code = f"AUTO_BALANCE_{project_version.id}_{target_semester}"
         balance = db.query(BridgeModule).filter(
             BridgeModule.project_version_id == project_version.id,
@@ -699,6 +713,16 @@ def build_curriculum_plan(
     # The final credit-gap repair may move flexible courses after the normal
     # semantic pass. Re-apply the bounded semester-improvement pass last so
     # EPVO-recommended semesters are respected in the persisted schedule too.
+    schedule = _repair_semester_appropriateness(
+        schedule, num_semesters, nominal_load, db
+    )
+    # Credit balancing and final bridge-gap repair can still move a real
+    # course after the earlier admission pass. Apply the independent gate at
+    # the true end of the pipeline, then restore semantic placement once; no
+    # later operation is allowed to undo this ordering.
+    schedule = _repair_final_admission_misplacements(
+        schedule, domain_repair_candidates, project_version, db
+    )
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )

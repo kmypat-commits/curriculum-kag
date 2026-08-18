@@ -108,13 +108,24 @@ try {
         actual_counts = $actualCounts
         mismatches = $mismatches
     }
-    $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+    # PowerShell 5's ``-Encoding UTF8`` writes a BOM.  Keep machine-readable
+    # restore evidence consumable by Python, CI and external tooling without
+    # a special ``utf-8-sig`` decoder.
+    [IO.File]::WriteAllText(
+        $resultPath,
+        ($result | ConvertTo-Json -Depth 6),
+        [Text.UTF8Encoding]::new($false)
+    )
     if (-not $passed) {
         throw "Restore verification failed: $($mismatches -join '; ')"
     }
     $metadata.restore_verified = $true
     $metadata | Add-Member -NotePropertyName restore_verified_at -NotePropertyValue $result.verified_at -Force
-    $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    [IO.File]::WriteAllText(
+        $manifestPath,
+        ($metadata | ConvertTo-Json -Depth 6),
+        [Text.UTF8Encoding]::new($false)
+    )
     Write-Host "Isolated restore verification passed." -ForegroundColor Green
     Write-Host "Result: $resultPath"
 }

@@ -16,9 +16,12 @@ for path in tracked:
 if fail:
     print('\n'.join(fail)); return_code=1
 else:
+    # Planner routes are intentionally split; keep the invariant gate pointed
+    # at their implementation rather than the thin composition facade.
     planner=(ROOT/'backend'/'app'/'api'/'planner.py').read_text(encoding='utf-8')
+    planner_build=(ROOT/'backend'/'app'/'api'/'planner_build.py').read_text(encoding='utf-8')
     verifier=(ROOT/'backend'/'app'/'planner'/'verifier.py').read_text(encoding='utf-8')
-    for marker, source in (("variant_not_distinct", planner), ("lo_without_real_course", planner + verifier), ("rejected_variants", planner)):
+    for marker, source in (("variant_not_distinct", planner_build), ("lo_without_real_course", planner_build + verifier), ("rejected_variants", planner_build)):
         if marker not in source: fail.append(f'missing quality invariant: {marker}')
 if fail:
     print('\n'.join(fail)); return_code=1

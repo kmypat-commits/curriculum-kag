@@ -7,6 +7,22 @@ from app.planner.international_quality import evaluate_international_quality
 from app.planner.verifier import verify_curriculum_plan
 
 
+# Increment when the persisted quality/verification contract changes.  Clients
+# can then distinguish a current validator result from a legacy JSON snapshot.
+PLAN_METRICS_SCHEMA_VERSION = 2
+
+
+def persisted_metrics_current(metrics: Dict | None) -> bool:
+    """Return whether a persisted plan has the complete current evidence contract."""
+    metrics = metrics or {}
+    admission = metrics.get("course_admission") or {}
+    return bool(
+        metrics.get("metrics_schema_version") == PLAN_METRICS_SCHEMA_VERSION
+        and isinstance(admission, dict)
+        and admission.get("passed") is not None
+    )
+
+
 def calculate_plan_metrics(
     schedule,
     selected_courses,
@@ -40,6 +56,7 @@ def calculate_plan_metrics(
             "objectives": ["LO coverage", "redundancy", "domain entropy"],
         })
     return {
+        "metrics_schema_version": PLAN_METRICS_SCHEMA_VERSION,
         "total_credits": verification["total_credits"],
         "target_credits": verification["target_credits"],
         "total_courses": len(persisted_items),

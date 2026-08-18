@@ -39,6 +39,7 @@ from app.services.content_localization import (
 )
 from app.services.epvo_repository import epvo_row_matches_education_level
 from app.services.plan_reporting import academic_classification as _academic_classification
+from app.api.planner_replacement_courses import course_replacement_preview as _course_replacement_preview
 
 
 router = APIRouter()
@@ -845,8 +846,9 @@ async def confirm_suspicious_course(
     }
 
 
-@router.get("/{project_version_id}/course-replacement-preview")
-async def course_replacement_preview(
+# Course replacement routes live in planner_replacement_courses.py. Keep the
+# legacy helpers temporarily private for backwards-compatible imports.
+async def _legacy_course_replacement_preview(
     project_version_id: int,
     course_id: int = Query(...),
     variant: str = Query("A", pattern="^[ABCabc]$"),
@@ -1074,8 +1076,7 @@ async def course_replacement_preview(
     }
 
 
-@router.post("/{project_version_id}/course-replacement-apply")
-async def course_replacement_apply(
+async def _legacy_course_replacement_apply(
     project_version_id: int,
     course_id: int = Body(...),
     replacement_course_id: int = Body(...),
@@ -1086,7 +1087,7 @@ async def course_replacement_apply(
     """Confirm one audited replacement now and for subsequent A/B/C builds."""
     from app.models.plan import Plan, PlanItem
 
-    preview = await course_replacement_preview(
+    preview = await _course_replacement_preview(
         project_version_id, course_id, variant, db, current_user
     )
     allowed = {row["course_id"] for row in preview["candidates"]}

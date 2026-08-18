@@ -18,7 +18,7 @@ CEER is a provenance-preserving research representation of educational-programme
 
 | Item | Value |
 |---|---:|
-| Approved multilingual course cards | 21,525+ |
+| Approved multilingual course cards | 26,696 |
 | Normalized expert evidence links | 932,483 |
 | Source expert evaluations/pairs | 935,151 |
 | Languages | Russian, Kazakh, English |

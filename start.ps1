@@ -2,7 +2,9 @@ param(
     [switch]$NoBrowser,
     [switch]$Rebuild,
     [ValidateSet("auto", "sqlite", "postgres-shadow", "postgres")]
-    [string]$Database = "auto"
+    # PostgreSQL is the primary data store. SQLite is an explicit rollback
+    # mode only (`-Database sqlite`) and must never be selected silently.
+    [string]$Database = "postgres"
 )
 
 $ErrorActionPreference = "Stop"
@@ -340,6 +342,19 @@ if ($existingBackendHealth) {
 
 $pids = @{}
 if (-not (Test-Endpoint "http://127.0.0.1:8000/health")) {
+    if ($expectedDatabaseDialect -eq "postgresql") {
+        Write-Host "Applying PostgreSQL migrations..."
+        Push-Location $backendDir
+        try {
+            & $python -m alembic upgrade head
+            if ($LASTEXITCODE -ne 0) {
+                throw "Alembic migration failed. The backend was not started."
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
     Write-Host "Starting backend..."
     $backend = Start-Process -FilePath $python -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000" -WorkingDirectory $backendDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime "backend.out.log") -RedirectStandardError (Join-Path $runtime "backend.err.log")
     try { $backend.PriorityClass = "BelowNormal" } catch { }
@@ -374,10 +389,10 @@ if ($pids.Count -gt 0) {
 }
 
 Write-Host ""
-Write-Host "Curriculum-KAG is ready: http://localhost:3001/" -ForegroundColor Green
+Write-Host "Curriculum-KAG is ready: http://127.0.0.1:3001/ (localhost is also supported)" -ForegroundColor Green
 Write-Host "Login: admin@curriculum-kag.local / admin123"
 Write-Host "Use stop.bat to stop services started by this launcher."
 
 if (-not $NoBrowser) {
-    Start-Process "http://localhost:3001/"
+    Start-Process "http://127.0.0.1:3001/"
 }

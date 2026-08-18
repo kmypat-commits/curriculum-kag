@@ -40,6 +40,7 @@ router = APIRouter()
 async def get_variants(
     project_version_id: int,
     include_descriptions: bool = Query(False),
+    include_explanations: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -602,8 +603,10 @@ async def get_variants(
                     course_obj.cycle_component if item.course_id and course_obj
                     else item.course_type
                 ),
-                "why_selected": why_selected,
-                "plan_requisites": plan_requisite_payload(item.course_id),
+                # Explanations contain full LO text and are large for A/B/C.
+                # Return them only when the user explicitly requests details.
+                "why_selected": why_selected if include_explanations else None,
+                "plan_requisites": plan_requisite_payload(item.course_id) if include_explanations else None,
             })
 
         # Add semester LOs
@@ -671,6 +674,7 @@ async def get_variants(
             semester_los[sem] = ", ".join(row["code"] for row in details) if details else "-"
 
         metrics = plan.metrics_json or {}
+        from app.planner.plan_metrics import persisted_metrics_current
         total_breakdown_credits = max(1, sum(item["credits"] for item in domain_breakdown.values()))
         domain_breakdown["domain1"]["quota_credits"] = round(
             domain_breakdown["domain1"]["credits"] + bridge_domain_credits[0], 1
@@ -687,6 +691,7 @@ async def get_variants(
             "variant_type": plan.variant_type,
             "is_active": plan.is_active == 1,
             "metrics": metrics,
+            "metrics_current": persisted_metrics_current(metrics),
             "verification": metrics.get("verification", {}),
             "schedule": schedule,
             "semester_los": semester_los,
@@ -880,8 +885,15 @@ async def lo_coverage_sources(
 @router.get("/{project_version_id}/evaluation")
 async def get_evaluation(project_version_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from app.models.plan import Plan
+    from app.planner.plan_metrics import persisted_metrics_current
     plans = db.query(Plan).filter(Plan.project_version_id == project_version_id).order_by(Plan.id.desc()).all()
     latest = {}
     for plan in plans:
-        latest.setdefault(plan.variant_type, {"plan_id": plan.id, "variant_type": plan.variant_type, "metrics": plan.metrics_json or {}})
+        metrics = plan.metrics_json or {}
+        latest.setdefault(plan.variant_type, {
+            "plan_id": plan.id,
+            "variant_type": plan.variant_type,
+            "metrics": metrics,
+            "metrics_current": persisted_metrics_current(metrics),
+        })
     return {"project_version_id": project_version_id, "variants": list(latest.values())}

@@ -23,6 +23,8 @@ from app.planner.scheduler import (
     ensure_credit_bridge_modules,
     schedule_courses,
 )
+from app.planner.bridge_policy import bridge_module_limit
+from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
 from app.planner.verifier import (
     _ict_competency_audit,
     _semantic_max_semester,
@@ -37,6 +39,32 @@ def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
     assert looks_like_mojibake("ÐÐ»Ð°Ð½ ÑÑÐµÐ±Ð½Ð¾Ð¹ Ð¿ÑÐ¾Ð³ÑÐ°Ð¼Ð¼Ñ")
     assert not looks_like_mojibake("План образовательной программы")
     assert not looks_like_mojibake("Білім беру бағдарламасының жоспары")
+
+
+def test_bridge_budget_is_hard_capped_by_user_and_system_limits():
+    project = SimpleNamespace(constraints_json={"allow_new_courses": True, "max_new_courses": 20})
+    version = SimpleNamespace(project=project)
+    assert bridge_module_limit(version) == 5
+
+    project.constraints_json = {"allow_new_courses": True, "max_new_courses": 3}
+    assert bridge_module_limit(version) == 3
+
+    project.constraints_json = {"allow_new_courses": False, "max_new_courses": 5}
+    assert bridge_module_limit(version) == 0
+
+
+def test_shared_epvo_scope_allocates_credit_once_across_two_domains():
+    assert domain_credit_shares(3, 3) == (0.5, 0.5)
+    assert domain_credit_shares(3, 2) == (0.6, 0.4)
+    assert domain_credit_shares(3, 0) == (1.0, 0.0)
+    assert domain_credit_shares(0, 0) == (0.0, 0.0)
+
+
+def test_epvo_domain_aliases_match_localized_labels_without_cross_domain_leakage():
+    assert domain_label_matches("Medicine", ["Здравоохранение"])
+    assert domain_label_matches("Healthcare", ["6B101 Здравоохранение"])
+    assert domain_label_matches("Agriculture", ["Агрономия"])
+    assert not domain_label_matches("Finance", ["Здравоохранение"])
 
 
 def test_research_methods_are_early_but_not_locked_to_semester_three_postgraduate():
@@ -78,7 +106,7 @@ def test_foundation_source_semester_is_advisory_except_for_clinical_depth():
     assert _semantic_max_semester("Основы общей врачебной практики", 8) == 8
 
 
-def test_inferred_prerequisite_can_raise_final_admission_semester():
+def test_source_semester_is_advisory_unless_explicitly_locked():
     course = SimpleNamespace(
         title="Искусственный интеллект для информационной безопасности",
         domain="it",
@@ -92,7 +120,35 @@ def test_inferred_prerequisite_can_raise_final_admission_semester():
     }
     assert _minimum_appropriate_semester(item, course, 8) < 7
     item["prerequisites"] = [42]
+    assert _minimum_appropriate_semester(item, course, 8) < 7
+    item["source_semester_required"] = True
     assert _minimum_appropriate_semester(item, course, 8) == 7
+
+
+def test_scheduler_uses_the_same_minimum_as_final_admission_gate():
+    """Scheduler preserves real prerequisites even when source timing is advisory."""
+    courses = [
+        {
+            "course_id": 1,
+            "title": "Основы информационной безопасности",
+            "credits": 5,
+            "recommended_semester": 2,
+            "prerequisites": [],
+        },
+        {
+            "course_id": 2,
+            "title": "Искусственный интеллект для информационной безопасности",
+            "credits": 4,
+            "recommended_semester": 8,
+            "prerequisites": [1],
+        },
+    ]
+    schedule = schedule_courses(courses, 8, 30, MagicMock())
+    semester = next(
+        value for value, items in schedule.items()
+        if any(item.get("course_id") == 2 for item in items)
+    )
+    assert semester >= 2
 
 
 def test_it_medicine_rejects_physician_training_without_digital_content():
@@ -556,6 +612,76 @@ def test_semester_repair_resolves_conflicting_source_recommendation():
     }
     assert semester_by_course[1] <= 3
     assert semester_by_course[2] >= 7
+
+
+def test_semester_repair_uses_two_hop_rotation_to_keep_loads_valid():
+    late = SimpleNamespace(
+        id=1,
+        title="Искусственный интеллект для информационной безопасности",
+        domain="IT",
+        cycle_component="professional",
+        recommended_semester=8,
+    )
+    foundation = SimpleNamespace(
+        id=2,
+        title="Основы программирования",
+        domain="IT",
+        cycle_component="basic",
+        recommended_semester=1,
+    )
+    filler_courses = [
+        SimpleNamespace(
+            id=index,
+            title=f"Дисциплина {index}",
+            domain="IT",
+            cycle_component="basic",
+            recommended_semester=1,
+        )
+        for index in range(3, 30)
+    ]
+    schedule = {semester: [] for semester in range(1, 9)}
+    schedule[1] = [
+        {"course_id": 2, "title": foundation.title, "credits": 4, "prerequisites": []},
+        *[
+            {"course_id": index, "title": f"Дисциплина {index}", "credits": 4, "prerequisites": []}
+            for index in range(3, 10)
+        ],
+    ]  # 32 credits; one four-credit foundation can move.
+    schedule[6] = [
+        {"course_id": 1, "title": late.title, "credits": 4, "prerequisites": [2]},
+        {"bridge_module_id": 1, "title": "Bridge", "credits": 5, "prerequisites": []},
+        *[
+            {"course_id": index, "title": f"Дисциплина {index}", "credits": 3, "prerequisites": []}
+            for index in range(10, 16)
+        ],
+    ]  # 27 credits.
+    schedule[7] = [
+        *[
+            {"course_id": index, "title": f"Дисциплина {index}", "credits": 3, "prerequisites": []}
+            for index in range(16, 25)
+        ],
+    ]  # 27 credits; accepts the late four-credit course.
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [
+        late, foundation, *filler_courses,
+    ]
+
+    repaired = _repair_semester_appropriateness(schedule, 8, 30, db)
+    semester_by_course = {
+        item["course_id"]: semester
+        for semester, items in repaired.items()
+        for item in items if item.get("course_id") is not None
+    }
+    loads = {
+        semester: sum(int(item.get("credits") or 0) for item in items)
+        for semester, items in repaired.items()
+    }
+    assert semester_by_course[1] >= 7
+    # The introductory prerequisite stays early; a different transferable
+    # foundation refills semester six.
+    assert semester_by_course[2] == 1
+    assert any(semester_by_course[course_id] == 6 for course_id in range(3, 10))
+    assert all(27 <= loads[semester] <= 33 for semester in (1, 6, 7))
 
 
 def test_exact_goso_remainder_preserves_both_domain_quotas():

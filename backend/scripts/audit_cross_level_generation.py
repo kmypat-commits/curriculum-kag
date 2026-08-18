@@ -9,7 +9,13 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import sys
 from pathlib import Path
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.database import SessionLocal
 from app.kag.scoring import compute_all_matches
@@ -50,24 +56,38 @@ ICT_MEDICINE_LOS = [
     "Проверять качество и безопасность цифровых медицинских решений в междисциплинарной команде.",
 ]
 
+ICT_AGRO_LOS = [
+    "Разрабатывать цифровые платформы, программные сервисы и базы данных для агропромышленного комплекса.",
+    "Применять анализ данных, машинное обучение и дистанционный мониторинг для задач точного земледелия.",
+    "Интерпретировать агрономические данные, показатели почвы, растений и сельскохозяйственного производства совместно с отраслевыми специалистами.",
+    "Проектировать безопасные и устойчивые цифровые решения для управления агротехнологическими процессами.",
+    "Интегрировать датчики, геоинформационные системы и информационные платформы в агропромышленные процессы.",
+    "Оценивать экономические, экологические и этические последствия внедрения интеллектуальных агротехнологий.",
+]
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--level", choices=("bachelor", "master", "doctorate"), required=True)
-    parser.add_argument("--profile", choices=("standard", "ict-medicine"), default="standard")
+    parser.add_argument("--profile", choices=("standard", "ict-medicine", "ict-agro"), default="standard")
     parser.add_argument("--jurisdiction", choices=("KZ", "INTERNATIONAL"), default="KZ")
     parser.add_argument("--output", required=True)
     parser.add_argument("--variants", nargs="+", choices=("A", "B", "C"), default=("A", "B", "C"))
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
-    if args.profile == "ict-medicine":
+    if args.profile in {"ict-medicine", "ict-agro"}:
         if args.level != "bachelor":
-            parser.error("ict-medicine profile currently requires --level bachelor")
+            parser.error("interdisciplinary control profiles currently require --level bachelor")
         total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
-        secondary_direction, secondary_group, secondary_area = "6B101", "B086", "6B10"
+        if args.profile == "ict-medicine":
+            secondary_direction, secondary_group, secondary_area = "6B101", "B086", "6B10"
+            domain2 = "Здравоохранение"
+            professional_los = ICT_MEDICINE_LOS
+        else:
+            secondary_direction, secondary_group, secondary_area = "6B081", "B077", "6B08"
+            domain2 = "Агрономия"
+            professional_los = ICT_AGRO_LOS
         domain1 = "Информационно-коммуникационные технологии"
-        domain2 = "Здравоохранение"
-        professional_los = ICT_MEDICINE_LOS
         # Two-domain programmes may require one foundation, one data and one
         # integration module, plus a small credit-balancing module.  The
         # contract therefore limits the number but does not reject a valid
@@ -99,7 +119,7 @@ def main() -> None:
     constraints = {
         "education_level": args.level,
         "jurisdiction": args.jurisdiction,
-        "program_type": "interdisciplinary" if args.profile == "ict-medicine" else "standard",
+        "program_type": "interdisciplinary" if args.profile != "standard" else "standard",
         "education_area": area,
         "direction_code": direction,
         "group_code": group,
@@ -113,7 +133,7 @@ def main() -> None:
         "credit_tolerance": 0,
         "max_credits_per_semester": 30,
         "min_domain1_percent": 40,
-        "min_domain2_percent": 40 if args.profile == "ict-medicine" else 0,
+        "min_domain2_percent": 40 if args.profile != "standard" else 0,
         "allow_new_courses": True,
         "max_new_courses": 5,
         "master_track": "scientific_pedagogical",
@@ -394,7 +414,7 @@ def main() -> None:
                     and all(int(item.get("credits") or 0) > 0 for item in details)
                     and all(1 <= int(item.get("semester") or 0) <= semesters for item in details)
                 )
-            if args.profile != "ict-medicine":
+            if args.profile == "standard":
                 return row["bridges"] <= max_allowed_bridges
             details = row.get("bridge_details") or []
             real_titles = " ".join(
