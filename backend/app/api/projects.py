@@ -1,5 +1,6 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict
@@ -297,7 +298,7 @@ async def create_project(
                 order_index=idx
             ))
         db.commit()
-    except Exception as exc:
+    except (SQLAlchemyError, ValueError, TypeError, KeyError) as exc:
         db.rollback()
         # Return a short actionable error instead of leaving the client waiting
         # for a generic 500 after the transaction has already failed.

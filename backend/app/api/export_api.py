@@ -1,6 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from app.database import get_db
 from app.models.user import User
 from app.services.auth import get_current_user
@@ -184,6 +185,6 @@ async def export_plan(
             }
         )
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Не удалось выполнить экспорт: {str(e)}")
+    except (SQLAlchemyError, OSError, ValueError, TypeError) as e:
+        raise HTTPException(status_code=500, detail=f"Не удалось выполнить экспорт: {e.__class__.__name__}") from e
 

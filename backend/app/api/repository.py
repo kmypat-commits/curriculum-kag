@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import func, or_, String, cast, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
@@ -178,7 +179,7 @@ async def import_courses(
                 
                 imported_count += 1
                 
-            except Exception as e:
+            except (SQLAlchemyError, ValueError, TypeError, KeyError) as e:
                 errors.append(f"Row {idx}: {str(e)}")
         
         db.commit()
@@ -189,8 +190,8 @@ async def import_courses(
             "total_rows": len(df)
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Не удалось импортировать данные: {str(e)}")
+    except (SQLAlchemyError, OSError, ValueError, TypeError, KeyError) as e:
+        raise HTTPException(status_code=500, detail=f"Не удалось импортировать данные: {e.__class__.__name__}") from e
 
 
 @router.get("/stats")
