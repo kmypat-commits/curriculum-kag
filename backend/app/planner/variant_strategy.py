@@ -953,11 +953,17 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             domain_bonus = 1 if course and any(d and (d in (course.domain or "").lower() or (course.domain or "").lower() in d) for d in domains) else 0
             return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), semester_preference, -len(prereq_ids_by_course.get(cid, [])), domain_bonus, data["sum"] / credits, -course_depth(cid), -course.id)
         return (role_rank(course), scope_rank(course), priority_rank(course), semester_stability_rank(course), semester_preference, len(data["los"]), data["sum"], data["max"], -course_depth(cid), -course.id)
+    # A 100-course frontier is sufficient for a one-domain catalogue but can
+    # starve a two-direction programme: 40/40 domain quotas may require
+    # separate prerequisite chains from both EPVO groups.  Keep the larger
+    # bounded frontier only for scoped/professional programmes; it remains
+    # deterministic and avoids scanning the full repository.
+    candidate_limit = 350 if interdisciplinary or epvo_professional_scope else 100
     candidate_ids = ranked_unique_candidate_ids(
         (cid for cid in aggregates if cid in courses and is_project_domain(courses[cid]) and course_depth(cid) < num_semesters),
         rank=rank,
         title_for=lambda cid: _title_key(courses[cid].title),
-        limit=100,
+        limit=candidate_limit,
     )
     root_credits = sum(
         int(course.credits or 5)
