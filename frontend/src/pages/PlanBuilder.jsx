@@ -9,6 +9,7 @@ import CompactSection from '../components/CompactSection'
 import PlanBuildProgress from '../components/PlanBuildProgress'
 import PlanSemesterGrid from '../components/PlanSemesterGrid'
 import PlanQualityPanel from '../components/PlanQualityPanel'
+import PlanVerificationPanels from '../components/PlanVerificationPanels'
 import { useNotifications } from '../contexts/NotificationContext'
 import {
     alreadyRunningText,
@@ -915,50 +916,7 @@ export default function PlanBuilder() {
                             t={t}
                             toggleCourseExclusion={toggleCourseExclusion}
                         />
-                        {currentPlan?.metrics?.verification?.goso_compliance?.applicable && (() => {
-                            const goso = currentPlan.metrics.verification.goso_compliance
-                            return <CompactSection title={localText('\u0421\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0413\u041e\u0421\u041e \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0438 \u041a\u0430\u0437\u0430\u0445\u0441\u0442\u0430\u043d', '\u049a\u0430\u0437\u0430\u049b\u0441\u0442\u0430\u043d \u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430\u0441\u044b\u043d\u044b\u04a3 \u041c\u0416\u041c\u0411\u0421 \u0441\u04d9\u0439\u043a\u0435\u0441\u0442\u0456\u0433\u0456', 'Kazakhstan state-standard compliance')} toggleLabel={compactToggleLabel} accent={goso.compliant ? '#2e7d32' : '#c62828'} defaultOpen={false}>
-                                <h3 style={{ marginTop: 0 }}>{localText('Соответствие ГОСО Республики Казахстан', 'Қазақстан Республикасының МЖМБС сәйкестігі', 'Kazakhstan state-standard compliance')}</h3>
-                                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                                    <span>{localText('Статус', 'Күйі', 'Status')}: <strong>{goso.compliant ? localText('соответствует', 'сәйкес', 'compliant') : localText('есть нарушения', 'бұзушылықтар бар', 'violations found')}</strong></span>
-                                    <span>{localText('Обязательные кредиты', 'Міндетті кредиттер', 'Mandatory credits')}: <strong>{goso.mandatory_credits}</strong></span>
-                                    <span>{localText('Уровень', 'Деңгей', 'Level')}: <strong>{goso.education_level}</strong></span>
-                                </div>
-                                {(goso.violations || []).map((item, index) => <div key={index} style={{ marginTop: 8, color: '#9b1c1c', fontSize: 13 }}>
-                                    ⚠️ {item.title || item.reason}: {item.actual !== undefined ? `${item.actual} / ${item.required}` : ''}
-                                </div>)}
-                                <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>{goso.source}</div>
-                            </CompactSection>
-                        })()}
-                        {currentPlan?.metrics?.verification?.pedagogical_audit && (() => {
-                            const audit = currentPlan.metrics.verification.pedagogical_audit
-                            return <CompactSection title={localText('\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043b\u0430\u043d\u0430', '\u0416\u043e\u0441\u043f\u0430\u0440 \u0441\u0430\u043f\u0430\u0441\u044b\u043d \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0442\u044b \u0442\u0435\u043a\u0441\u0435\u0440\u0443', 'Automatic curriculum quality audit')} toggleLabel={compactToggleLabel} accent={audit.passed ? '#2e7d32' : '#e67e22'} defaultOpen={false}>
-                                <div style={{ fontSize: 13, color: '#566', marginBottom: 10 }}>{audit.engine}</div>
-                                <strong style={{ color: audit.passed ? '#1b5e20' : '#9a5b00' }}>
-                                    {audit.passed
-                                        ? localText('План прошёл проверку связей с РО и последовательности семестров.', 'Жоспар ОН байланыстары мен семестр реттілігі тексерісінен өтті.', 'The plan passed LO alignment and semester sequencing checks.')
-                                        : localText('План требует исправлений до экспертного утверждения.', 'Жоспар сарапшылық бекітуге дейін түзетуді қажет етеді.', 'The plan needs corrections before expert approval.')}
-                                </strong>
-                                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: 13 }}>
-                                    <span>{localText('Структурные пререквизиты', 'Құрылымдық пререквизиттер', 'Structural prerequisites')}: <b>{audit.structural_foundations?.length || 0}</b></span>
-                                    <span>{localText('РО без реальной дисциплины', 'Нақты пәнсіз ОН', 'LOs without a real course')}: <b>{audit.lo_without_real_course?.length || 0}</b></span>
-                                    <span>{localText('Слабые дисциплины', 'Әлсіз пәндер', 'Weak courses')}: <b>{audit.weak_courses?.length || 0}</b></span>
-                                    <span>{localText('Неуместный семестр', 'Орынсыз семестр', 'Semester misplacements')}: <b>{audit.semester_misplacements?.length || 0}</b></span>
-                                </div>
-                                {(audit.lo_without_real_course || []).slice(0, 5).map(row => <div key={row.lo_code} style={{ marginTop: 7, fontSize: 12, color: '#7a4f00' }}>
-                                    ⚠ {row.lo_code}: {row.lo_text} · {localText('лучшая реальная связь', 'ең жақсы нақты байланыс', 'best real link')} {Math.round((row.max_real_course_score || 0) * 100)}%
-                                </div>)}
-                                {(audit.weak_courses || []).slice(0, 5).map(row => <div key={row.course_id} style={{ marginTop: 7, fontSize: 12, color: '#7a4f00' }}>
-                                    ⚠ {row.title} · {t('semester')} {row.semester} · AI {Math.round((row.model_score || 0) * 100)}% · EPVO {Math.round((row.epvo_expert_score || 0) * 100)}%
-                                </div>)}
-                                {(audit.structural_foundations || []).slice(0, 5).map(row => <div key={`foundation-${row.course_id}`} style={{ marginTop: 7, fontSize: 12, color: '#315b7a' }}>
-                                    ↳ {row.title} · {localText('не закрывает LO напрямую, но является подтверждённым пререквизитом', 'LO-ны тікелей жаппайды, бірақ расталған пререквизит', 'indirect LO support as a confirmed prerequisite')}
-                                </div>)}
-                                {(audit.semester_misplacements || []).slice(0, 5).map(row => <div key={`semester-${row.course_id}`} style={{ marginTop: 7, fontSize: 12, color: '#7a4f00' }}>
-                                    ⚠ {row.title}: {t('semester')} {row.semester} → {localText('рекомендуется', 'ұсынылады', 'recommended')} {row.recommended_semester}
-                                </div>)}
-                            </CompactSection>
-                        })()}
+                        <PlanVerificationPanels currentPlan={currentPlan} localText={localText} compactToggleLabel={compactToggleLabel} t={t} />
                         {currentPlan?.metrics?.optimizer && (
                             <CompactSection title={t('optimizer')} toggleLabel={compactToggleLabel} accent={'#3949ab'} defaultOpen={false}>
                                 <strong>{currentPlan.metrics.optimizer.name}</strong>
