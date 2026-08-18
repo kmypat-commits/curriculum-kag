@@ -172,7 +172,7 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                         if recommended_semester and target_semester != recommended_semester:
                             continue
                     if item.get("regulatory_required") and target_semester != int(item.get("recommended_semester") or donor_semester):
-                        # Р“РћРЎРћ fixes the component and credit volume, but a
+                        # RK regulations fix the component and credit volume, but a
                         # practice can move one semester forward when this is
                         # the only way to keep the doctoral workload within
                         # the allowed band. Research stages and final defence
