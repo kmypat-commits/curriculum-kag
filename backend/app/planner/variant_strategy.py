@@ -92,6 +92,7 @@ from app.planner.candidate_retrieval import (
 from app.planner.variant_assembly import add_bundle_if_fits
 from app.planner.variant_ranking import ranked_unique_candidate_ids
 from app.planner.variant_diversification import _diversify_variant_items
+from app.planner.variant_replacements import apply_confirmed_variant_replacements
 
 def select_courses_for_variant(project_version_id: int, db: Session, variant_type: str) -> List[Dict]:
     version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
@@ -1960,58 +1961,15 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     )
     result = _trim_to_target_credits(top_up_with_credit_bridges(top_up_with_real_epvo_courses(result)), target, db)
     result = rebalance_domain_quotas(result)
-    confirmed_course_replacements = {
-        int(course_id): int(replacement_id)
-        for course_id, replacement_id in (constraints.get("confirmed_course_replacements") or {}).items()
-        if str(course_id).isdigit() and str(replacement_id).isdigit()
-    }
-    if confirmed_course_replacements:
-        selected_ids = {int(item.get("course_id")) for item in result if item.get("course_id")}
-        for index, item in enumerate(result):
-            old_id = int(item.get("course_id") or 0)
-            replacement_id = confirmed_course_replacements.get(old_id)
-            replacement = courses.get(replacement_id)
-            if not replacement or replacement_id in selected_ids:
-                continue
-            selected_ids.discard(old_id)
-            selected_ids.add(replacement_id)
-            result[index] = {
-                "course_id": replacement.id,
-                "title": replacement.title,
-                "domain": replacement.domain,
-                "credits": int(item.get("credits") or replacement.credits or 5),
-                "recommended_semester": int(item.get("recommended_semester") or replacement.recommended_semester or 1),
-                "latest_semester": int(item.get("latest_semester") or num_semesters),
-                "prerequisites": prereq_ids_by_course.get(replacement.id, []),
-                "type": replacement.cycle_component or item.get("type") or "elective",
-                "selection_method": "expert_confirmed_course_replacement",
-            }
-    confirmed_replacements = {
-        int(bridge_id): int(course_id)
-        for bridge_id, course_id in (constraints.get("confirmed_bridge_replacements") or {}).items()
-        if str(bridge_id).isdigit() and str(course_id).isdigit()
-    }
-    result = replace_redundant_bridges_with_real_courses(result, set(confirmed_replacements))
+    result = apply_confirmed_variant_replacements(
+        result,
+        constraints,
+        courses,
+        prereq_ids_by_course,
+        num_semesters,
+        replace_redundant_bridges_with_real_courses,
+    )
     result = rebalance_domain_quotas(result)
-    if confirmed_replacements:
-        for index, item in enumerate(result):
-            course_id = confirmed_replacements.get(int(item.get("bridge_module_id") or 0))
-            course = courses.get(course_id)
-            if not course:
-                continue
-            result[index] = {
-                "course_id": course.id,
-                "title": course.title,
-                "domain": course.domain,
-                # Expert confirmation replaces the bridge content/name but
-                # preserves the curriculum credit envelope and semester slot.
-                "credits": int(item.get("credits") or course.credits or 5),
-                "recommended_semester": int(item.get("recommended_semester") or course.recommended_semester or 1),
-                "latest_semester": int(item.get("latest_semester") or num_semesters),
-                "prerequisites": prereq_ids_by_course.get(course.id, []),
-                "type": course.cycle_component or "mandatory",
-                "selection_method": "expert_confirmed_ai_bridge_replacement",
-            }
     # Expert replacements are applied late and can change the domain envelope.
     # Recheck quotas once more while keeping those confirmed courses protected.
     result = rebalance_domain_quotas(result)
