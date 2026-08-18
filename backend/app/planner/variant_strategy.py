@@ -173,9 +173,18 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 return False
             # Domain membership alone is insufficient: a medical or IT course
             # may still be irrelevant to this programme's stated outcomes.
+            # Exact membership in the selected EPVO group is a valid
+            # catalogue-level admission signal even when a legacy programme
+            # has mojibake LO text and therefore a depressed local SBERT
+            # score.  The course still needs a programme MatchScore (it is in
+            # ``aggregates``), and the final verifier remains responsible for
+            # LO coverage; this only prevents a damaged old text field from
+            # collapsing the whole scoped candidate pool.
+            exact_scope = scope_rank(course) >= 3
             if (
                 float(evidence.get("max") or 0.0) < 0.4
                 and float(evidence.get("expert") or 0.0) < 0.5
+                and not exact_scope
                 and not course_code.startswith(f"AI-CONFIRMED-{project_version_id}-")
             ):
                 return False
