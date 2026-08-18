@@ -277,6 +277,9 @@ def build_curriculum_plan(
                 variant_type,
                 target,
             )
+        selected_courses = _cap_bridge_items_to_budget(
+            selected_courses, project_version, confirmed_bridge_ids
+        )
     selected_courses = _unique_items_by_title(selected_courses)
     selected_courses = _remap_equivalent_prerequisites(selected_courses, db)
     num_semesters = int(constraints.get("total_semesters", 8))
@@ -410,6 +413,13 @@ def build_curriculum_plan(
     # pseudo-course after duplicate catalogue rows were removed.
     selected_courses = sanitize_selected_courses(selected_courses)
     selected_courses = merge_goso_items(selected_courses, project_version, db)
+    # Selection can inherit several low-evidence bridge rows from the
+    # candidate/repair stages. Enforce the same budget before structural
+    # interdisciplinary bridges are added; otherwise later credit repair can
+    # produce a plan that is technically complete but pedagogically unusable.
+    selected_courses = _cap_bridge_items_to_budget(
+        selected_courses, project_version, confirmed_bridge_ids
+    )
     total_before_gap_fill = sum(int(item.get("credits") or 0) for item in selected_courses)
     if total_before_gap_fill < target_credits and constraints.get("allow_new_courses", True):
         existing_bridge_ids = {
@@ -881,6 +891,41 @@ def build_curriculum_plan(
 
 
 
+def _cap_bridge_items_to_budget(
+    selected_courses: List[Dict],
+    project_version: ProjectVersion,
+    confirmed_bridge_ids: set[int] | None = None,
+) -> List[Dict]:
+    """Keep bridge units within the auditable programme budget.
+
+    Bridge rows may be introduced by several independent repair stages.  A
+    single final gate prevents those stages from accumulating 10+ modules.
+    Confirmed replacements are retained; remaining slots favour bridges with
+    more explicit LO targets and higher admission evidence.
+    """
+    limit = bridge_module_limit(project_version)
+    bridges = [item for item in selected_courses if item.get("bridge_module_id") is not None]
+    if len(bridges) <= limit:
+        return selected_courses
+    confirmed = confirmed_bridge_ids or set()
+    protected = [item for item in bridges if int(item.get("bridge_module_id") or 0) in confirmed]
+    if len(protected) >= limit:
+        keep = protected
+    else:
+        remaining = [item for item in bridges if item not in protected]
+        remaining.sort(
+            key=lambda item: (
+                -len(item.get("target_los") or item.get("learning_outcomes") or []),
+                -float(item.get("admission_score") or item.get("score") or 0.0),
+                int(item.get("credits") or 0),
+            )
+        )
+        keep = protected + remaining[: max(0, limit - len(protected))]
+    keep_ids = {id(item) for item in keep}
+    return [
+        item for item in selected_courses
+        if item.get("bridge_module_id") is None or id(item) in keep_ids
+    ]
 
 
 def _fill_schedule_credit_gap(
@@ -919,7 +964,18 @@ def _fill_schedule_credit_gap(
     # the minimum number of 3--7 credit modules instead of silently returning
     # an incomplete plan.  The verifier still marks bridge-heavy plans for
     # expert review; this change only makes the credit envelope deterministic.
-    slots_needed = max(1, math.ceil(gap / 7))
+    existing_bridge_ids = {
+        int(item.get("bridge_module_id"))
+        for items in schedule.values()
+        for item in items
+        if item.get("bridge_module_id") is not None
+    }
+    available_bridge_slots = max(
+        0, bridge_module_limit(project_version) - len(existing_bridge_ids)
+    )
+    if available_bridge_slots <= 0:
+        return schedule
+    slots_needed = min(available_bridge_slots, max(1, math.ceil(gap / 7)))
     modules = ensure_credit_bridge_modules(
         project_version,
         db,
