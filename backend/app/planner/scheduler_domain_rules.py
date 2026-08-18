@@ -53,16 +53,37 @@ def is_it_medicine_support_course(course, project_domains: list[str]) -> bool:
         return True
     text = _title_key(" ".join([course.title or "", course.description or ""]))
     explicit_digital = ("информационн систем", "медицинская информатика", "медицинской информатики", "медицинскую информатику", "цифр", "алгоритм", "программ", "телемед", "биоинформ", "искусствен", "machine learning", "data science", "database", "digital", "information system", "software", "computer", "электронн медицинск", "электронн здравоохран")
-    physician_depth = ("клиническ", "диагност", "лечени", "хирург", "терапевт", "внутренние болезни", "акуш", "гинек", "педиатр", "офтальм", "онколог", "кардио", "уролог", "реаним", "стоматолог", "пропедевтик", "врачебн практик", "clinical diagnostics", "clinical diagnosis", "surgery", "treatment")
+    physician_depth = ("клиническ", "диагност", "лечени", "хирург", "терапевт", "внутренние болезни", "акуш", "гинек", "педиатр", "офтальм", "онколог", "кардио", "уролог", "нейропат", "патолог", "реаним", "стоматолог", "пропедевтик", "врачебн практик", "clinical diagnostics", "clinical diagnosis", "surgery", "treatment")
     if not _has_domain_term(text, physician_depth) or _has_domain_term(text, explicit_digital):
         return True
-    return 0 < int(course.credits or 0) <= 7
+    # A short generic foundation may provide medical context for IT students,
+    # but a specialty clinical block (neuropathology, surgery, etc.) cannot be
+    # admitted merely because it is small.
+    compact_foundation = str(course.title or "").casefold().strip().startswith("основы ") and int(course.credits or 0) <= 5
+    return compact_foundation and not any(
+        marker in text for marker in ("нейропат", "патолог", "хирург", "кардио", "онколог", "уролог", "офтальм")
+    )
 
 
 def has_foreign_professional_title(course, project_domains: list[str]) -> bool:
     """Detect a professional context not represented by selected fields."""
     title = _title_key(course.title)
+    # A replacement-character title is a data-quality issue, not reliable
+    # semantic evidence.  Treating mojibake as a real word can accidentally
+    # match markers such as ``предприяти`` and reject a valid EPVO course;
+    # encoding audits handle these rows separately and the planner can then
+    # request a reviewed translation.
+    if "\ufffd" in title:
+        return False
     domains = " ".join(project_domains).casefold()
+    course_domain = str(getattr(course, "domain", "") or "").casefold()
+    # EPVO often stores enterprise/1C courses under the IT domain.  For an
+    # explicitly IT-scoped programme that is a valid application context, not
+    # a foreign business programme; LO/EPVO evidence still controls admission.
+    if any(marker in course_domain for marker in ("it", "информ", "computer")) and any(
+        marker in domains for marker in ("it", "информ", "computer", "6b", "7m", "8d")
+    ):
+        return False
     context_groups = (
         (("маркетинг", "marketing", "бизнес коммуникац", "business communication", "цифровая экономика", "digital economy", "экономик", "предприяти", "enterprise management", "комплексная логистика", "логистика", "logistics", "бухгалтер", "accounting", "финанс", "finance"), ("бизнес", "управлен", "эконом", "менедж", "маркет", "логист", "финанс", "account", "business", "management", "econom", "marketing", "logistics", "finance")),
         (("промышленная безопасность", "industrial safety"), ("промышлен", "производ", "инженер", "безопасность труда", "industrial", "manufactur", "engineering", "occupational safety")),

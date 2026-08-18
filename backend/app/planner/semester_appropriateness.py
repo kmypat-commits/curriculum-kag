@@ -72,6 +72,13 @@ def _repair_semester_appropriateness(
             return 1, num_semesters
         recommended = int(item.get("recommended_semester") or course.recommended_semester or 0)
         semantic_upper = _foundation_max_semester(course.title, num_semesters)
+        course_domain_text = str(course.domain or "").casefold()
+        course_title_text = str(course.title or "").casefold().strip()
+        if (
+            any(marker in course_domain_text for marker in ("мед", "здрав", "medicine", "health"))
+            and course_title_text.startswith(("основы ", "введение ", "fundamentals", "introduction"))
+        ):
+            semantic_upper = max(semantic_upper, (num_semesters + 1) // 2)
         if item.get("prerequisites"):
             # "Основы" can name a domain foundation built on earlier general
             # prerequisites (for example engineering calculations after

@@ -120,6 +120,16 @@ def test_hard_variant_failure_is_rejected_for_every_jurisdiction():
         "hard_violation_count": 0,
         "quality_violations": [{"reason": "lo_without_real_course"}],
     })
+    assert must_reject_variant({
+        "feasible": True,
+        "hard_violation_count": 0,
+        "quality_violations": [{"reason": "semester_appropriateness"}],
+    })
+    assert must_reject_variant({
+        "feasible": True,
+        "hard_violation_count": 0,
+        "quality_violations": [{"reason": "missing_core_competency_blocks"}],
+    })
     assert not must_reject_variant({
         "feasible": True,
         "hard_violation_count": 0,

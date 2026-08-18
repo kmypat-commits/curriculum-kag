@@ -220,6 +220,19 @@ def test_foreign_professional_context_is_not_hidden_by_ai_or_digital_words():
         SimpleNamespace(title="Базы данных и Business Intelligence"),
         domains,
     )
+    # Damaged legacy text is handled by the encoding audit, not treated as a
+    # trustworthy semantic marker that can reject a valid EPVO course.
+    assert not _has_foreign_professional_title(
+        SimpleNamespace(title=("\ufffd" * 16) + " " + ("\ufffd" * 8) + " 1"),
+        domains,
+    )
+    assert not _has_foreign_professional_title(
+        SimpleNamespace(
+            title="Программирование бизнес-процессов на платформе 1С",
+            domain="it",
+        ),
+        ["6B061", "B057"],
+    )
 
 
 def test_load_shift_never_splits_real_epvo_course_credits():

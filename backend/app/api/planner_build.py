@@ -46,10 +46,20 @@ def must_reject_variant(verification: dict | None) -> bool:
         for item in (verification.get("quality_violations") or [])
         if isinstance(item, dict)
     }
+    # Some quality findings are not optional presentation warnings: a plan
+    # with an impossible semester placement or a missing core competency is
+    # pedagogically unsafe even when its arithmetic is valid.  Keep softer
+    # review hints (for example domain advisory text) non-blocking.
+    blocking_quality_reasons = {
+        "semester_appropriateness",
+        "missing_core_competency_blocks",
+        "bridge_module_limit_exceeded",
+    }
     return bool(
         not verification.get("feasible")
         or int(verification.get("hard_violation_count") or 0) > 0
         or "lo_without_real_course" in quality_reasons
+        or quality_reasons.intersection(blocking_quality_reasons)
     )
 
 

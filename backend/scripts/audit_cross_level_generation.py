@@ -510,7 +510,13 @@ def main() -> None:
         })
         raise
     finally:
-        db.rollback()
+        # ``--keep`` is an explicit debugging option: retain the generated
+        # temporary project so its schedule can be inspected after a failed
+        # control run.  The default remains rollback + cleanup.
+        if args.keep and report.get("status") == "complete":
+            db.commit()
+        else:
+            db.rollback()
         if project_id is not None and not args.keep:
             temporary = db.get(Project, project_id)
             if temporary is not None:

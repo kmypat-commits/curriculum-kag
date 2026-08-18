@@ -219,13 +219,16 @@ def build_curriculum_plan(
         selected_courses = _fit_real_professional_block_after_goso(
             selected_courses, project_version, db, variant_type
         )
-    selected_courses = _repair_missing_ict_competencies(
-        selected_courses, project_version, db
-    )
     if not selector_has_complete_real_lo:
         selected_courses = _ensure_foundation_capacity(
             selected_courses, project_version, db
         )
+    # Foundation-capacity repair can rebuild the candidate subset. Run the
+    # competency pass after it so a required ICT block (notably information
+    # security) cannot be discarded by the later fallback.
+    selected_courses = _repair_missing_ict_competencies(
+        selected_courses, project_version, db
+    )
     confirmed_bridge_ids = {
         int(bridge_id)
         for bridge_id in (constraints.get("confirmed_bridge_replacements") or {})
@@ -361,6 +364,12 @@ def build_curriculum_plan(
         # before every scheduling attempt so replacements follow the same
         # education-level and semester rules.
         selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
+        # This is the last candidate boundary before scheduling. Reassert the
+        # ICT competency contract here because any preceding normalization or
+        # credit repair may have replaced the marked security course.
+        selected_courses = _repair_missing_ict_competencies(
+            selected_courses, project_version, db
+        )
         schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
         schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
         verification = verify_curriculum_plan(schedule, project_version, db)
@@ -407,6 +416,13 @@ def build_curriculum_plan(
         selected_courses = _remap_equivalent_prerequisites(selected_courses, db)
         selected_courses = sanitize_selected_courses(selected_courses)
         selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
+
+    # The prerequisite loop may rebuild the exact candidate subset and discard
+    # a competency repair marker. Re-run this quality-critical pass at the
+    # final selection boundary so required ICT blocks survive every repair.
+    selected_courses = _repair_missing_ict_competencies(
+        selected_courses, project_version, db
+    )
 
     # Fill an ordinary credit gap with several distinct, auditable modules.
     # Previously the final repair could turn one subject into a 60-credit
@@ -740,6 +756,82 @@ def build_curriculum_plan(
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )
+
+    # Final schedule guard: load/quota repairs operate on a flat schedule and
+    # can otherwise replace the only course carrying an ICT competency block.
+    # Restore a same-credit, scoped EPVO competency candidate in-place before
+    # the independent verifier runs; no synthetic bridge is accepted here.
+    competency_requirements = _ict_competency_requirements(constraints)
+    if competency_requirements:
+        final_course_ids = {
+            int(item["course_id"])
+            for rows in schedule.values()
+            for item in rows
+            if item.get("course_id") is not None
+        }
+        final_courses = {
+            course.id: course
+            for course in db.query(Course).filter(
+                Course.id.in_(final_course_ids or {-1})
+            ).all()
+        }
+        final_audit = _ict_competency_audit(list(final_courses.values()), constraints)
+        if final_audit.get("missing"):
+            flat_items = [dict(item) for rows in schedule.values() for item in rows]
+            repaired_items = _repair_missing_ict_competencies(
+                flat_items, project_version, db
+            )
+            repaired_by_id = {
+                int(item["course_id"]): item
+                for item in repaired_items
+                if item.get("course_id") is not None
+                and int(item["course_id"]) not in final_course_ids
+                and item.get("competency_required")
+            }
+            selected_prerequisites = {
+                int(prerequisite_id)
+                for rows in schedule.values()
+                for item in rows
+                for prerequisite_id in (item.get("prerequisites") or [])
+                if prerequisite_id in final_course_ids
+            }
+            for candidate in repaired_by_id.values():
+                candidate_credits = int(candidate.get("credits") or 0)
+                replaceable = [
+                    (semester, index, item)
+                    for semester, rows in schedule.items()
+                    for index, item in enumerate(rows)
+                    if item.get("course_id") is not None
+                    and not item.get("regulatory_required")
+                    and not item.get("competency_required")
+                    and int(item.get("course_id")) not in selected_prerequisites
+                    and int(item.get("credits") or 0) == candidate_credits
+                ]
+                if not replaceable:
+                    continue
+                semester, index, old_item = min(
+                    replaceable,
+                    key=lambda row: (
+                        float(row[2].get("admission_score") or 0.0),
+                        -int(row[2].get("credits") or 0),
+                    ),
+                )
+                replacement = dict(candidate)
+                replacement["recommended_semester"] = semester
+                replacement["selection_method"] = "ict_competency_final_guard"
+                schedule[semester][index] = replacement
+                final_course_ids.discard(int(old_item["course_id"]))
+                final_course_ids.add(int(candidate["course_id"]))
+                final_audit = _ict_competency_audit(
+                    [
+                        db.get(Course, course_id)
+                        for course_id in final_course_ids
+                        if db.get(Course, course_id) is not None
+                    ],
+                    constraints,
+                )
+                if not final_audit.get("missing"):
+                    break
 
     invalid_domain_courses = []
     for semester_items in schedule.values():
