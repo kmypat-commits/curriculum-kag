@@ -105,3 +105,19 @@ postgres-data/
 article_user_qa_before/
 docs/article/qa_*/
 docs/article/source_pdf_extracts/
+# Local article conversion scripts and review drafts are not application
+# release artifacts; keep them available locally without polluting the code
+# history. The final manuscript is exported separately when approved.
+backend/scripts/convert_word_equations.ps1
+backend/scripts/export_word_pdf.ps1
+backend/scripts/major_revise_tem_article.py
+backend/scripts/make_page_contact_sheets.py
+backend/scripts/polish_tem_submission_layout.py
+backend/scripts/profile_local_api.py
+backend/scripts/qa_tem_article.py
+backend/scripts/revise_user_tem_article.py
+docs/article/*_edited.docx
+docs/article/*_revised.docx
+docs/article/*_working.docx
+docs/article/*_submission_draft*.docx
+docs/article/screenshots_en/
