@@ -78,6 +78,20 @@ def test_epvo_normalized_stamp_changes_after_in_place_fingerprint_update():
     engine.dispose()
 
 
+def test_epvo_ranking_export_preserves_raw_graded_expert_scale():
+    from scripts.export_epvo_ranking_dataset_postgres import expert_scores
+
+    payload = {
+        "expertCheckResults": [
+            {"floId": "LO1", "result": "0,5"},
+            {"floId": "LO1", "result": "1"},
+            {"floId": "LO2", "result": "0"},
+            {"floId": "LO3", "result": "2"},
+        ]
+    }
+    assert expert_scores(payload) == {"LO1": 0.75, "LO2": 0.0}
+
+
 def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
     assert looks_like_mojibake("РџР»Р°РЅ СѓС‡РµР±РЅРѕР№ РїСЂРѕРіСЂР°РјРјС‹")
     assert looks_like_mojibake("ÐÐ»Ð°Ð½ ÑÑÐµÐ±Ð½Ð¾Ð¹ Ð¿ÑÐ¾Ð³ÑÐ°Ð¼Ð¼Ñ")

@@ -53,8 +53,8 @@ def main():
     parser.add_argument("--split", choices=("validation", "test"), default="test")
     parser.add_argument("--seed-prefix", default="ranking-v1")
     parser.add_argument(
-        "--min-expert-score", type=float, default=0.0,
-        help="Keep only declared EPVO links at or above this graded expert strength.",
+        "--min-expert-score", type=float, default=0.5,
+        help="Keep only EPVO links at or above this graded expert strength (0.5 = medium/high by default).",
     )
     args = parser.parse_args()
     programme_path = Path(args.programmes_data) if args.programmes_data else Path(args.data).with_name("programs.jsonl")

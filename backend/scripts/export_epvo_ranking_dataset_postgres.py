@@ -79,6 +79,24 @@ def split_for(program_id: str, seed: int = 42) -> str:
     return "train" if bucket < 70 else "validation" if bucket < 85 else "test"
 
 
+def expert_scores(payload: dict) -> dict[str, float]:
+    """Recover the original graded expert scale from a raw discipline card."""
+    votes: dict[str, list[float]] = defaultdict(list)
+    for item in payload.get("expertCheckResults") or []:
+        lo_id = item.get("floId")
+        try:
+            value = float(str(item.get("result")).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if lo_id is not None and value in {0.0, 0.5, 1.0}:
+            votes[str(lo_id)].append(value)
+    return {
+        lo_id: round(sum(values) / len(values), 4)
+        for lo_id, values in votes.items()
+        if values
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
@@ -97,7 +115,7 @@ def main() -> int:
     normalized: dict[str, dict] = {}
     localized_courses: dict[int, dict[str, dict[str, str]]] = defaultdict(dict)
     links: dict[str, set[tuple[str, str]]] = defaultdict(set)
-    link_strength: dict[tuple[str, str, str], float] = {}
+    raw_expert_scores: dict[tuple[str, str, str], float] = {}
 
     with engine.connect() as db:
         programme_filter = ""
@@ -140,7 +158,12 @@ def main() -> int:
             if programme_filter else
             "SELECT program_source_id, source_key, payload_json FROM raw_epvo_disciplines"
         ), programme_params):
-            disciplines[str(row.program_source_id)].append((str(row.source_key), row.payload_json or {}))
+            program_id = str(row.program_source_id)
+            source_key = str(row.source_key)
+            payload = row.payload_json or {}
+            disciplines[program_id].append((source_key, payload))
+            for lo_id, value in expert_scores(payload).items():
+                raw_expert_scores[(program_id, source_key, lo_id)] = value
         for row in db.execute(text(
             "SELECT program_source_id, source_key, payload_json FROM raw_epvo_learning_outcomes "
             f"WHERE program_source_id{programme_filter}"
@@ -201,11 +224,12 @@ def main() -> int:
             strength = float(row.strength or 0.0)
             if strength > 0:
                 links[program_id].add((discipline_id, lo_id))
-            link_strength[(program_id, discipline_id, lo_id)] = strength
 
     pair_count = 0
+    positive_pair_count = 0
     programme_count = 0
     split_counts = defaultdict(int)
+    score_counts = defaultdict(int)
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
     pairs_path = output / "course_lo_pairs.jsonl"
@@ -235,15 +259,29 @@ def main() -> int:
                 positive_edges.add((course_id, lo_id))
             if len(positive_edges) < args.min_labelled_links or len(by_course) < 2:
                 continue
+            graded_edges: dict[tuple[str, str], float | None] = {}
+            for source_key, _payload in disciplines.get(program_id, []):
+                course_id = source_to_course.get(source_key)
+                if not course_id:
+                    continue
+                for lo_id in outcomes.get(program_id, {}):
+                    value = raw_expert_scores.get((program_id, source_key, lo_id))
+                    if value is not None:
+                        graded_edges[(course_id, lo_id)] = value
+            # A normalized positive link without a raw vote remains available
+            # as a declared edge, but it is explicitly marked as unlabeled
+            # rather than silently turning into expert_score=1.
+            for course_id, lo_id in positive_edges:
+                graded_edges.setdefault((course_id, lo_id), None)
             programme_count += 1
             split_counts[program["split"]] += 1
             expert_edges = [
                 {
                     "course_id": course_id,
                     "lo_id": lo_id,
-                    "score": link_strength.get((program_id, course_id, lo_id), 1.0),
+                    "score": score,
                 }
-                for course_id, lo_id in sorted(positive_edges)
+                for (course_id, lo_id), score in sorted(graded_edges.items())
             ]
             row = {
                 **program,
@@ -253,7 +291,7 @@ def main() -> int:
                 "expert_edges": expert_edges,
             }
             program_stream.write(json.dumps(row, ensure_ascii=False) + "\n")
-            for course_id, lo_id in row["positive_edges"]:
+            for course_id, lo_id in sorted(graded_edges):
                 course = by_course[course_id]
                 outcome = outcomes[program_id][lo_id]
                 pair_stream.write(json.dumps({
@@ -261,18 +299,25 @@ def main() -> int:
                     "split": program["split"],
                     "course_id": course_id,
                     "lo_id": lo_id,
-                    "declared_link": True,
-                    "expert_score": link_strength.get((program_id, course_id, lo_id), 1.0),
+                    "declared_link": (course_id, lo_id) in positive_edges,
+                    "expert_score": graded_edges[(course_id, lo_id)],
                     "course_title": course.get("title") or {},
                     "course_description": course.get("description") or {},
                     "lo_text": outcome.get("text") or {},
                 }, ensure_ascii=False) + "\n")
                 pair_count += 1
+                positive_pair_count += int((course_id, lo_id) in positive_edges)
+                score = graded_edges[(course_id, lo_id)]
+                score_counts["unlabeled"] += int(score is None)
+                if score is not None:
+                    score_counts[f"score_{score:g}"] += 1
     manifest = {
         "source": "PostgreSQL raw_epvo_* + epvo_discipline_lo_links",
         "programmes": programme_count,
-        "positive_pairs": pair_count,
+        "positive_pairs": positive_pair_count,
+        "pair_rows": pair_count,
         "split_counts": dict(split_counts),
+        "expert_score_distribution": dict(score_counts),
         "database_dialect": engine.dialect.name,
         "status": "ready" if programme_count and pair_count else "empty",
     }
