@@ -6,6 +6,7 @@ import os
 import logging
 import time
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 # Fix for Passlib + Bcrypt 4.1.0+ compatibility on Python 3.14
 try:
@@ -116,7 +117,7 @@ async def health_check():
             "database": database,
             "database_status": "connected",
         }
-    except Exception:
+    except SQLAlchemyError:
         return JSONResponse(
             status_code=503,
             content={
