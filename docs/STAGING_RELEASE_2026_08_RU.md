@@ -44,6 +44,8 @@ python backend/scripts/check_release_hygiene.py
 `alembic` head, endpoint contracts и browser smoke. До этого версия считается
 `staging-candidate`, а не production.
 
+Для защиты от случайного тега используйте `powershell -File .\scripts\create-staging-tag.ps1 -Tag staging-YYYY.MM.DD[-suffix]`. Скрипт сам проверяет чистый worktree, manifest, последний restore-manifest, PostgreSQL на `5433` и UI smoke; при незапущенном PostgreSQL он завершает работу без создания тега.
+
 ## Откат
 
 Остановить backend/frontend, сохранить логи и текущий manifest, восстановить
