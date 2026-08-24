@@ -26,6 +26,7 @@ from app.planner.scheduler import (
 )
 from app.planner.bridge_policy import bridge_module_limit
 from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.evidence_preflight import evaluate_scoped_evidence
 from app.planner.verifier import (
     _ict_competency_audit,
     _semantic_max_semester,
@@ -52,6 +53,36 @@ def test_bridge_budget_is_hard_capped_by_user_and_system_limits():
 
     project.constraints_json = {"allow_new_courses": False, "max_new_courses": 5}
     assert bridge_module_limit(version) == 0
+
+
+def test_evidence_preflight_blocks_dual_domain_credit_deficit_before_scheduler():
+    courses = [
+        SimpleNamespace(id=1, credits=5),
+        SimpleNamespace(id=2, credits=5),
+    ]
+    result = evaluate_scoped_evidence(
+        courses=courses,
+        scoped_course_ids={1: (True, False), 2: (False, True)},
+        credible_course_ids={1, 2},
+        constraints={
+            "program_type": "interdisciplinary",
+            "secondary_direction_code": "6B081",
+            "total_credits": 240,
+            "min_domain1_percent": 40,
+            "min_domain2_percent": 40,
+            "credit_tolerance": 3,
+        },
+    )
+    assert result["blocking"] is True
+    assert result["deficits"] == [88.0, 88.0]
+
+
+def test_evidence_preflight_skips_standard_programmes():
+    result = evaluate_scoped_evidence(
+        courses=[], scoped_course_ids={}, credible_course_ids=set(),
+        constraints={"program_type": "standard", "total_credits": 240},
+    )
+    assert result == {"blocking": False, "skipped": True, "reason": "not_interdisciplinary"}
 
 
 def test_shared_epvo_scope_allocates_credit_once_across_two_domains():

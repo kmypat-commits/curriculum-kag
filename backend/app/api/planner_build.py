@@ -17,6 +17,7 @@ from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.models.user import User
 from app.planner.scheduler import build_curriculum_plan, calculate_plan_metrics
+from app.planner.evidence_preflight import assess_professional_evidence
 from app.services.auth import get_current_user
 from app.services.plan_reporting import build_change_report as _build_change_report
 from app.services.plan_reporting import plan_snapshot as _plan_snapshot
@@ -284,6 +285,17 @@ def build_plan(
             )
         timings["scoring"] = round(time.perf_counter() - stage_started, 2)
         timings["scoring_cached"] = scoring_cached
+        evidence_preflight = assess_professional_evidence(version, db)
+        timings["evidence_preflight"] = evidence_preflight
+        if evidence_preflight.get("blocking"):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "insufficient_epvo_lo_evidence",
+                    "message": evidence_preflight.get("message"),
+                    "evidence": evidence_preflight,
+                },
+            )
         stage_started = time.perf_counter()
         _set_build_status(
             project_version_id, stage="variants", progress=20,
@@ -462,6 +474,15 @@ def build_plan(
                 "C": "Минимум конфликтов"
             }
         }
+    except HTTPException:
+        db.rollback()
+        _replace_build_status(project_version_id, **{
+            "state": "failed", "stage": "failed", "progress": 0,
+            "error": "Проверка EPVO/LO-доказательств остановила построение до запуска вариантов.",
+            "elapsed_seconds": round(time.perf_counter() - build_started, 1),
+            "timings": timings,
+        })
+        raise
     except Exception as e:
         db.rollback()
         _replace_build_status(project_version_id, **{
