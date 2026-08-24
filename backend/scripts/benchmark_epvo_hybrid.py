@@ -125,6 +125,7 @@ def main() -> int:
     # recurring catalogue titles (e.g. the same course appears in several
     # universities) but never reads held-out programme edges.
     train_anchors: dict[str, list[str]] = defaultdict(list)
+    train_anchor_los_by_text: dict[str, list[str]] = defaultdict(list)
     for row in rows:
         if row.get("split") != "train":
             continue
@@ -145,7 +146,23 @@ def main() -> int:
             outcome = outcomes.get(lo_id)
             key = title_key(course or {})
             if key and outcome:
-                train_anchors[key].append(outcome_text(outcome))
+                lo_text = outcome_text(outcome)
+                train_anchors[key].append(lo_text)
+                train_anchor_los_by_text[course_text(course)].append(lo_text)
+    fuzzy_anchor_texts = list(train_anchor_los_by_text)
+    fuzzy_anchor_lo_texts = [train_anchor_los_by_text[value] for value in fuzzy_anchor_texts]
+    fuzzy_lo_texts: list[str] = []
+    fuzzy_lo_indices: list[list[int]] = []
+    fuzzy_lo_index: dict[str, int] = {}
+    for anchor_los in fuzzy_anchor_lo_texts:
+        indices = []
+        for value in anchor_los:
+            index = fuzzy_lo_index.setdefault(value, len(fuzzy_lo_texts))
+            if index == len(fuzzy_lo_texts):
+                fuzzy_lo_texts.append(value)
+            indices.append(index)
+        fuzzy_lo_indices.append(indices)
+    fuzzy_lo_matrix = vectorizer.transform(fuzzy_lo_texts) if fuzzy_lo_texts else None
 
     blocks: dict[str, dict] = {}
     for row in rows:
@@ -185,11 +202,34 @@ def main() -> int:
         from sentence_transformers import SentenceTransformer
         sbert_model = SentenceTransformer(str(args.sbert_model), device=args.device)
 
+    # Build nearest fuzzy anchors once for the complete test candidate pool;
+    # recomputing this matrix per programme was needlessly expensive.
+    fuzzy_lookup: dict[str, list[tuple[int, float]]] = {}
+    if fuzzy_anchor_texts and fuzzy_lo_matrix is not None:
+        unique_test_courses = sorted({value for block in blocks.values() for value in block["courses"]})
+        fuzzy_courses = vectorizer.transform(fuzzy_anchor_texts)
+        all_course_similarity = (vectorizer.transform(unique_test_courses) @ fuzzy_courses.T).toarray()
+        for row_index, value in enumerate(unique_test_courses):
+            nearest = np.argsort(-all_course_similarity[row_index])[:8]
+            fuzzy_lookup[value] = [
+                (int(anchor_index), float(all_course_similarity[row_index, anchor_index]))
+                for anchor_index in nearest
+                if all_course_similarity[row_index, anchor_index] > 0
+            ]
+
     metrics = {"programmes": len(blocks), "queries": 0}
     values = defaultdict(list)
     total_queries = 0
     anchor_values = {weight: defaultdict(list) for weight in (0.25, 0.5, 0.75)}
-    hybrid_values = {name: defaultdict(list) for name in ("sbert_0.5_lex_0.25_anchor_0.25", "sbert_0.6_lex_0.2_anchor_0.2", "sbert_0.25_lex_0.5_anchor_0.25")}
+    fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
+    hybrid_values = {name: defaultdict(list) for name in (
+        "sbert_0.5_lex_0.25_anchor_0.25",
+        "sbert_0.6_lex_0.2_anchor_0.2",
+        "sbert_0.25_lex_0.5_anchor_0.25",
+        "sbert_0.25_lex_0.25_fuzzy_0.5",
+        "sbert_0.2_lex_0.3_fuzzy_0.5",
+        "sbert_0.4_lex_0.2_fuzzy_0.4",
+    )}
     for block in blocks.values():
         course_vectors = vectorizer.transform(block["courses"])
         lo_vectors = vectorizer.transform(block["los"])
@@ -214,6 +254,23 @@ def main() -> int:
             for name, value in variant_metrics.items():
                 if name != "queries":
                     aggregate[name].append(value * variant_metrics["queries"])
+        # Fuzzy train-only anchors use the nearest recurring course texts,
+        # rather than requiring an exact title match.  At most eight anchors
+        # are inspected per candidate to keep the benchmark bounded.
+        fuzzy_scores = np.zeros_like(lexical_scores)
+        if fuzzy_lookup and fuzzy_lo_matrix is not None:
+            lo_similarity = (lo_vectors @ fuzzy_lo_matrix.T).toarray()
+            for course_index, course_text_value in enumerate(block["courses"]):
+                for anchor_index, course_score in fuzzy_lookup.get(course_text_value, []):
+                    fuzzy_scores[:, course_index] = np.maximum(
+                        fuzzy_scores[:, course_index],
+                        course_score * lo_similarity[:, fuzzy_lo_indices[anchor_index]].max(axis=1),
+                    )
+        for weight, aggregate in fuzzy_values.items():
+            variant_metrics = rank_metrics(block, (1 - weight) * lexical_scores + weight * fuzzy_scores)
+            for metric, value in variant_metrics.items():
+                if metric != "queries":
+                    aggregate[metric].append(value * variant_metrics["queries"])
         if sbert_model is not None:
             sbert_course = sbert_model.encode(block["courses"], batch_size=48, normalize_embeddings=True, show_progress_bar=False)
             sbert_lo = sbert_model.encode(block["los"], batch_size=48, normalize_embeddings=True, show_progress_bar=False)
@@ -222,6 +279,9 @@ def main() -> int:
                 "sbert_0.5_lex_0.25_anchor_0.25": 0.5 * sbert_scores + 0.25 * lexical_scores + 0.25 * anchor_scores,
                 "sbert_0.6_lex_0.2_anchor_0.2": 0.6 * sbert_scores + 0.2 * lexical_scores + 0.2 * anchor_scores,
                 "sbert_0.25_lex_0.5_anchor_0.25": 0.25 * sbert_scores + 0.5 * lexical_scores + 0.25 * anchor_scores,
+                "sbert_0.25_lex_0.25_fuzzy_0.5": 0.25 * sbert_scores + 0.25 * lexical_scores + 0.5 * fuzzy_scores,
+                "sbert_0.2_lex_0.3_fuzzy_0.5": 0.2 * sbert_scores + 0.3 * lexical_scores + 0.5 * fuzzy_scores,
+                "sbert_0.4_lex_0.2_fuzzy_0.4": 0.4 * sbert_scores + 0.2 * lexical_scores + 0.4 * fuzzy_scores,
             }
             for name, scores in hybrid_scores.items():
                 variant_metrics = rank_metrics(block, scores)
@@ -240,6 +300,11 @@ def main() -> int:
         metrics[key] = float(sum(weighted) / total_queries) if total_queries else 0.0
     for weight, aggregate in anchor_values.items():
         metrics[f"anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in fuzzy_values.items():
+        metrics[f"fuzzy_anchor_weight_{weight:g}"] = {
             name: float(sum(values) / total_queries) if total_queries else 0.0
             for name, values in aggregate.items()
         }

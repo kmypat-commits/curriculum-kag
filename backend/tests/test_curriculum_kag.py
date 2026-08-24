@@ -86,10 +86,12 @@ def test_epvo_ranking_export_preserves_raw_graded_expert_scale():
             {"floId": "LO1", "result": "0,5"},
             {"floId": "LO1", "result": "1"},
             {"floId": "LO2", "result": "0"},
+            {"floId": "LO4", "result": "0.25"},
+            {"floId": "LO5", "result": "0.75"},
             {"floId": "LO3", "result": "2"},
         ]
     }
-    assert expert_scores(payload) == {"LO1": 0.75, "LO2": 0.0}
+    assert expert_scores(payload) == {"LO1": 0.75, "LO2": 0.0, "LO4": 0.25, "LO5": 0.75}
 
 
 def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():

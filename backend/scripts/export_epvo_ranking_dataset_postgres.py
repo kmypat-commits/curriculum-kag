@@ -56,6 +56,21 @@ def clean(value: object) -> str:
     return text_value
 
 
+def json_object(value: object, default: object):
+    """Normalize PostgreSQL JSONB and SQLite JSON-text driver values."""
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed
+    return default
+
+
 def localized(payload: dict, *keys: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for language, suffixes in {
@@ -88,7 +103,10 @@ def expert_scores(payload: dict) -> dict[str, float]:
             value = float(str(item.get("result")).replace(",", "."))
         except (TypeError, ValueError):
             continue
-        if lo_id is not None and value in {0.0, 0.5, 1.0}:
+        # Preserve the full observed expert scale.  Most records are 0/0.5/1,
+        # while some historical cards contain quarter-step aggregates such as
+        # 0.25 and 0.75; silently dropping them would bias graded nDCG.
+        if lo_id is not None and 0.0 <= value <= 1.0:
             votes[str(lo_id)].append(value)
     return {
         lo_id: round(sum(values) / len(values), 4)
@@ -136,7 +154,7 @@ def main() -> int:
             if programme_filter else
             "SELECT source_id, payload_json FROM raw_epvo_programs"
         ), programme_params):
-            payload = row.payload_json or {}
+            payload = json_object(row.payload_json, {})
             program_id = str(row.source_id)
             direction = payload.get("trainingDirectionsObj") or {}
             group = payload.get("groupEduProgramObj") or {}
@@ -160,7 +178,7 @@ def main() -> int:
         ), programme_params):
             program_id = str(row.program_source_id)
             source_key = str(row.source_key)
-            payload = row.payload_json or {}
+            payload = json_object(row.payload_json, {})
             disciplines[program_id].append((source_key, payload))
             for lo_id, value in expert_scores(payload).items():
                 raw_expert_scores[(program_id, source_key, lo_id)] = value
@@ -170,7 +188,7 @@ def main() -> int:
             if programme_filter else
             "SELECT program_source_id, source_key, payload_json FROM raw_epvo_learning_outcomes"
         ), programme_params):
-            payload = row.payload_json or {}
+            payload = json_object(row.payload_json, {})
             outcomes[str(row.program_source_id)][str(row.source_key)] = {
                 "id": str(row.source_key),
                 "text": localized(payload, "learningOutcomeName", "name"),
@@ -185,13 +203,13 @@ def main() -> int:
                 "title": {"ru": clean(row.title_ru), "kz": clean(row.title_kk), "en": clean(row.title_en)},
                 "description": {},
             }
-            content = row.content_json or {}
+            content = json_object(row.content_json, {})
             for language in ("ru", "kk", "en"):
                 value = clean(content.get(f"description_{language}") or (content.get("description") if language == "ru" else ""))
                 if value:
                     item["description"]["kz" if language == "kk" else language] = value
             normalized[str(row.id)] = item
-            for source_key in row.source_keys or []:
+            for source_key in json_object(row.source_keys, []):
                 normalized[str(source_key)] = item
         # Prefer the active, repaired localization layer over legacy JSON
         # descriptions.  This keeps ranking inputs in the same language-safe
@@ -312,7 +330,7 @@ def main() -> int:
                 if score is not None:
                     score_counts[f"score_{score:g}"] += 1
     manifest = {
-        "source": "PostgreSQL raw_epvo_* + epvo_discipline_lo_links",
+        "source": f"{engine.dialect.name} raw_epvo_* + epvo_discipline_lo_links",
         "programmes": programme_count,
         "positive_pairs": positive_pair_count,
         "pair_rows": pair_count,
