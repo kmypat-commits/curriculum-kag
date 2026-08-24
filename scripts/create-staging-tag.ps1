@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Tag
+    [string]$Tag,
+    [switch]$BrowserSmokeVerified
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +17,9 @@ try {
     if (-not (Test-Path -LiteralPath $manifestPath)) { throw "Staging manifest is missing; run build-staging-manifest.ps1." }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($manifest.git.dirty -ne $false) { throw "Manifest records a dirty worktree." }
+    if (-not $BrowserSmokeVerified) {
+        throw "Pass -BrowserSmokeVerified only after manually checking graph and RU/KK/EN in an authenticated browser session."
+    }
 
     $restore = Get-ChildItem (Join-Path $root "backups/postgres/*.manifest.restore.json") -File |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
