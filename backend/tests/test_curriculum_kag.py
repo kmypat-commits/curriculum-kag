@@ -79,7 +79,7 @@ def test_epvo_normalized_stamp_changes_after_in_place_fingerprint_update():
 
 
 def test_epvo_ranking_export_preserves_raw_graded_expert_scale():
-    from scripts.export_epvo_ranking_dataset_postgres import expert_scores
+    from scripts.export_epvo_ranking_dataset_postgres import expert_scores, json_object
 
     payload = {
         "expertCheckResults": [
@@ -92,6 +92,8 @@ def test_epvo_ranking_export_preserves_raw_graded_expert_scale():
         ]
     }
     assert expert_scores(payload) == {"LO1": 0.75, "LO2": 0.0, "LO4": 0.25, "LO5": 0.75}
+    assert json_object('{"source_keys": ["A", "B"]}', {}) == {"source_keys": ["A", "B"]}
+    assert json_object(None, []) == []
 
 
 def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
