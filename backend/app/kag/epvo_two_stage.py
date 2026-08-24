@@ -39,7 +39,7 @@ class EpvoTwoStageRanker:
                     local_files_only=True,
                 )
                 return True
-            except Exception as exc:
+            except (ImportError, OSError, RuntimeError, ValueError, TypeError) as exc:
                 self.load_error = str(exc)
                 self.model = None
                 return False
@@ -86,7 +86,7 @@ class EpvoTwoStageRanker:
                     "ranker_weight": round(weight, 3),
                 }
             return result
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, OSError, OverflowError) as exc:
             self.load_error = str(exc)
             return {}
 

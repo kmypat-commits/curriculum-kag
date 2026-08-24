@@ -39,7 +39,7 @@ class EmbeddingService:
                 device=device,
                 local_files_only=True,
             )
-        except BaseException as exc:
+        except (ImportError, OSError, RuntimeError, ValueError, TypeError) as exc:
             self.load_error = str(exc)
             self.model = None
     def encode(self, text: str) -> np.ndarray:
@@ -60,7 +60,7 @@ class EmbeddingService:
                     while len(self._cache) > self._cache_limit:
                         self._cache.popitem(last=False)
                 return vector
-            except Exception as exc: self.load_error = str(exc)
+            except (RuntimeError, ValueError, TypeError, OSError) as exc: self.load_error = str(exc)
         vector = np.zeros(settings.EMBEDDING_DIMENSION, dtype=np.float32)
         tokens = re.findall(r"[\w-]+", text.lower(), flags=re.UNICODE)
         for token in tokens:
@@ -79,7 +79,7 @@ class EmbeddingService:
         self._ensure_model_loaded()
         if self.model is not None:
             try: return self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False).astype(np.float32)
-            except Exception as exc: self.load_error = str(exc)
+            except (RuntimeError, ValueError, TypeError, OSError) as exc: self.load_error = str(exc)
         return np.vstack([self.encode(text) for text in texts]) if texts else np.empty((0, settings.EMBEDDING_DIMENSION))
     def get_model_version(self) -> str:
         return self.model_name if self.model is not None else "feature-hash-v2"

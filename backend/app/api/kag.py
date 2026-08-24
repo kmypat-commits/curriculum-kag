@@ -522,7 +522,7 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError, json.JSONDecodeError) as e:
         # The analysis button must always produce a usable, auditable result.
         # If a legacy project has incomplete match rows or the optional AI
         # provider fails before the normal fallback is reached, return an

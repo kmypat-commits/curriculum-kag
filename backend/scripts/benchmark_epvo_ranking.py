@@ -84,7 +84,7 @@ def main():
             "export_epvo_ranking_dataset_postgres.py before measuring SBERT."
         )
     programmes = {program for _, program in sorted(set(selected))[:args.programs]}
-    data = defaultdict(lambda: {"courses": {}, "los": {}, "links": defaultdict(set)})
+    data = defaultdict(lambda: {"courses": {}, "los": {}, "links": defaultdict(set), "weights": defaultdict(dict)})
     if use_programme_rows:
         # Programme-level rows retain unlinked courses.  Ranking against this
         # complete candidate pool avoids the optimistic bias of the legacy
@@ -117,6 +117,7 @@ def main():
                     score = expert_scores.get((course_id, lo_id), 1.0)
                     if course_id in data[program]["courses"] and lo_id in data[program]["los"] and score >= args.min_expert_score:
                         data[program]["links"][lo_id].add(course_id)
+                        data[program]["weights"][lo_id][course_id] = score
     else:
         with Path(args.data).open(encoding="utf-8") as stream:
             for line in stream:
@@ -132,13 +133,15 @@ def main():
                 data[program]["los"][lo_id] = _localized_text(lo_text)
                 if row.get("declared_link", True) and float(row.get("expert_score") or 0.0) >= args.min_expert_score:
                     data[program]["links"][lo_id].add(course_id)
+                    raw_score = row.get("expert_score")
+                    data[program]["weights"][lo_id][course_id] = float(raw_score) if raw_score is not None else 1.0
     model = SentenceTransformer(args.model, device=args.device)
     candidate = (
         SentenceTransformer(args.candidate_model, device=args.device)
         if args.candidate_model and args.candidate_weight > 0
         else None
     )
-    recall5, recall10, reciprocal, ndcg10 = [], [], [], []
+    recall5, recall10, reciprocal, ndcg10, graded_ndcg10 = [], [], [], [], []
     query_count = 0
     for program in sorted(data):
         block = data[program]
@@ -167,6 +170,11 @@ def main():
             dcg = sum((1 if item in relevant else 0) / math.log2(position + 2) for position, item in enumerate(ranking[:10]))
             ideal = sum(1 / math.log2(position + 2) for position in range(min(len(relevant), 10)))
             ndcg10.append(dcg / ideal if ideal else 0)
+            weights = block["weights"].get(lo_id, {})
+            graded_dcg = sum(float(weights.get(item, 0.0)) / math.log2(position + 2) for position, item in enumerate(ranking[:10]))
+            ideal_weights = sorted((float(value) for value in weights.values()), reverse=True)[:10]
+            graded_ideal = sum(value / math.log2(position + 2) for position, value in enumerate(ideal_weights))
+            graded_ndcg10.append(graded_dcg / graded_ideal if graded_ideal else 0)
             query_count += 1
     if query_count == 0:
         raise SystemExit(
@@ -182,6 +190,7 @@ def main():
         "programmes": len(data), "queries": query_count,
         "recall_at_5": float(np.mean(recall5)), "recall_at_10": float(np.mean(recall10)),
         "mrr": float(np.mean(reciprocal)), "ndcg_at_10": float(np.mean(ndcg10)),
+        "graded_ndcg_at_10": float(np.mean(graded_ndcg10)),
     }
     output = Path(args.output); output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
