@@ -293,6 +293,11 @@ def build_plan(
                 detail={
                     "code": "insufficient_epvo_lo_evidence",
                     "message": evidence_preflight.get("message"),
+                    "message_by_language": {
+                        "ru": "Недостаточно подтверждённых EPVO/LO-доказательств для выбранных направлений. Пересчитайте связи дисциплина–РО или подтвердите экспертные связи перед генерацией.",
+                        "kk": "Таңдалған бағыттар үшін расталған EPVO/ОН дәлелдері жеткіліксіз. Генерация алдында пән–ОН байланыстарын қайта есептеңіз немесе сарапшы байланыстарын растаңыз.",
+                        "en": "There is not enough verified EPVO/LO evidence for the selected fields. Recompute course–LO links or confirm expert links before generation.",
+                    },
                     "evidence": evidence_preflight,
                 },
             )

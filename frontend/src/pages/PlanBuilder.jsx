@@ -82,7 +82,7 @@ export default function PlanBuilder() {
             return detail.map(item => item?.msg || item?.message || JSON.stringify(item)).join('; ')
         }
         if (detail && typeof detail === 'object') {
-            return detail.message || detail.error || JSON.stringify(detail)
+            return detail.message_by_language?.[language] || detail.message || detail.error || JSON.stringify(detail)
         }
         return detail || err?.message || localText('Неизвестная ошибка', 'Белгісіз қате', 'Unknown error')
     }
