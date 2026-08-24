@@ -16,6 +16,7 @@ from app.services.content_localization import (
     course_localization_payload,
 )
 from app.services.epvo_repository import _assign_epvo_prerequisites
+from app.services.llm_errors import LLM_ERRORS
 import pandas as pd
 import json
 import time
@@ -584,7 +585,7 @@ Return ONLY valid JSON, no markdown."""
             raw = json.dumps({"courses": all_courses_raw})
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=500, detail=f"Языковая модель вернула некорректные данные: {str(e)}")
-        except Exception as e:
+        except LLM_ERRORS as e:
             raise HTTPException(status_code=500, detail=f"Не удалось обратиться к языковой модели: {str(e)}")
 
     else:
@@ -739,7 +740,7 @@ Return ONLY valid JSON."""
                 response_format={"type": "json_object"}
             )
             raw = resp.choices[0].message.content
-        except Exception as e:
+        except LLM_ERRORS as e:
             raise HTTPException(status_code=500, detail=f"Не удалось обратиться к языковой модели: {str(e)}")
     else:
         sorted_c = sorted(all_courses, key=lambda c: (c.recommended_semester or 9, c.course_id))

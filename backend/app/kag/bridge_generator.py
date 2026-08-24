@@ -8,6 +8,7 @@ from app.models.course import Course
 from app.kag.gap_detector import detect_gaps
 from app.kag.retrieval import retrieve_similar_chunks
 from app.config import settings
+from app.services.llm_errors import LLM_ERRORS
 import json
 import logging
 
@@ -191,7 +192,7 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
             normalized = _normalize_bridge_response(response.choices[0].message.content, fallback_context or {})
             if normalized:
                 return normalized
-        except Exception as exc:
+        except LLM_ERRORS as exc:
             logger.warning("OpenAI bridge generation failed; using deterministic fallback: %s", exc)
     elif has_real_key and settings.LLM_PROVIDER == "anthropic":
         try:
@@ -209,7 +210,7 @@ def call_llm(prompt: str, fallback_context: Optional[Dict] = None) -> str:
             normalized = _normalize_bridge_response(response.content[0].text, fallback_context or {})
             if normalized:
                 return normalized
-        except Exception as exc:
+        except LLM_ERRORS as exc:
             logger.warning("Anthropic bridge generation failed; using deterministic fallback: %s", exc)
     context = fallback_context or {}
     domain1, domain2 = context.get("domain1", "Primary Discipline"), context.get("domain2", "Secondary Discipline")

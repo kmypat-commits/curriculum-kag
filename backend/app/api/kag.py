@@ -24,6 +24,7 @@ from app.models.plan import Plan, PlanItem
 from app.planner.verifier import verify_curriculum_plan
 from app.services.ai_contracts import validate_achievability
 from app.services.pydantic_ai_adapter import run_achievability as run_pydantic_ai_achievability
+from app.services.llm_errors import LLM_ERRORS
 import json
 from typing import Optional
 
@@ -438,7 +439,7 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
                     response_format={"type": "json_object"}
                 )
                 raw = response.choices[0].message.content
-            except Exception:
+            except LLM_ERRORS:
                 # The UI must remain usable when the external provider is unavailable,
                 # rate-limited, or has an expired key. Use the same deterministic
                 # evidence-based fallback as offline mode instead of returning HTTP 500.
