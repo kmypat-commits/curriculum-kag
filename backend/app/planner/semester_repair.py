@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from itertools import combinations
 import re
-from statistics import median
 from typing import Dict, List
 
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.bridge_module import BridgeModule
 from app.models.course import Course, course_prerequisites
 from app.models.embedding import MatchScore
-from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.planner.admission import (
     audit_final_course_admission as _audit_final_course_admission,
@@ -23,26 +19,18 @@ from app.planner.course_policy import (
     project_domain_terms as _project_domain_terms,
 )
 from app.planner.scheduler_catalogue import unique_items_by_title as _unique_items_by_title
-from app.planner.domain_evidence import domain_credit_shares
 from app.planner.scheduler_domain_rules import (
     has_foreign_professional_title as _has_foreign_professional_title,
     is_it_medicine_support_course as _is_it_medicine_support_course,
 )
-from app.planner.scheduler_utils import (
-    move_item as _move_item,
-    swap_items as _swap_items,
-    title_key as _title_key,
-)
-from app.planner.semester_rules import (
-    complexity_min_semester as _complexity_min_semester,
-    foundation_max_semester as _foundation_max_semester,
-    late_stage_min_semester as _late_stage_min_semester,
-    minimum_appropriate_semester as _item_minimum_appropriate_semester,
-)
+from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.verifier import verify_curriculum_plan
 from app.services.epvo_repository import epvo_row_matches_education_level
-from app.planner.scoped_epvo_semesters import apply_scoped_epvo_semesters as _apply_scoped_epvo_semesters
 from app.planner.semester_appropriateness import _repair_semester_appropriateness
+from app.planner.semester_load_repair import balance_semester_with_bridge
+# Compatibility export: scheduler imports this scoped-semester adapter from
+# the historical repair facade.
+from app.planner.scoped_epvo_semesters import apply_scoped_epvo_semesters as _apply_scoped_epvo_semesters
 
 
 from app.planner.semester_domain_repair import _repair_final_domain_quotas
@@ -96,45 +84,6 @@ def _repair_final_admission_misplacements(
     project_families = {
         domain_family(domain) for domain in project_domains if domain
     }
-
-    def balance_semester_with_bridge(
-        trial: Dict[int, List[Dict]],
-        semester_number: int,
-        course_credit_delta: int,
-    ) -> bool:
-        """Keep a semester's load intact without ever changing a real course.
-
-        A real EPVO course is atomic.  During a late-course swap its 3/4/5
-        credit value can nevertheless differ from the displaced course.  An
-        explicit generated bridge is the only flexible item in a plan, so it
-        may absorb at most the small delta while staying in the 3--7 range.
-        This makes a pedagogically valid exchange possible without hiding a
-        credit change in a repository course.
-        """
-        if not course_credit_delta:
-            return True
-        bridge_options = [
-            (index, item)
-            for index, item in enumerate(trial.get(semester_number, []))
-            if item.get("bridge_module_id") is not None
-            and 3 <= int(item.get("credits") or 0) - course_credit_delta <= 7
-        ]
-        if not bridge_options:
-            return False
-        bridge_index, bridge_item = min(
-            bridge_options,
-            key=lambda row: int(row[1].get("credits") or 0),
-        )
-        adjusted_bridge = dict(bridge_item)
-        adjusted_bridge["credits"] = (
-            int(bridge_item.get("credits") or 0) - course_credit_delta
-        )
-        adjusted_bridge["selection_method"] = (
-            f"{bridge_item.get('selection_method') or 'bridge'}"
-            "+admission_credit_exchange"
-        )
-        trial[semester_number][bridge_index] = adjusted_bridge
-        return True
 
     prerequisite_map: Dict[int, List[int]] = {}
     if candidate_ids:
