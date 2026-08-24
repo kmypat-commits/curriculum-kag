@@ -1,5 +1,7 @@
 """Composition tests for the split planner API routers."""
 
+from types import SimpleNamespace
+
 from app.api import planner
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -60,6 +62,33 @@ def test_variant_ranking_keeps_best_unique_titles():
         limit=10,
     )
     assert result == [3, 1]
+
+
+def test_variant_ranking_stage_preserves_variant_specific_ordering():
+    from app.planner.variant_ranking import rank_variant_candidates
+
+    courses = {
+        1: SimpleNamespace(id=1, credits=5, recommended_semester=1, domain="IT", title="A"),
+        2: SimpleNamespace(id=2, credits=5, recommended_semester=3, domain="IT", title="B"),
+    }
+    result = rank_variant_candidates(
+        [1, 2],
+        aggregates={
+            1: {"max": 0.80, "sum": 0.80, "los": {"LO1"}},
+            2: {"max": 0.80, "sum": 0.80, "los": {"LO1"}},
+        },
+        courses=courses,
+        prerequisite_ids_by_course={1: [], 2: []},
+        course_depth=lambda course_id: 0,
+        role_rank=lambda _course: 1,
+        scope_rank=lambda _course: 1,
+        priority_rank=lambda _course: 1,
+        semester_stability_rank=lambda _course: 1,
+        variant_type="A",
+        project_domains=("IT", ""),
+        title_for=lambda course_id: courses[course_id].title,
+    )
+    assert result == [1, 2]
 
 
 def test_variant_assembly_adds_bundle_atomically():

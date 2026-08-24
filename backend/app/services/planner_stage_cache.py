@@ -10,7 +10,7 @@ import hashlib
 import json
 from typing import Any
 
-from sqlalchemy import String, cast, func, or_
+from sqlalchemy import String, cast, func, or_, text
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditEvent
@@ -50,6 +50,33 @@ def _scope_pairs(version: ProjectVersion) -> list[tuple[str, str]]:
     return [(group, direction) for group, direction in pairs if group or direction]
 
 
+def _content_digest(db: Session, model, column_name: str | None) -> str:
+    """Return a deterministic content digest when the table has a source key.
+
+    ``max(id)`` and row counts only detect appended/deleted records.  EPVO
+    imports can also repair a payload in place.  Raw records carry a checksum
+    and normalized records carry a dedup fingerprint, so PostgreSQL can hash
+    the ordered values without loading hundreds of thousands of rows into the
+    Python process.  SQLite keeps a cheap min/max fallback for local tests.
+    """
+    if not column_name:
+        return ""
+    column = getattr(model, column_name, None)
+    if column is None:
+        return ""
+    dialect = db.get_bind().dialect.name
+    if dialect == "postgresql":
+        table_name = model.__tablename__.replace('"', '""')
+        column_name_sql = column.name.replace('"', '""')
+        value = db.execute(text(
+            f"SELECT md5(string_agg(\"{column_name_sql}\", ',' ORDER BY \"id\")) "
+            f"FROM \"{table_name}\""
+        )).scalar()
+        return str(value or "")
+    minimum, maximum = db.query(func.min(column), func.max(column)).one()
+    return f"{minimum or ''}:{maximum or ''}"
+
+
 def _table_stamp(db: Session, model) -> list[Any]:
     """Source stamp that also detects in-place updates and deletes.
 
@@ -61,7 +88,19 @@ def _table_stamp(db: Session, model) -> list[Any]:
     row_count = db.query(func.count(model.id)).scalar() or 0
     updated_column = getattr(model, "updated_at", None)
     latest_update = db.query(func.max(updated_column)).scalar() if updated_column is not None else None
-    return [model.__tablename__, int(row_count), int(latest_id), str(latest_update or "")]
+    content_column = (
+        "checksum" if getattr(model, "checksum", None) is not None
+        else "dedup_fingerprint" if getattr(model, "dedup_fingerprint", None) is not None
+        else None
+    )
+    return [
+        model.__tablename__,
+        int(row_count),
+        int(latest_id),
+        str(latest_update or ""),
+        content_column or "",
+        _content_digest(db, model, content_column),
+    ]
 
 
 def _approved_scope_stamp(version: ProjectVersion, db: Session) -> list[Any]:

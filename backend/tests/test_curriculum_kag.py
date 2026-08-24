@@ -1,6 +1,9 @@
 ﻿from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
 from check_text_encoding import looks_like_mojibake
 from app.kag.bridge_generator import call_llm, parse_llm_response
 from app.kag.scoring import INTERDISCIPLINARY_SCOPE_LIMIT
@@ -34,6 +37,27 @@ from app.planner.verifier import (
     verify_curriculum_plan,
 )
 from app.services.content_localization import register_course_translations
+from app.services.planner_stage_cache import _table_stamp
+from app.models.epvo import RawEpvoProgram
+
+
+def test_epvo_stage_stamp_changes_after_in_place_checksum_update():
+    engine = create_engine("sqlite:///:memory:")
+    RawEpvoProgram.__table__.create(engine)
+    with Session(engine) as db:
+        row = RawEpvoProgram(
+            source_id="programme-1",
+            payload_json={"title": "before"},
+            checksum="checksum-before",
+        )
+        db.add(row)
+        db.commit()
+        before = _table_stamp(db, RawEpvoProgram)
+        row.checksum = "checksum-after"
+        db.commit()
+        after = _table_stamp(db, RawEpvoProgram)
+    assert before != after
+    engine.dispose()
 
 
 def test_encoding_gate_distinguishes_clean_russian_and_kazakh_from_mojibake():
