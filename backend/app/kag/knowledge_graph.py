@@ -86,6 +86,6 @@ def _build_course_vectors(courses: List[Course], db: Session) -> Dict[int, np.nd
         vectors = []
         for _, embedding in rows:
             try: vectors.append(np.array(json.loads(embedding.vector) if isinstance(embedding.vector, str) else embedding.vector, dtype=np.float32))
-            except Exception: continue
+            except (TypeError, ValueError): continue
         if vectors: result[course.id] = np.mean(vectors, axis=0).astype(np.float32)
     return result

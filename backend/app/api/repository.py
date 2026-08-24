@@ -317,7 +317,7 @@ async def create_course(
     db.flush()
     try:
         index_course(course, db)
-    except Exception:
+    except (ImportError, RuntimeError, SQLAlchemyError, TypeError, ValueError):
         pass
     db.commit()
     relation_ids = [relation.id for relation in (list(course.prerequisites or []) + list(course.postrequisites or []))]
@@ -634,7 +634,7 @@ Return ONLY valid JSON, no markdown."""
         db.flush()
         try:
             index_course(course, db)
-        except Exception:
+        except (ImportError, RuntimeError, SQLAlchemyError, TypeError, ValueError):
             pass
         created.append({
             "id": course.id,
