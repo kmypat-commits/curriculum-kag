@@ -38,7 +38,7 @@ from app.planner.verifier import (
 )
 from app.services.content_localization import register_course_translations
 from app.services.planner_stage_cache import _table_stamp
-from app.models.epvo import RawEpvoProgram
+from app.models.epvo import EpvoDisciplineNormalized, RawEpvoProgram
 
 
 def test_epvo_stage_stamp_changes_after_in_place_checksum_update():
@@ -56,6 +56,24 @@ def test_epvo_stage_stamp_changes_after_in_place_checksum_update():
         row.checksum = "checksum-after"
         db.commit()
         after = _table_stamp(db, RawEpvoProgram)
+    assert before != after
+    engine.dispose()
+
+
+def test_epvo_normalized_stamp_changes_after_in_place_fingerprint_update():
+    engine = create_engine("sqlite:///:memory:")
+    EpvoDisciplineNormalized.__table__.create(engine)
+    with Session(engine) as db:
+        row = EpvoDisciplineNormalized(
+            canonical_title="Course before",
+            dedup_fingerprint="fingerprint-before",
+        )
+        db.add(row)
+        db.commit()
+        before = _table_stamp(db, EpvoDisciplineNormalized)
+        row.dedup_fingerprint = "fingerprint-after"
+        db.commit()
+        after = _table_stamp(db, EpvoDisciplineNormalized)
     assert before != after
     engine.dispose()
 
