@@ -16,6 +16,27 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA = ROOT / "experiment-results" / "epvo-expert-labels" / "course_lo_pairs.jsonl"
 
 
+def _localized_text(value: object) -> str:
+    """Choose a deterministic non-empty text across the EPVO languages."""
+    if isinstance(value, dict):
+        return " | ".join(
+            str(value.get(key) or "").strip()
+            for key in ("ru", "kz", "kk", "en")
+            if str(value.get(key) or "").strip()
+        )
+    return str(value or "").strip()
+
+
+def _course_text(course: dict) -> str:
+    title = _localized_text(course.get("title"))
+    description = _localized_text(course.get("description"))
+    return " | ".join(filter(None, (title, description)))
+
+
+def _outcome_text(outcome: dict) -> str:
+    return _localized_text(outcome.get("text") or outcome.get("description") or outcome.get("title"))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default=str(DEFAULT_DATA))
@@ -24,6 +45,10 @@ def main():
     parser.add_argument("--candidate-weight", type=float, default=0.0)
     parser.add_argument("--output", default=str(ROOT / "experiment-results" / "epvo-ranking-benchmark" / "metrics.json"))
     parser.add_argument("--programs", type=int, default=80)
+    parser.add_argument(
+        "--programmes-data",
+        help="Programme-level JSONL with all courses and expert_edges. Defaults to programs.jsonl beside --data when present.",
+    )
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--split", choices=("validation", "test"), default="test")
     parser.add_argument("--seed-prefix", default="ranking-v1")
@@ -32,14 +57,23 @@ def main():
         help="Keep only declared EPVO links at or above this graded expert strength.",
     )
     args = parser.parse_args()
+    programme_path = Path(args.programmes_data) if args.programmes_data else Path(args.data).with_name("programs.jsonl")
+    use_programme_rows = programme_path.is_file()
     selected = []
     text_rows = 0
-    with open(args.data, encoding="utf-8") as stream:
+    source_path = programme_path if use_programme_rows else Path(args.data)
+    with source_path.open(encoding="utf-8") as stream:
         for line in stream:
             row = json.loads(line)
             if row.get("split") != args.split:
                 continue
-            if row.get("course_title") or row.get("course_description") or row.get("lo_text"):
+            if use_programme_rows:
+                has_text = any(_course_text(course) for course in row.get("courses") or []) and any(
+                    _outcome_text(outcome) for outcome in row.get("outcomes") or []
+                )
+            else:
+                has_text = bool(row.get("course_title") or row.get("course_description") or row.get("lo_text"))
+            if has_text:
                 text_rows += 1
             program = str(row["program_id"])
             score = hashlib.sha256(f"{args.seed_prefix}:{args.split}:{program}".encode()).hexdigest()
@@ -51,23 +85,53 @@ def main():
         )
     programmes = {program for _, program in sorted(set(selected))[:args.programs]}
     data = defaultdict(lambda: {"courses": {}, "los": {}, "links": defaultdict(set)})
-    with open(args.data, encoding="utf-8") as stream:
-        for line in stream:
-            row = json.loads(line)
-            program = str(row.get("program_id"))
-            if program not in programmes:
-                continue
-            course_id, lo_id = str(row["course_id"]), str(row["lo_id"])
-            title = row.get("course_title") or {}
-            description = row.get("course_description") or {}
-            lo_text = row.get("lo_text") or {}
-            data[program]["courses"][course_id] = " | ".join(filter(None, [title.get("ru") or title.get("kz") or title.get("en"), description.get("ru") or description.get("kz") or description.get("en")]))
-            data[program]["los"][lo_id] = lo_text.get("ru") or lo_text.get("kz") or lo_text.get("en") or ""
-            if (
-                row.get("declared_link", True)
-                and float(row.get("expert_score") or 0.0) >= args.min_expert_score
-            ):
-                data[program]["links"][lo_id].add(course_id)
+    if use_programme_rows:
+        # Programme-level rows retain unlinked courses.  Ranking against this
+        # complete candidate pool avoids the optimistic bias of the legacy
+        # positive-pairs-only export.
+        with programme_path.open(encoding="utf-8") as stream:
+            for line in stream:
+                row = json.loads(line)
+                program = str(row.get("program_id"))
+                if program not in programmes:
+                    continue
+                for course in row.get("courses") or []:
+                    course_id = str(course.get("id") or course.get("course_id") or "")
+                    text_value = _course_text(course)
+                    if course_id and text_value:
+                        data[program]["courses"][course_id] = text_value
+                for outcome in row.get("outcomes") or []:
+                    lo_id = str(outcome.get("id") or outcome.get("lo_id") or "")
+                    text_value = _outcome_text(outcome)
+                    if lo_id and text_value:
+                        data[program]["los"][lo_id] = text_value
+                expert_scores = {
+                    (str(edge.get("course_id")), str(edge.get("lo_id"))): float(edge.get("score") or 0.0)
+                    for edge in row.get("expert_edges") or []
+                    if edge.get("course_id") is not None and edge.get("lo_id") is not None
+                }
+                for edge in row.get("positive_edges") or []:
+                    if not isinstance(edge, (list, tuple)) or len(edge) < 2:
+                        continue
+                    course_id, lo_id = str(edge[0]), str(edge[1])
+                    score = expert_scores.get((course_id, lo_id), 1.0)
+                    if course_id in data[program]["courses"] and lo_id in data[program]["los"] and score >= args.min_expert_score:
+                        data[program]["links"][lo_id].add(course_id)
+    else:
+        with Path(args.data).open(encoding="utf-8") as stream:
+            for line in stream:
+                row = json.loads(line)
+                program = str(row.get("program_id"))
+                if program not in programmes:
+                    continue
+                course_id, lo_id = str(row["course_id"]), str(row["lo_id"])
+                title = row.get("course_title") or {}
+                description = row.get("course_description") or {}
+                lo_text = row.get("lo_text") or {}
+                data[program]["courses"][course_id] = " | ".join(filter(None, [_localized_text(title), _localized_text(description)]))
+                data[program]["los"][lo_id] = _localized_text(lo_text)
+                if row.get("declared_link", True) and float(row.get("expert_score") or 0.0) >= args.min_expert_score:
+                    data[program]["links"][lo_id].add(course_id)
     model = SentenceTransformer(args.model, device=args.device)
     candidate = (
         SentenceTransformer(args.candidate_model, device=args.device)
@@ -104,9 +168,15 @@ def main():
             ideal = sum(1 / math.log2(position + 2) for position in range(min(len(relevant), 10)))
             ndcg10.append(dcg / ideal if ideal else 0)
             query_count += 1
+    if query_count == 0:
+        raise SystemExit(
+            "No benchmark queries remain after programme/text/expert-score filtering. "
+            "Check the split, programme-level export, and --min-expert-score."
+        )
     result = {
         "created_at": datetime.now(timezone.utc).isoformat(), "model": args.model,
         "candidate_model": args.candidate_model, "candidate_weight": args.candidate_weight, "device": args.device,
+        "candidate_pool_source": "programme_level" if use_programme_rows else "positive_pairs_legacy",
         "seed_policy": f"sha256({args.seed_prefix}:{args.split}:program_id)",
         "split": args.split, "min_expert_score": args.min_expert_score,
         "programmes": len(data), "queries": query_count,

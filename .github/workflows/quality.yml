@@ -82,6 +82,8 @@ jobs:
         run: python backend/tests/run_postgres_endpoint_contracts.py
       - name: Verify Alembic head after PostgreSQL migration
         run: python backend/scripts/check_alembic_state.py
+      - name: Verify PostgreSQL dump and isolated restore
+        run: python backend/scripts/check_postgres_restore.py
 
   deployment-config:
     runs-on: ubuntu-latest
