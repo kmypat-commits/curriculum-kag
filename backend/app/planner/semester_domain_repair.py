@@ -23,6 +23,11 @@ from app.planner.scheduler_domain_rules import (
 )
 from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.semester_appropriateness import _repair_semester_appropriateness
+from app.planner.semester_domain_metrics import (
+    domain_deficit,
+    non_domain_hard_count,
+    scope_strength,
+)
 from app.planner.verifier import verify_curriculum_plan
 from app.services.epvo_repository import epvo_row_matches_education_level
 
@@ -50,32 +55,6 @@ def _repair_final_domain_quotas(
         str(project_version.project.domain1 or "").casefold().strip(),
         str(project_version.project.domain2 or "").casefold().strip(),
     ]
-
-    def domain_deficit(verification: Dict) -> float:
-        return sum(
-            max(
-                0.0,
-                float(row.get("required_credits") or 0.0)
-                - float(row.get("tolerance_credits") or 0.0)
-                - float(row.get("actual_credits") or 0.0),
-            )
-            for row in (verification.get("domain_quota_violations") or [])
-        )
-
-    def non_domain_hard_count(verification: Dict) -> int:
-        goso = verification.get("goso_compliance") or {}
-        pedagogical = verification.get("pedagogical_audit") or {}
-        return (
-            len(verification.get("prerequisite_violations") or [])
-            + len(verification.get("semester_load_violations") or [])
-            + len(verification.get("credit_violations") or [])
-            + len(goso.get("violations") or [])
-            + int(verification.get("course_lo_violations") or 0)
-            + len(pedagogical.get("lo_without_real_course") or [])
-            + len(pedagogical.get("weak_courses") or [])
-            + len(pedagogical.get("structural_foundations") or [])
-            + len(pedagogical.get("semester_misplacements") or [])
-        )
 
     normalized = {
         semester: [dict(item) for item in items]
@@ -106,13 +85,6 @@ def _repair_final_domain_quotas(
             str(constraints.get("secondary_direction_code") or ""),
         ),
     ]
-
-    def scope_strength(values: set[str], group: str, direction: str) -> int:
-        if group and group in values:
-            return 3
-        if direction and direction in values:
-            return 2
-        return 0
 
     scope_weights: Dict[int, list[int]] = {}
     for row in db.query(EpvoDisciplineNormalized).filter(
