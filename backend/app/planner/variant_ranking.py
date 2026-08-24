@@ -49,6 +49,8 @@ def rank_variant_candidates(
     here makes retrieval/ranking testable independently from semester repair
     and final plan assembly.
     """
+    project_domains = tuple(project_domains)
+
     def rank(course_id: int) -> tuple:
         return variant_candidate_key(
             course_id,
