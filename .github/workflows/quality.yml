@@ -56,6 +56,7 @@ jobs:
     env:
       SECRET_KEY: ci-only-secret
       CURRICULUM_KAG_TEST_DATABASE_URL: postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5432/curriculum_kag_endpoint_test
+      DATABASE_URL: postgresql+psycopg2://curriculum_user:curriculum_pass@localhost:5432/curriculum_kag_endpoint_test
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -79,6 +80,8 @@ jobs:
         run: pip install -r backend/requirements-minimal.txt
       - name: Run authenticated PostgreSQL endpoint contracts
         run: python backend/tests/run_postgres_endpoint_contracts.py
+      - name: Verify Alembic head after PostgreSQL migration
+        run: python backend/scripts/check_alembic_state.py
 
   deployment-config:
     runs-on: ubuntu-latest

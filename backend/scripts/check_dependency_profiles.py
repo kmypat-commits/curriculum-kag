@@ -31,21 +31,32 @@ def read_pins(path: Path) -> dict[str, str]:
 def main() -> int:
     production = read_pins(ROOT / "requirements.txt")
     local = read_pins(ROOT / "requirements-local.txt")
+    lock = read_pins(ROOT / "requirements.lock")
     missing = sorted(name for name in local if name not in production)
     mismatches = sorted(
         f"{name}: local {version}, Docker {production[name]}"
         for name, version in local.items()
         if name in production and production[name] != version
     )
-    if missing or mismatches:
+    lock_mismatches = sorted(
+        f"{name}: lock {lock.get(name)}, production {version}"
+        for name, version in production.items()
+        if lock.get(name) != version
+    )
+    lock_missing = sorted(name for name in production if name not in lock)
+    if missing or mismatches or lock_mismatches or lock_missing:
         if missing:
             print("Local-only packages without a Docker decision: " + ", ".join(missing))
         if mismatches:
             print("Version mismatches: " + "; ".join(mismatches))
+        if lock_missing:
+            print("Production packages missing from requirements.lock: " + ", ".join(lock_missing))
+        if lock_mismatches:
+            print("Lock mismatches: " + "; ".join(lock_mismatches))
         return 1
     optional = sorted(set(production) - set(local))
     print(
-        f"Dependency profiles are compatible: {len(local)} shared exact pins; "
+        f"Dependency profiles are compatible: {len(local)} shared exact pins and {len(lock)} locked pins; "
         f"Docker-only optional packages: {', '.join(optional) or 'none'}"
     )
     return 0
