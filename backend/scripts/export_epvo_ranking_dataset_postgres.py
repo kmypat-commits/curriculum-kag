@@ -237,14 +237,25 @@ def main() -> int:
                 continue
             programme_count += 1
             split_counts[program["split"]] += 1
+            expert_edges = [
+                {
+                    "course_id": course_id,
+                    "lo_id": lo_id,
+                    "score": link_strength.get((program_id, course_id, lo_id), 1.0),
+                }
+                for course_id, lo_id in sorted(positive_edges)
+            ]
             row = {
                 **program,
                 "courses": list(by_course.values()),
                 "outcomes": list(outcomes.get(program_id, {}).values()),
                 "positive_edges": [list(edge) for edge in sorted(positive_edges)],
+                "expert_edges": expert_edges,
             }
             program_stream.write(json.dumps(row, ensure_ascii=False) + "\n")
             for course_id, lo_id in row["positive_edges"]:
+                course = by_course[course_id]
+                outcome = outcomes[program_id][lo_id]
                 pair_stream.write(json.dumps({
                     "program_id": program_id,
                     "split": program["split"],
@@ -252,6 +263,9 @@ def main() -> int:
                     "lo_id": lo_id,
                     "declared_link": True,
                     "expert_score": link_strength.get((program_id, course_id, lo_id), 1.0),
+                    "course_title": course.get("title") or {},
+                    "course_description": course.get("description") or {},
+                    "lo_text": outcome.get("text") or {},
                 }, ensure_ascii=False) + "\n")
                 pair_count += 1
     manifest = {

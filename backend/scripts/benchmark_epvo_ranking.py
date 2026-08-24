@@ -27,16 +27,28 @@ def main():
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--split", choices=("validation", "test"), default="test")
     parser.add_argument("--seed-prefix", default="ranking-v1")
+    parser.add_argument(
+        "--min-expert-score", type=float, default=0.0,
+        help="Keep only declared EPVO links at or above this graded expert strength.",
+    )
     args = parser.parse_args()
     selected = []
+    text_rows = 0
     with open(args.data, encoding="utf-8") as stream:
         for line in stream:
             row = json.loads(line)
             if row.get("split") != args.split:
                 continue
+            if row.get("course_title") or row.get("course_description") or row.get("lo_text"):
+                text_rows += 1
             program = str(row["program_id"])
             score = hashlib.sha256(f"{args.seed_prefix}:{args.split}:{program}".encode()).hexdigest()
             selected.append((score, program))
+    if selected and text_rows == 0:
+        raise SystemExit(
+            "Ranking dataset has no course/LO text. Re-export it with "
+            "export_epvo_ranking_dataset_postgres.py before measuring SBERT."
+        )
     programmes = {program for _, program in sorted(set(selected))[:args.programs]}
     data = defaultdict(lambda: {"courses": {}, "los": {}, "links": defaultdict(set)})
     with open(args.data, encoding="utf-8") as stream:
@@ -51,7 +63,10 @@ def main():
             lo_text = row.get("lo_text") or {}
             data[program]["courses"][course_id] = " | ".join(filter(None, [title.get("ru") or title.get("kz") or title.get("en"), description.get("ru") or description.get("kz") or description.get("en")]))
             data[program]["los"][lo_id] = lo_text.get("ru") or lo_text.get("kz") or lo_text.get("en") or ""
-            if row.get("declared_link", True):
+            if (
+                row.get("declared_link", True)
+                and float(row.get("expert_score") or 0.0) >= args.min_expert_score
+            ):
                 data[program]["links"][lo_id].add(course_id)
     model = SentenceTransformer(args.model, device=args.device)
     candidate = (
@@ -93,7 +108,8 @@ def main():
         "created_at": datetime.now(timezone.utc).isoformat(), "model": args.model,
         "candidate_model": args.candidate_model, "candidate_weight": args.candidate_weight, "device": args.device,
         "seed_policy": f"sha256({args.seed_prefix}:{args.split}:program_id)",
-        "split": args.split, "programmes": len(data), "queries": query_count,
+        "split": args.split, "min_expert_score": args.min_expert_score,
+        "programmes": len(data), "queries": query_count,
         "recall_at_5": float(np.mean(recall5)), "recall_at_10": float(np.mean(recall10)),
         "mrr": float(np.mean(reciprocal)), "ndcg_at_10": float(np.mean(ndcg10)),
     }
