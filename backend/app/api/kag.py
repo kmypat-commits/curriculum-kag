@@ -16,6 +16,8 @@ from app.kag.embedding_service import embedding_service
 from app.kag.indexing import index_all_courses
 from app.models.embedding import Embedding, MatchFeedback, MatchScore
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
+from pydantic import ValidationError
 from app.kag.feedback import promote_bridge_to_course, record_plan_feedback
 from app.config import settings
 from app.models.plan import Plan, PlanItem
@@ -94,7 +96,7 @@ async def compute_matches(
     try:
         result = compute_all_matches(project_version_id, db)
         return result
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -144,7 +146,7 @@ async def get_coverage(
             "gaps": gaps_result,
             "plan_coverage": plan_coverage,
         }
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -161,7 +163,7 @@ async def propose_merges(
             "suggestions": duplicates,
             "count": len(duplicates)
         }
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -181,7 +183,7 @@ async def generate_bridge(
             "count": len(modules),
             "mode": "optional_enrichment" if force_enrichment else "gap_closure",
         }
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -220,7 +222,7 @@ async def graph_stats(
     """Return statistics about the current curriculum knowledge graph."""
     try:
         return get_graph_stats(db)
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -245,7 +247,7 @@ async def build_graph(
             project_version_id=project_version_id,
         )
         return {"status": "built", **stats}
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -280,7 +282,7 @@ async def promote_bridge(
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -303,7 +305,7 @@ async def submit_plan_feedback(
             user_id=current_user.id,
         )
         return {"status": "recorded", "feedback": feedback}
-    except Exception as e:
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -499,7 +501,7 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
         # state instead of leaking a 500 or malformed UI payload.
         try:
             result = validate_achievability(result).model_dump()
-        except Exception:
+        except (ValidationError, ValueError, TypeError, KeyError):
             result = {
                 "verdict": "Needs Improvement",
                 "score": 0,

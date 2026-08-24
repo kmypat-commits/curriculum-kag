@@ -1,5 +1,6 @@
 ﻿from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 import secrets
 from app.models.project import ProjectVersion, LearningOutcome
 from app.models.bridge_module import BridgeModule
@@ -318,7 +319,7 @@ def generate_bridge_modules(
         db.add(bridge_module)
         try:
             db.commit()
-        except Exception:
+        except IntegrityError:
             db.rollback()
             bridge_module.course_id = f"{prefix}_{project_version_id}_{secrets.token_hex(4).upper()}"
             db.add(bridge_module)
