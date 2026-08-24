@@ -186,6 +186,12 @@ def main() -> int:
         course_ids = list(courses)
         lo_ids = [lo_id for lo_id in outcomes if links.get(lo_id)]
         if course_ids and lo_ids:
+            programme_context = " | ".join(
+                value for value in (
+                    text_value(row.get("name")),
+                    text_value(row.get("goal") or row.get("program_goal")),
+                ) if value
+            )
             blocks[program] = {
                 "course_ids": course_ids,
                 "lo_ids": lo_ids,
@@ -193,6 +199,7 @@ def main() -> int:
                 "course_keys": [title_key(courses[course_id]) for course_id in course_ids],
                 "los": [outcome_text(outcomes[lo_id]) for lo_id in lo_ids],
                 "links": links,
+                "programme_context": programme_context,
             }
     if not blocks:
         raise SystemExit("No benchmark queries remain after expert-score filtering")
@@ -222,6 +229,7 @@ def main() -> int:
     total_queries = 0
     anchor_values = {weight: defaultdict(list) for weight in (0.25, 0.5, 0.75)}
     fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
+    context_values = {weight: defaultdict(list) for weight in (0.10, 0.20, 0.30, 0.40)}
     hybrid_values = {name: defaultdict(list) for name in (
         "sbert_0.5_lex_0.25_anchor_0.25",
         "sbert_0.6_lex_0.2_anchor_0.2",
@@ -234,6 +242,11 @@ def main() -> int:
         course_vectors = vectorizer.transform(block["courses"])
         lo_vectors = vectorizer.transform(block["los"])
         lexical_scores = (lo_vectors @ course_vectors.T).toarray()
+        # Programme name/goal are observable at planning time and do not
+        # contain held-out course--LO edges.  They provide a conservative
+        # context prior for generic outcomes such as "apply methods".
+        context_vector = vectorizer.transform([block["programme_context"]])
+        context_scores = (context_vector @ course_vectors.T).toarray()
         block_metrics = rank_metrics(block, lexical_scores)
         total_queries += int(block_metrics["queries"])
         for key, value in block_metrics.items():
@@ -271,6 +284,14 @@ def main() -> int:
             for metric, value in variant_metrics.items():
                 if metric != "queries":
                     aggregate[metric].append(value * variant_metrics["queries"])
+        for weight, aggregate in context_values.items():
+            variant_metrics = rank_metrics(
+                block,
+                (1 - weight) * lexical_scores + weight * context_scores,
+            )
+            for metric, value in variant_metrics.items():
+                if metric != "queries":
+                    aggregate[metric].append(value * variant_metrics["queries"])
         if sbert_model is not None:
             sbert_course = sbert_model.encode(block["courses"], batch_size=48, normalize_embeddings=True, show_progress_bar=False)
             sbert_lo = sbert_model.encode(block["los"], batch_size=48, normalize_embeddings=True, show_progress_bar=False)
@@ -305,6 +326,11 @@ def main() -> int:
         }
     for weight, aggregate in fuzzy_values.items():
         metrics[f"fuzzy_anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in context_values.items():
+        metrics[f"programme_context_weight_{weight:g}"] = {
             name: float(sum(values) / total_queries) if total_queries else 0.0
             for name, values in aggregate.items()
         }
