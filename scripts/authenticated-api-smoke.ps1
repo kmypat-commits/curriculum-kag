@@ -22,11 +22,20 @@ $headers = @{ Authorization = "Bearer $($login.access_token)" }
 $me = Invoke-RestMethod -Method Get -Uri "$base/auth/me" -Headers $headers
 if (-not $me.email) { throw "Authenticated /auth/me response has no email." }
 
-$graph = Invoke-RestMethod -Method Get `
-    -Uri "$base/planner/version/$ProjectVersionId/graph?variant=A" `
-    -Headers $headers
-if ($null -eq $graph.nodes -or $null -eq $graph.edges) {
-    throw "Graph response does not contain nodes and edges."
+$graphCounts = @{}
+foreach ($variant in @('A', 'B', 'C')) {
+    $graph = Invoke-RestMethod -Method Get `
+        -Uri "$base/planner/version/$ProjectVersionId/graph?variant=$variant" `
+        -Headers $headers
+    if ($null -eq $graph.nodes -or $null -eq $graph.edges) {
+        throw "Graph response for variant $variant does not contain nodes and edges."
+    }
+    $nodeCount = @($graph.nodes).Count
+    $edgeCount = @($graph.edges).Count
+    if ($nodeCount -lt 1 -or $edgeCount -lt 1) {
+        throw "Graph response for variant $variant is empty."
+    }
+    $graphCounts[$variant] = "$nodeCount nodes/$edgeCount edges"
 }
 
-Write-Host "Authenticated API smoke passed: user=$($me.email); graph nodes=$(@($graph.nodes).Count), edges=$(@($graph.edges).Count)." -ForegroundColor Green
+Write-Host "Authenticated API smoke passed: user=$($me.email); graph A/B/C=$($graphCounts['A']), $($graphCounts['B']), $($graphCounts['C'])." -ForegroundColor Green
