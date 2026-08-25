@@ -41,9 +41,9 @@ class StreamingTfidf:
     def __init__(self, n_features: int = 2**17) -> None:
         self.vectorizer = HashingVectorizer(
             analyzer="char_wb", ngram_range=(3, 5), n_features=n_features,
-            alternate_sign=False, norm=None, binary=False,
+            alternate_sign=False, norm=None, binary=False, dtype=np.float32,
         )
-        self.df = np.zeros(n_features, dtype=np.float64)
+        self.df = np.zeros(n_features, dtype=np.float32)
         self.documents = 0
         self.idf: np.ndarray | None = None
 
@@ -55,7 +55,7 @@ class StreamingTfidf:
             self.documents += matrix.shape[0]
 
     def finalize(self) -> None:
-        self.idf = np.log((1.0 + self.documents) / (1.0 + self.df)) + 1.0
+        self.idf = (np.log((1.0 + self.documents) / (1.0 + self.df)) + 1.0).astype(np.float32)
 
     def transform(self, values: list[str]):
         if self.idf is None:
@@ -131,7 +131,6 @@ def main() -> int:
     title_anchors: dict[str, list[str]] = defaultdict(list)
     graded_id_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
     graded_title_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
-    blocks: list[dict] = []
     train_programmes = 0
     train_anchor_edges = 0
 
@@ -169,10 +168,10 @@ def main() -> int:
                 graded_id_anchors[course_id].append((lo, expert_score))
                 graded_title_anchors[title_key(course)].append((lo, expert_score))
                 train_anchor_edges += 1
-        elif row.get("split") == args.split and str(row.get("program_id")) in selected:
-            block = make_block(row, args.min_expert_score)
-            if block is not None:
-                blocks.append(block)
+        # Held-out rows are deliberately processed only after train-only
+        # statistics and anchors have been finalized below.  Keeping them out
+        # of memory makes the benchmark genuinely streaming on the full
+        # programme-level export.
     tfidf.finalize()
     sbert_model = None
     if args.sbert_model:
@@ -201,7 +200,18 @@ def main() -> int:
         "sbert_0.6_lex_0.2_anchor_0.2": defaultdict(float),
         "sbert_0.25_lex_0.25_anchor_0.5": defaultdict(float),
     }
-    for block in blocks:
+    processed_programmes = 0
+    # Rescan the source after fitting train-only statistics.  Only one held-out
+    # programme is materialized at a time; no test text or expert edge enters
+    # the vectorizer/anchor state.
+    for line in args.data.open(encoding="utf-8"):
+        row = json.loads(line)
+        if row.get("split") != args.split or str(row.get("program_id")) not in selected:
+            continue
+        block = make_block(row, args.min_expert_score)
+        if block is None:
+            continue
+        processed_programmes += 1
         course_vectors = tfidf.transform(block["courses"])
         lo_vectors = tfidf.transform(block["los"])
         lexical = (lo_vectors @ course_vectors.T).toarray()
@@ -252,7 +262,7 @@ def main() -> int:
     output = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "split": args.split,
-        "programmes": len(blocks),
+        "programmes": processed_programmes,
         "queries": query_count,
         "train_programmes": train_programmes,
         "train_documents": tfidf.documents,
