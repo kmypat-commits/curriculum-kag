@@ -436,6 +436,30 @@ def test_variant_ranking_domain_frontier_is_cached_by_domain():
     assert second is first
 
 
+def test_variant_domain_reserve_adds_atomic_bundle_without_exceeding_maximum():
+    from types import SimpleNamespace
+
+    from app.planner.variant_domain_repair import reserve_domain_quota
+
+    selected = {}
+    courses = {1: SimpleNamespace(id=1)}
+    result = reserve_domain_quota(
+        0,
+        selected=selected,
+        total=0,
+        maximum=5,
+        quota_total_credits=5,
+        minimum_percentages=[40, 0],
+        candidate_ids=[1],
+        courses=courses,
+        project_domain_share=lambda _course, _index: 1.0,
+        bundle_for_course=lambda _course_id: [{"course_id": 1, "credits": 5}],
+        selected_domain_credit_total=lambda _index: 0,
+    )
+    assert result == 5
+    assert selected[1]["domain_quota_reserve"] == 1
+
+
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
     from types import SimpleNamespace
 

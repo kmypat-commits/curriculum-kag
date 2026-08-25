@@ -113,7 +113,10 @@ from app.planner.variant_coverage import (
     coverage_state as _coverage_state,
 )
 from app.planner.variant_lo_repair import close_professional_lo_gaps as _close_professional_lo_gaps
-from app.planner.variant_domain_repair import rebalance_domain_quotas as _rebalance_domain_quotas
+from app.planner.variant_domain_repair import (
+    rebalance_domain_quotas as _rebalance_domain_quotas,
+    reserve_domain_quota as _reserve_domain_quota,
+)
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
@@ -660,43 +663,34 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             priority_rank=priority_rank,
             epvo_domain_index=epvo_domain_index,
         )
-    def fill_domain_quota(domain_index: int) -> None:
-        nonlocal total
-        regulatory_selected_credits = sum(
-            int(item.get("credits") or 0)
-            for item in selected.values()
-            if item.get("regulatory_required")
-        )
-        quota_base = max(0, quota_total_credits - regulatory_selected_credits)
-        required = math.ceil(quota_base * min_domain_percent[domain_index] / 100)
-        if required <= 0:
-            return
-        domain_candidates = [
-            cid for cid in candidate_ids
-            if cid in courses and project_domain_share(courses[cid], domain_index) > 0.0
-        ]
-        for cid in domain_candidates:
-            if selected_domain_credit_total(domain_index) >= required:
-                break
-            additions = list({
-                item["course_id"]: item
-                for item in bundle(cid)
-                if item["course_id"] not in selected
-            }.values())
-            addition_credits = sum(item["credits"] for item in additions)
-            if not additions or total + addition_credits > maximum:
-                continue
-            for item in additions:
-                reserved = dict(item)
-                reserved["domain_quota_reserve"] = domain_index + 1
-                reserved["selection_method"] = "domain_quota_reserve"
-                selected[reserved["course_id"]] = reserved
-            total = sum(item["credits"] for item in selected.values())
-
     # Respect the quotas entered in the project wizard before the generic fill.
     if interdisciplinary:
-        fill_domain_quota(1)
-    fill_domain_quota(0)
+        total = _reserve_domain_quota(
+            1,
+            selected=selected,
+            total=total,
+            maximum=maximum,
+            quota_total_credits=quota_total_credits,
+            minimum_percentages=min_domain_percent,
+            candidate_ids=candidate_ids,
+            courses=courses,
+            project_domain_share=project_domain_share,
+            bundle_for_course=bundle,
+            selected_domain_credit_total=selected_domain_credit_total,
+        )
+    total = _reserve_domain_quota(
+        0,
+        selected=selected,
+        total=total,
+        maximum=maximum,
+        quota_total_credits=quota_total_credits,
+        minimum_percentages=min_domain_percent,
+        candidate_ids=candidate_ids,
+        courses=courses,
+        project_domain_share=project_domain_share,
+        bundle_for_course=bundle,
+        selected_domain_credit_total=selected_domain_credit_total,
+    )
 
     for cid in candidate_ids:
         total, added = add_bundle_if_fits(selected, bundle(cid), maximum)

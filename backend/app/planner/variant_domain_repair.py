@@ -393,3 +393,55 @@ def rebalance_domain_quotas(
             if not swapped:
                 break
     return normalized
+
+
+def reserve_domain_quota(
+    domain_index: int,
+    *,
+    selected: dict[int, dict],
+    total: int,
+    maximum: int,
+    quota_total_credits: int,
+    minimum_percentages: list[int],
+    candidate_ids: Sequence[int],
+    courses: Mapping[int, Any],
+    project_domain_share: Callable[[Any, int], float],
+    bundle_for_course: Callable[[int], Sequence[dict]],
+    selected_domain_credit_total: Callable[[int], int],
+) -> int:
+    """Reserve prerequisite bundles needed to meet one domain quota."""
+    regulatory_selected_credits = sum(
+        int(item.get("credits") or 0)
+        for item in selected.values()
+        if item.get("regulatory_required")
+    )
+    quota_base = max(0, quota_total_credits - regulatory_selected_credits)
+    required = int(quota_base * minimum_percentages[domain_index] / 100)
+    if required <= 0:
+        return total
+    domain_candidates = [
+        course_id
+        for course_id in candidate_ids
+        if course_id in courses
+        and project_domain_share(courses[course_id], domain_index) > 0.0
+    ]
+    for course_id in domain_candidates:
+        if selected_domain_credit_total(domain_index) >= required:
+            break
+        additions = list(
+            {
+                item["course_id"]: item
+                for item in bundle_for_course(course_id)
+                if item["course_id"] not in selected
+            }.values()
+        )
+        addition_credits = sum(item["credits"] for item in additions)
+        if not additions or total + addition_credits > maximum:
+            continue
+        for item in additions:
+            reserved = dict(item)
+            reserved["domain_quota_reserve"] = domain_index + 1
+            reserved["selection_method"] = "domain_quota_reserve"
+            selected[reserved["course_id"]] = reserved
+        total = sum(item["credits"] for item in selected.values())
+    return total
