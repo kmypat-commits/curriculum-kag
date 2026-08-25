@@ -158,18 +158,25 @@ def main() -> int:
         help="Optional JSON status file for monitoring a long-running benchmark.",
     )
     args = parser.parse_args()
-    selected_offsets_by_programme = selected_offsets(args.data, args.split, args.programmes)
-    selected = set(selected_offsets_by_programme)
     status = {
         "status": "running",
-        "stage": "fit_train_statistics",
+        "stage": "select_heldout_offsets",
         "split": args.split,
-        "selected_programmes": len(selected),
+        "requested_programmes": args.programmes,
+        "selected_programmes": 0,
         "processed_programmes": 0,
         "queries": 0,
         "data": str(args.data),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    write_status(args.status_file, status)
+    selected_offsets_by_programme = selected_offsets(args.data, args.split, args.programmes)
+    selected = set(selected_offsets_by_programme)
+    status.update({
+        "stage": "fit_train_statistics",
+        "selected_programmes": len(selected),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
     write_status(args.status_file, status)
     tfidf = StreamingTfidf()
     id_anchors: dict[str, list[str]] = defaultdict(list)
