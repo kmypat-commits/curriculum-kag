@@ -58,3 +58,12 @@ nDCG@10=0,3470/0,3654. Поэтому прежний результат окол
 переносить на полный clean-v3 пул: он относится к более узкой legacy-выборке.
 Production-реранкер не меняется до появления модели, устойчивой на полном
 programme-disjoint test.
+
+Новый clean-v3 multi-positive listwise pilot (1 000 train-групп, 4 411
+положительных и 14 916 отрицательных кандидатов, CUDA) дал validation
+Recall@10=0,4804 и test Recall@10=0,4773; validation ниже предыдущего
+ranking-loss baseline, поэтому артефакт оставлен экспериментальным.
+Аудит candidate pool: 629 test-запросов, медиана 26 кандидатов, oracle
+Recall@10=0,9348, пересечение programme ID между split=0. Это подтверждает,
+что порог 0,80 достижим теоретически, но требует более точного programme-level
+hard-negative/listwise ранжирования.
