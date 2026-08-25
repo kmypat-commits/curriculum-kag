@@ -376,6 +376,24 @@ def test_variant_credit_repair_prefers_real_top_up_before_bridge():
     assert result[-1]["bridge_module_id"] == 2
 
 
+def test_variant_coverage_uses_probabilistic_union_and_strongest_signal():
+    from app.planner.variant_coverage import coverage_objective, coverage_state
+
+    scores = {10: {"LO1": 0.5}, 11: {"LO1": 0.5, "LO2": 0.7}}
+    state = lambda values: coverage_state(
+        values,
+        lo_codes=["LO1", "LO2"],
+        score_by_course=scores,
+        required_coverage=0.75,
+    )
+
+    coverage, maximums, missing = state([{"course_id": 10}, {"course_id": 11}])
+    assert coverage["LO1"] == 0.75
+    assert maximums["LO1"] == 0.5
+    assert missing == ["LO2"]
+    assert coverage_objective([{"course_id": 10}], state=state)[0] == 0
+
+
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
     from types import SimpleNamespace
 

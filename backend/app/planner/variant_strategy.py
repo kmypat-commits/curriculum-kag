@@ -107,6 +107,10 @@ from app.planner.variant_quota import (
     quality_preserved_after_swap as _quality_preserved_after_swap,
 )
 from app.planner.variant_repairs import top_up_with_credit_bridges as _top_up_with_credit_bridges
+from app.planner.variant_coverage import (
+    coverage_objective as _coverage_objective,
+    coverage_state as _coverage_state,
+)
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
@@ -222,32 +226,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         # immediately marked as incomplete.
         required_coverage = float(settings.COVERAGE_THRESHOLD)
 
-        def coverage_state(values: List[Dict]) -> tuple[Dict[str, float], Dict[str, float], List[str]]:
-            products = {lo.lo_code: 1.0 for lo in lo_by_id.values()}
-            maximums = {lo.lo_code: 0.0 for lo in lo_by_id.values()}
-            for item in values:
-                course_id = int(item.get("course_id") or 0)
-                for code, score in score_by_course.get(course_id, {}).items():
-                    bounded = max(0.0, min(1.0, float(score)))
-                    products[code] *= 1.0 - bounded
-                    maximums[code] = max(maximums[code], bounded)
-            coverage = {code: 1.0 - product for code, product in products.items()}
-            missing_codes = [
-                code
-                for code in coverage
-                if coverage[code] + 1e-9 < required_coverage
-                or maximums[code] + 1e-9 < 0.5
-            ]
-            return coverage, maximums, missing_codes
-
-        def coverage_objective(values: List[Dict]) -> tuple:
-            coverage, maximums, missing_codes = coverage_state(values)
-            return (
-                len(coverage) - len(missing_codes),
-                min(coverage.values(), default=0.0),
-                sum(coverage.values()),
-                sum(maximums.values()),
-            )
+        coverage_state = partial(
+            _coverage_state,
+            lo_codes=[lo.lo_code for lo in lo_by_id.values()],
+            score_by_course=score_by_course,
+            required_coverage=required_coverage,
+        )
+        coverage_objective = partial(_coverage_objective, state=coverage_state)
 
         coverage, maximums, missing = coverage_state(normalized)
         if not missing:
