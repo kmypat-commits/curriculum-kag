@@ -33,7 +33,11 @@ before they start the backend.
 `backend/app/planner/scheduler.py` is now the orchestration facade. Its computational phases are:
 
 - `course_selection.py` — constrained candidate selection, variants A/B/C and bridge creation;
-- `semester_repair.py` — semester placement, domain/admission repair and schedule construction;
+- `semester_repair.py` — compatibility facade for semester-repair responsibilities;
+- `semester_load_repair.py` — credit/load balancing and bounded bridge adjustments;
+- `semester_domain_repair.py` — domain quota repair;
+- `semester_appropriateness.py` — pedagogical semester suitability;
+- `semester_admission_repair.py` — final evidence, education-level, prerequisite and late-course admission repair;
 - `credit_balancing.py` — semester loads, total-credit repair and bounded bridge balancing;
 - `prerequisite_inference.py` — plan-local prerequisite inference;
 - `plan_metrics.py` — final verification and research-facing metrics.
