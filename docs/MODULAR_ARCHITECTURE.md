@@ -21,6 +21,7 @@ workers from starting the same plan build; polling resumes after a restart.
 
 Course selection is split behind the stable `course_selection.py` facade:
 `candidate_retrieval.py` retrieves and filters scoped courses,
+`variant_admission.py` applies the pure education-level/domain/evidence gate,
 `variant_strategy.py` builds deterministic A/B/C variants, and
 `bridge_creation.py` owns bridge and credit-gap construction.
 

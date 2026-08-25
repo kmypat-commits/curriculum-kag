@@ -51,6 +51,12 @@ def test_variant_strategy_imports_its_bridge_dependencies():
     assert callable(select_courses_for_variant)
 
 
+def test_variant_admission_predicate_is_extracted_from_orchestrator():
+    from app.planner.variant_admission import is_project_domain_course
+
+    assert callable(is_project_domain_course)
+
+
 def test_semester_repair_facade_keeps_admission_repair_isolated():
     from app.planner.semester_repair import _repair_final_admission_misplacements
 

@@ -92,6 +92,7 @@ from app.planner.candidate_retrieval import (
     _select_exact_professional_subset,
 )
 from app.planner.variant_assembly import add_bundle_if_fits, build_prerequisite_bundle
+from app.planner.variant_admission import is_project_domain_course as _is_project_domain_course
 from app.planner.variant_ranking import rank_variant_candidates, variant_candidate_key
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
@@ -148,81 +149,6 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_level_scope_allowed_ids: set[int] = set()
 
     min_general_lo_evidence = 0.55
-
-    def is_project_domain(course: Course) -> bool:
-        if not _education_level_course_allowed(course, constraints.get("education_level")):
-            return False
-        if (
-            professional_scope
-            and _has_foreign_professional_title(course, project_domains)
-        ):
-            return False
-        if (
-            interdisciplinary_professional
-            and not _is_it_medicine_support_course(course, project_domains)
-        ):
-            return False
-        course_code = str(course.course_id or "")
-        if course_code.startswith("AI-CONFIRMED-") and not course_code.startswith(f"AI-CONFIRMED-{project_version_id}-"):
-            # Expert-confirmed synthetic replacements belong to one project;
-            # they must never leak into another curriculum through the global
-            # Course table.
-            return False
-        if course_code.startswith("EPVO-") and course.id not in epvo_level_scope_allowed_ids:
-            return False
-        # Canonical EPVO courses can be shared by several programmes and keep
-        # the global domain label of the first imported row. Exact selected
-        # EPVO group/direction evidence is therefore authoritative here.
-        if course.id not in epvo_domain_index and not (
-            _course_domain_matches(course, project_domains)
-            or domain_label_matches(course.domain, project_domains)
-        ):
-            return False
-        if professional_scope and not str(course.course_id or "").startswith("GOSO-KZ-"):
-            evidence = aggregates.get(course.id, {})
-            if (
-                epvo_professional_scope
-                and str(course.course_id or "").startswith("EPVO-")
-                and scope_rank(course) <= 0
-                and float(evidence.get("max") or 0.0) < 0.55
-            ):
-                return False
-            # Domain membership alone is insufficient: a medical or IT course
-            # may still be irrelevant to this programme's stated outcomes.
-            # Exact membership in the selected EPVO group is a valid
-            # catalogue-level admission signal even when a legacy programme
-            # has mojibake LO text and therefore a depressed local SBERT
-            # score.  The course still needs a programme MatchScore (it is in
-            # ``aggregates``), and the final verifier remains responsible for
-            # LO coverage; this only prevents a damaged old text field from
-            # collapsing the whole scoped candidate pool.
-            exact_scope = scope_rank(course) >= 3
-            if (
-                float(evidence.get("max") or 0.0) < 0.4
-                and float(evidence.get("expert") or 0.0) < 0.5
-                and not exact_scope
-                and not course_code.startswith(f"AI-CONFIRMED-{project_version_id}-")
-            ):
-                return False
-        if cyber_forensics_program:
-            return _course_curriculum_role(course, project_domains) == "core"
-        if professional_scope and _course_curriculum_role(course, project_domains) == "general":
-            evidence = aggregates.get(course.id, {})
-            # In interdisciplinary professional programmes generic catalogue
-            # items (languages, history, entrepreneurship, etc.) must not fill
-            # the curriculum unless they have at least a weak explicit LO link.
-            # Otherwise the fallback stage can reach the credit target with
-            # courses that are formally in an EPVO group but pedagogically
-            # unrelated to the programme outcomes.
-            if (
-                float(evidence.get("max") or 0.0) < min_general_lo_evidence
-                and not (
-                    scope_rank(course) >= 3
-                    and bool(evidence.get("professional_lo_codes"))
-                )
-            ):
-                return False
-        return True
 
     def remove_weak_general_items(items: List[Dict]) -> List[Dict]:
         if not professional_scope:
@@ -739,6 +665,29 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
 
     def scope_rank(course: Course) -> int:
         return _policy_scope_rank(course, epvo_scope_by_id, epvo_scope)
+
+    is_project_domain = partial(
+        _is_project_domain_course,
+        education_level=constraints.get("education_level"),
+        professional_scope=professional_scope,
+        project_domains=project_domains,
+        interdisciplinary_professional=interdisciplinary_professional,
+        cyber_forensics_program=cyber_forensics_program,
+        epvo_professional_scope=epvo_professional_scope,
+        project_version_id=project_version_id,
+        epvo_level_scope_allowed_ids=epvo_level_scope_allowed_ids,
+        epvo_domain_index=epvo_domain_index,
+        aggregates=aggregates,
+        min_general_lo_evidence=min_general_lo_evidence,
+        education_level_allowed=_education_level_course_allowed,
+        foreign_professional_title=_has_foreign_professional_title,
+        medicine_support_course=_is_it_medicine_support_course,
+        course_domain_matches=_course_domain_matches,
+        domain_label_matches=domain_label_matches,
+        curriculum_role=_course_curriculum_role,
+        scope_rank=scope_rank,
+    )
+
     def priority_rank(course: Course) -> int:
         return _policy_priority_rank(course, epvo_priority_by_id, epvo_priority)
     def semester_stability_rank(course: Course | None) -> float:
