@@ -1,7 +1,7 @@
 """Deterministic ranking primitives for curriculum-plan variants."""
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, MutableMapping
 from typing import Any
 
 
@@ -139,6 +139,34 @@ def rank_domain_quota_candidates(
         and course_depth(course.id) < max_depth
     )
     return sorted(candidates, key=rank_key)
+
+
+def get_domain_quota_candidates(
+    domain_index: int,
+    *,
+    cache: MutableMapping[int, list[Any]],
+    courses: Iterable[Any],
+    is_admissible: Callable[[Any], bool],
+    domain_share: Callable[[Any, int], float],
+    course_depth: Callable[[int], int],
+    max_depth: int,
+    rank_key: Callable[[Any], tuple],
+) -> list[Any]:
+    """Memoize one deterministic domain frontier for the planner."""
+    cached = cache.get(domain_index)
+    if cached is not None:
+        return cached
+    result = rank_domain_quota_candidates(
+        courses,
+        domain_index=domain_index,
+        is_admissible=is_admissible,
+        domain_share=domain_share,
+        course_depth=course_depth,
+        max_depth=max_depth,
+        rank_key=rank_key,
+    )
+    cache[domain_index] = result
+    return result
 
 
 def variant_candidate_key(

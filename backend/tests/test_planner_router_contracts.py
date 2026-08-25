@@ -405,6 +405,37 @@ def test_variant_quota_required_domain_credits_excludes_regulatory_volume():
     ) == [37.0, 27.0]
 
 
+def test_variant_ranking_domain_frontier_is_cached_by_domain():
+    from types import SimpleNamespace
+
+    from app.planner.variant_ranking import get_domain_quota_candidates
+
+    courses = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+    cache = {}
+    first = get_domain_quota_candidates(
+        0,
+        cache=cache,
+        courses=courses,
+        is_admissible=lambda _course: True,
+        domain_share=lambda _course, _index: 1.0,
+        course_depth=lambda _course_id: 0,
+        max_depth=2,
+        rank_key=lambda course: course.id,
+    )
+    second = get_domain_quota_candidates(
+        0,
+        cache=cache,
+        courses=[SimpleNamespace(id=99)],
+        is_admissible=lambda _course: False,
+        domain_share=lambda _course, _index: 0.0,
+        course_depth=lambda _course_id: 9,
+        max_depth=2,
+        rank_key=lambda course: course.id,
+    )
+    assert [course.id for course in first] == [1, 2]
+    assert second is first
+
+
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
     from types import SimpleNamespace
 

@@ -95,8 +95,8 @@ from app.planner.variant_prerequisites import (
     make_course_depth,
 )
 from app.planner.variant_ranking import (
+    get_domain_quota_candidates,
     rank_admissible_frontier,
-    rank_domain_quota_candidates,
     variant_candidate_key,
 )
 from app.planner.variant_scope import build_epvo_scope_index
@@ -598,30 +598,25 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
 
     domain_quota_candidate_cache: Dict[int, List[Course]] = {}
 
-    def domain_quota_candidates(domain_index: int) -> List[Course]:
-        cached = domain_quota_candidate_cache.get(domain_index)
-        if cached is not None:
-            return cached
-        cached = rank_domain_quota_candidates(
-            courses.values(),
-            domain_index=domain_index,
-            is_admissible=is_project_domain,
-            domain_share=project_domain_share,
-            course_depth=course_depth,
-            max_depth=num_semesters,
-            rank_key=lambda course: (
-                -role_rank(course),
-                -scope_rank(course),
-                -float(aggregates.get(course.id, {}).get("expert") or 0.0),
-                -float(aggregates.get(course.id, {}).get("max") or 0.0),
-                -len(aggregates.get(course.id, {}).get("professional_lo_codes") or set()),
-                -priority_rank(course),
-                course.recommended_semester or 99,
-                course.id,
-            ),
-        )
-        domain_quota_candidate_cache[domain_index] = cached
-        return cached
+    domain_quota_candidates = partial(
+        get_domain_quota_candidates,
+        cache=domain_quota_candidate_cache,
+        courses=courses.values(),
+        is_admissible=is_project_domain,
+        domain_share=project_domain_share,
+        course_depth=course_depth,
+        max_depth=num_semesters,
+        rank_key=lambda course: (
+            -role_rank(course),
+            -scope_rank(course),
+            -float(aggregates.get(course.id, {}).get("expert") or 0.0),
+            -float(aggregates.get(course.id, {}).get("max") or 0.0),
+            -len(aggregates.get(course.id, {}).get("professional_lo_codes") or set()),
+            -priority_rank(course),
+            course.recommended_semester or 99,
+            course.id,
+        ),
+    )
 
     top_up_with_real_epvo_courses = partial(
         _top_up_with_real_epvo_courses,
