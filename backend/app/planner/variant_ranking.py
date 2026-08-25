@@ -74,6 +74,52 @@ def rank_variant_candidates(
     )
 
 
+def rank_admissible_frontier(
+    candidate_ids: Iterable[int],
+    *,
+    is_admissible: Callable[[int], bool],
+    course_depth: Callable[[int], int],
+    max_depth: int,
+    aggregates: dict[int, dict[str, Any]],
+    courses: dict[int, Any],
+    prerequisite_ids_by_course: dict[int, list[int]],
+    role_rank: Callable[[Any], int],
+    scope_rank: Callable[[Any], int],
+    priority_rank: Callable[[Any], int],
+    semester_stability_rank: Callable[[Any], int],
+    variant_type: str,
+    project_domains: Iterable[str] = (),
+    title_for: Callable[[int], str],
+    limit: int = 100,
+) -> list[int]:
+    """Retrieve an admissible bounded frontier and apply variant ranking.
+
+    Candidate admission belongs to the project-specific planner; ordering and
+    duplicate-title handling remain deterministic and reusable here.
+    """
+    return rank_variant_candidates(
+        (
+            course_id
+            for course_id in candidate_ids
+            if course_id in courses
+            and is_admissible(course_id)
+            and course_depth(course_id) < max_depth
+        ),
+        aggregates=aggregates,
+        courses=courses,
+        prerequisite_ids_by_course=prerequisite_ids_by_course,
+        course_depth=course_depth,
+        role_rank=role_rank,
+        scope_rank=scope_rank,
+        priority_rank=priority_rank,
+        semester_stability_rank=semester_stability_rank,
+        variant_type=variant_type,
+        project_domains=project_domains,
+        title_for=title_for,
+        limit=limit,
+    )
+
+
 def variant_candidate_key(
     course_id: int,
     *,

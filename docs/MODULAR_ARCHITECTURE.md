@@ -22,7 +22,7 @@ workers from starting the same plan build; polling resumes after a restart.
 Course selection is split behind the stable `course_selection.py` facade:
 `candidate_retrieval.py` retrieves and filters scoped courses,
 `variant_admission.py` applies the pure education-level/domain/evidence gate,
-`variant_ranking.py` owns deterministic candidate ordering,
+`variant_ranking.py` owns deterministic candidate retrieval and ordering,
 `variant_prerequisites.py` filters evidenced earlier edges and computes depth,
 `variant_assembly.py` owns prerequisite bundles, `variant_strategy.py` builds
 deterministic A/B/C variants, and

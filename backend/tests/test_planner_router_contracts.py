@@ -106,6 +106,32 @@ def test_variant_ranking_stage_preserves_variant_specific_ordering():
     assert result == [1, 2]
 
 
+def test_variant_ranking_retrieves_only_admissible_depth_frontier():
+    from app.planner.variant_ranking import rank_admissible_frontier
+
+    courses = {
+        1: SimpleNamespace(id=1, credits=5, recommended_semester=1, domain="IT", title="A"),
+        2: SimpleNamespace(id=2, credits=5, recommended_semester=1, domain="IT", title="B"),
+        3: SimpleNamespace(id=3, credits=5, recommended_semester=1, domain="IT", title="C"),
+    }
+    result = rank_admissible_frontier(
+        [1, 2, 3],
+        is_admissible=lambda course_id: course_id != 2,
+        course_depth=lambda course_id: course_id,
+        max_depth=3,
+        aggregates={course_id: {"max": 0.8, "sum": 0.8, "los": {"LO1"}} for course_id in courses},
+        courses=courses,
+        prerequisite_ids_by_course={1: [], 2: [], 3: []},
+        role_rank=lambda _course: 1,
+        scope_rank=lambda _course: 1,
+        priority_rank=lambda _course: 1,
+        semester_stability_rank=lambda _course: 1,
+        variant_type="A",
+        title_for=lambda course_id: courses[course_id].title,
+    )
+    assert result == [1]
+
+
 def test_variant_assembly_adds_bundle_atomically():
     from app.planner.variant_assembly import add_bundle_if_fits
 

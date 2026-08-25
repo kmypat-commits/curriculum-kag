@@ -98,7 +98,10 @@ from app.planner.variant_prerequisites import (
     filter_supported_prerequisites,
     make_course_depth,
 )
-from app.planner.variant_ranking import rank_variant_candidates, variant_candidate_key
+from app.planner.variant_ranking import (
+    rank_admissible_frontier,
+    variant_candidate_key,
+)
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
@@ -765,8 +768,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # bounded frontier only for scoped/professional programmes; it remains
     # deterministic and avoids scanning the full repository.
     candidate_limit = 350 if interdisciplinary or epvo_professional_scope else 100
-    candidate_ids = rank_variant_candidates(
-        (cid for cid in aggregates if cid in courses and is_project_domain(courses[cid]) and course_depth(cid) < num_semesters),
+    candidate_ids = rank_admissible_frontier(
+        aggregates,
+        is_admissible=lambda cid: is_project_domain(courses[cid]),
+        max_depth=num_semesters,
         aggregates=aggregates,
         courses=courses,
         prerequisite_ids_by_course=prereq_ids_by_course,
