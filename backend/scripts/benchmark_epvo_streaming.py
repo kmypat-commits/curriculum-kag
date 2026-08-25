@@ -129,6 +129,8 @@ def main() -> int:
     tfidf = StreamingTfidf()
     id_anchors: dict[str, list[str]] = defaultdict(list)
     title_anchors: dict[str, list[str]] = defaultdict(list)
+    graded_id_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    graded_title_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
     blocks: list[dict] = []
     train_programmes = 0
     train_anchor_edges = 0
@@ -161,8 +163,11 @@ def main() -> int:
                 lo = outcome_text(outcome)
                 if not lo:
                     continue
+                expert_score = scores.get((course_id, lo_id), 1.0)
                 id_anchors[course_id].append(lo)
                 title_anchors[title_key(course)].append(lo)
+                graded_id_anchors[course_id].append((lo, expert_score))
+                graded_title_anchors[title_key(course)].append((lo, expert_score))
                 train_anchor_edges += 1
         elif row.get("split") == args.split and str(row.get("program_id")) in selected:
             block = make_block(row, args.min_expert_score)
@@ -177,10 +182,20 @@ def main() -> int:
     id_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in id_anchors.items()}
     title_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in title_anchors.items()}
 
+    def bound_graded(values: list[tuple[str, float]]) -> list[tuple[str, float]]:
+        strongest: dict[str, float] = {}
+        for text, score in values:
+            strongest[text] = max(strongest.get(text, 0.0), float(score))
+        return list(strongest.items())[:128]
+
+    graded_id_anchors = {key: bound_graded(values) for key, values in graded_id_anchors.items()}
+    graded_title_anchors = {key: bound_graded(values) for key, values in graded_title_anchors.items()}
+
     totals = defaultdict(float)
     query_count = 0
     variants = (0.15, 0.25, 0.35, 0.50)
     variant_totals = {weight: defaultdict(float) for weight in variants}
+    graded_anchor_totals = defaultdict(float)
     hybrid_totals = {
         "sbert_0.5_lex_0.25_anchor_0.25": defaultdict(float),
         "sbert_0.6_lex_0.2_anchor_0.2": defaultdict(float),
@@ -195,14 +210,25 @@ def main() -> int:
         for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
             totals[metric] += base[metric] * base["queries"]
         anchor = np.zeros_like(lexical)
+        graded_anchor = np.zeros_like(lexical)
         for course_index, course_id in enumerate(block["course_ids"]):
             values = id_anchors.get(course_id, []) + title_anchors.get(block["course_keys"][course_index], [])
             if values:
                 anchor[:, course_index] = (lo_vectors @ tfidf.transform(list(dict.fromkeys(values))).T).toarray().max(axis=1)
+            weighted_values = graded_id_anchors.get(course_id, []) + graded_title_anchors.get(block["course_keys"][course_index], [])
+            if weighted_values:
+                weighted_texts = [text for text, _ in weighted_values]
+                weighted_strengths = np.asarray([0.5 + 0.5 * score for _, score in weighted_values])
+                similarities = (lo_vectors @ tfidf.transform(weighted_texts).T).toarray()
+                graded_anchor[:, course_index] = (similarities * weighted_strengths).max(axis=1)
         for weight in variants:
             result = rank_metrics(block, (1.0 - weight) * lexical + weight * anchor)
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                 variant_totals[weight][metric] += result[metric] * result["queries"]
+        graded_result = rank_metrics(block, 0.65 * lexical + 0.35 * graded_anchor)
+        graded_anchor_totals["queries"] += graded_result["queries"]
+        for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+            graded_anchor_totals[metric] += graded_result[metric] * graded_result["queries"]
         if sbert_model is not None:
             sbert_courses = sbert_model.encode(
                 block["courses"] if args.language == "all" else block["course_langs"][args.language], batch_size=args.batch_size,
@@ -244,6 +270,10 @@ def main() -> int:
             metric: values[metric] / query_count if query_count else 0.0
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
         }
+    output["graded_anchor_weight_0.35"] = {
+        metric: graded_anchor_totals[metric] / query_count if query_count else 0.0
+        for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
+    }
     for name, values in hybrid_totals.items():
         output[name] = {
             metric: values[metric] / query_count if query_count else 0.0
