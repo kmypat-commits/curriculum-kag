@@ -92,7 +92,10 @@ from app.planner.candidate_retrieval import (
     _select_exact_professional_subset,
 )
 from app.planner.variant_assembly import add_bundle_if_fits, build_prerequisite_bundle
-from app.planner.variant_admission import is_project_domain_course as _is_project_domain_course
+from app.planner.variant_admission import (
+    is_project_domain_course as _is_project_domain_course,
+    remove_weak_general_items as _remove_weak_general_items,
+)
 from app.planner.variant_ranking import rank_variant_candidates, variant_candidate_key
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
@@ -149,19 +152,6 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_level_scope_allowed_ids: set[int] = set()
 
     min_general_lo_evidence = 0.55
-
-    def remove_weak_general_items(items: List[Dict]) -> List[Dict]:
-        if not professional_scope:
-            return items
-        cleaned = []
-        for item in items:
-            course = courses.get(item.get("course_id"))
-            if course and _course_curriculum_role(course, project_domains) == "general":
-                evidence = aggregates.get(course.id, {})
-                if float(evidence.get("max") or 0.0) < min_general_lo_evidence:
-                    continue
-            cleaned.append(item)
-        return cleaned
 
     def top_up_with_credit_bridges(items: List[Dict]) -> List[Dict]:
         if not constraints.get("allow_new_courses", True):
@@ -686,6 +676,15 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         domain_label_matches=domain_label_matches,
         curriculum_role=_course_curriculum_role,
         scope_rank=scope_rank,
+    )
+    remove_weak_general_items = partial(
+        _remove_weak_general_items,
+        professional_scope=professional_scope,
+        courses=courses,
+        project_domains=project_domains,
+        aggregates=aggregates,
+        curriculum_role=_course_curriculum_role,
+        min_general_lo_evidence=min_general_lo_evidence,
     )
 
     def priority_rank(course: Course) -> int:

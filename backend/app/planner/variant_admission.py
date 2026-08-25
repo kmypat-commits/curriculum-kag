@@ -13,6 +13,30 @@ from collections.abc import Callable, Mapping, Sequence
 from app.models.course import Course
 
 
+def remove_weak_general_items(
+    items: list[dict],
+    *,
+    professional_scope: bool,
+    courses: Mapping[int, Course],
+    project_domains: Sequence[str],
+    aggregates: Mapping[int, Mapping[str, object]],
+    curriculum_role: Callable[[Course, Sequence[str]], str],
+    min_general_lo_evidence: float,
+) -> list[dict]:
+    """Drop generic courses without sufficient LO evidence in scoped plans."""
+    if not professional_scope:
+        return items
+    cleaned: list[dict] = []
+    for item in items:
+        course = courses.get(item.get("course_id"))
+        if course and curriculum_role(course, project_domains) == "general":
+            evidence = aggregates.get(course.id, {})
+            if float(evidence.get("max") or 0.0) < min_general_lo_evidence:
+                continue
+        cleaned.append(item)
+    return cleaned
+
+
 def is_project_domain_course(
     course: Course,
     *,
