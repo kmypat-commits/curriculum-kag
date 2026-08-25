@@ -39,10 +39,11 @@ def localized_outcome_text(row: dict, language: str) -> str:
 
 def programme_scope_key(row: dict) -> str:
     """Stable direction/group key used only for train-only scope anchors."""
-    return "|".join(
+    parts = [
         str(row.get(key) or "").strip()
         for key in ("training_direction_code", "program_group_code")
-    )
+    ]
+    return "|".join(parts) if any(parts) else ""
 
 
 def write_status(path: Path | None, payload: dict) -> None:
@@ -242,7 +243,9 @@ def main() -> int:
                 expert_score = scores.get((course_id, lo_id), 1.0)
                 id_anchors[course_id].append(lo)
                 title_anchors[title_key(course)].append(lo)
-                scope_title_anchors[programme_scope_key(row)][title_key(course)].append(lo)
+                scope_key = programme_scope_key(row)
+                if scope_key:
+                    scope_title_anchors[scope_key][title_key(course)].append(lo)
                 graded_id_anchors[course_id].append((lo, expert_score))
                 graded_title_anchors[title_key(course)].append((lo, expert_score))
                 train_anchor_edges += 1

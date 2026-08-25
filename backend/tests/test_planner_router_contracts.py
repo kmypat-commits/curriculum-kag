@@ -340,7 +340,7 @@ def test_streaming_benchmark_scope_key_is_stable_for_direction_and_group():
             "program_group_code": " B001 ",
         }
     ) == "6B01|B001"
-    assert programme_scope_key({}) == "|"
+    assert programme_scope_key({}) == ""
 
 
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
