@@ -93,6 +93,7 @@ from app.planner.variant_assembly import (
     add_bundle_if_fits,
     assemble_foundation_frontier,
     build_prerequisite_bundle,
+    selected_domain_credits,
 )
 from app.planner.variant_admission import (
     is_project_domain_course as _is_project_domain_course,
@@ -104,6 +105,7 @@ from app.planner.variant_prerequisites import (
 )
 from app.planner.variant_ranking import (
     rank_admissible_frontier,
+    rank_domain_quota_candidates,
     variant_candidate_key,
 )
 from app.planner.variant_diversification import _diversify_variant_items
@@ -906,6 +908,14 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         optimized = _trim_to_target_credits(optimized, target, db)
         return _unique_items_by_title(optimized)
     selected: Dict[int, Dict] = {}
+    def selected_domain_credit_total(domain_index: int) -> int:
+        return selected_domain_credits(
+            selected,
+            courses=courses,
+            domain_index=domain_index,
+            domain_share=project_domain_share,
+        )
+
     def bundle(cid: int) -> List[Dict]:
         return build_prerequisite_bundle(
             cid,
@@ -954,30 +964,20 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         maximum_credits=maximum,
     )
 
-    def selected_domain_credits(domain_index: int) -> int:
-        value = 0.0
-        for item in selected.values():
-            course = courses.get(item.get("course_id"))
-            if course:
-                value += int(item.get("credits") or 0) * project_domain_share(
-                    course, domain_index
-                )
-        return int(round(value))
-
     domain_quota_candidate_cache: Dict[int, List[Course]] = {}
 
     def domain_quota_candidates(domain_index: int) -> List[Course]:
         cached = domain_quota_candidate_cache.get(domain_index)
         if cached is not None:
             return cached
-        cached = sorted(
-            (
-                course for course in courses.values()
-                if is_project_domain(course)
-                and project_domain_share(course, domain_index) > 0.0
-                and course_depth(course.id) < num_semesters
-            ),
-            key=lambda course: (
+        cached = rank_domain_quota_candidates(
+            courses.values(),
+            domain_index=domain_index,
+            is_admissible=is_project_domain,
+            domain_share=project_domain_share,
+            course_depth=course_depth,
+            max_depth=num_semesters,
+            rank_key=lambda course: (
                 -role_rank(course),
                 -scope_rank(course),
                 -float(aggregates.get(course.id, {}).get("expert") or 0.0),
@@ -1532,7 +1532,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if cid in courses and project_domain_share(courses[cid], domain_index) > 0.0
         ]
         for cid in domain_candidates:
-            if selected_domain_credits(domain_index) >= required:
+            if selected_domain_credit_total(domain_index) >= required:
                 break
             additions = list({
                 item["course_id"]: item

@@ -53,6 +53,22 @@ def assemble_foundation_frontier(
     return total
 
 
+def selected_domain_credits(
+    selected: Mapping[int, Dict],
+    *,
+    courses: Mapping[int, Any],
+    domain_index: int,
+    domain_share: Callable[[Any, int], float],
+) -> int:
+    """Return non-duplicated selected credits attributed to one domain."""
+    value = 0.0
+    for item in selected.values():
+        course = courses.get(item.get("course_id"))
+        if course is not None:
+            value += int(item.get("credits") or 0) * domain_share(course, domain_index)
+    return int(round(value))
+
+
 def build_prerequisite_bundle(
     course_id: int,
     *,

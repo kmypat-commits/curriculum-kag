@@ -163,6 +163,38 @@ def test_variant_assembly_foundation_frontier_commits_ranked_roots():
     assert set(selected) == {2, 1}
 
 
+def test_variant_assembly_domain_credit_total_uses_shared_domain_share():
+    from app.planner.variant_assembly import selected_domain_credits
+
+    selected = {
+        1: {"course_id": 10, "credits": 5},
+        2: {"course_id": 11, "credits": 3},
+    }
+    courses = {10: SimpleNamespace(id=10), 11: SimpleNamespace(id=11)}
+    assert selected_domain_credits(
+        selected,
+        courses=courses,
+        domain_index=0,
+        domain_share=lambda course, _index: 0.5 if course.id == 10 else 1.0,
+    ) == 6
+
+
+def test_variant_ranking_domain_frontier_applies_admission_and_depth():
+    from app.planner.variant_ranking import rank_domain_quota_candidates
+
+    courses = [SimpleNamespace(id=1), SimpleNamespace(id=2), SimpleNamespace(id=3)]
+    result = rank_domain_quota_candidates(
+        courses,
+        domain_index=0,
+        is_admissible=lambda course: course.id != 2,
+        domain_share=lambda _course, _index: 1.0,
+        course_depth=lambda course_id: course_id,
+        max_depth=3,
+        rank_key=lambda course: (-course.id,),
+    )
+    assert [course.id for course in result] == [1]
+
+
 def test_variant_prerequisites_filter_keeps_supported_earlier_edges_only():
     from app.planner.variant_prerequisites import filter_supported_prerequisites
 

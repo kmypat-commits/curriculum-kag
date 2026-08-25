@@ -120,6 +120,27 @@ def rank_admissible_frontier(
     )
 
 
+def rank_domain_quota_candidates(
+    courses: Iterable[Any],
+    *,
+    domain_index: int,
+    is_admissible: Callable[[Any], bool],
+    domain_share: Callable[[Any, int], float],
+    course_depth: Callable[[int], int],
+    max_depth: int,
+    rank_key: Callable[[Any], tuple],
+) -> list[Any]:
+    """Return the deterministic frontier for one non-duplicated domain quota."""
+    candidates = (
+        course
+        for course in courses
+        if is_admissible(course)
+        and domain_share(course, domain_index) > 0.0
+        and course_depth(course.id) < max_depth
+    )
+    return sorted(candidates, key=rank_key)
+
+
 def variant_candidate_key(
     course_id: int,
     *,
