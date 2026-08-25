@@ -61,6 +61,7 @@ def build_groups(
     language: str,
     min_expert_score: float,
     negative_strategy: str,
+    positive_loss: str,
 ) -> tuple[list[dict], dict]:
     rng = random.Random(seed)
     reservoir: list[dict] = []
@@ -80,13 +81,16 @@ def build_groups(
                 if edge.get("course_id") is not None and edge.get("lo_id") is not None
             }
             edges_by_lo: dict[str, set[str]] = {}
+            scores_by_edge: dict[tuple[str, str], float] = {}
             for course_id, lo_id in program.get("positive_edges") or []:
                 if (
                     str(course_id) in courses
                     and str(lo_id) in outcomes
                     and expert_scores.get((str(course_id), str(lo_id)), 1.0) >= min_expert_score
                 ):
-                    edges_by_lo.setdefault(str(lo_id), set()).add(str(course_id))
+                    course_key, lo_key = str(course_id), str(lo_id)
+                    edges_by_lo.setdefault(lo_key, set()).add(course_key)
+                    scores_by_edge[(course_key, lo_key)] = expert_scores.get((course_key, lo_key), 1.0)
             for lo_id, positive_ids in edges_by_lo.items():
                 query = localized(outcomes[lo_id].get("text") or {}, language)
                 positive_ids = list(positive_ids)
@@ -94,6 +98,11 @@ def build_groups(
                 if not query or not positive_ids or not negative_ids:
                     continue
                 rng.shuffle(positive_ids)
+                positive_weights = [
+                    scores_by_edge.get((course_id, str(lo_id)), 1.0)
+                    if positive_loss == "graded" else 1.0
+                    for course_id in positive_ids
+                ]
                 if negative_strategy == "lexical":
                     negative_ids.sort(
                         key=lambda course_id: token_overlap(
@@ -104,6 +113,7 @@ def build_groups(
                 else:
                     rng.shuffle(negative_ids)
                 positive_ids = positive_ids[:max_positives]
+                positive_weights = positive_weights[:max_positives]
                 negative_ids = negative_ids[:max(1, candidates - len(positive_ids))]
                 docs = [course_text(courses[course_id], language) for course_id in positive_ids + negative_ids]
                 if not docs or any(not text for text in docs):
@@ -112,6 +122,7 @@ def build_groups(
                     "query": query,
                     "documents": docs,
                     "positive_count": len(positive_ids),
+                    "positive_weights": positive_weights,
                     "program_id": str(program.get("program_id") or ""),
                     "lo_id": lo_id,
                 }
@@ -157,6 +168,7 @@ def main() -> None:
     parser.add_argument("--language", choices=LANGUAGES, default="ru")
     parser.add_argument("--min-expert-score", type=float, default=0.5)
     parser.add_argument("--negative-strategy", choices=("random", "lexical"), default="random")
+    parser.add_argument("--positive-loss", choices=("binary", "graded"), default="binary")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -164,7 +176,7 @@ def main() -> None:
     progress = output.with_name(output.name + "-progress.json")
     groups, stats = build_groups(
         Path(args.input), args.groups, args.candidates, args.max_positives, args.seed,
-        args.language, args.min_expert_score, args.negative_strategy
+        args.language, args.min_expert_score, args.negative_strategy, args.positive_loss
     )
     common = {
         "status": "prepared",
@@ -176,6 +188,7 @@ def main() -> None:
         "sampling": stats,
         "min_expert_score": args.min_expert_score,
         "negative_strategy": args.negative_strategy,
+        "positive_loss": args.positive_loss,
     }
     write_json(progress, common)
     if args.dry_run:
@@ -221,7 +234,13 @@ def main() -> None:
                     size = len(row["documents"])
                     logits = document_embeddings[offset:offset + size] @ query_embeddings[index] / args.temperature
                     log_probs = functional.log_softmax(logits, dim=0)
-                    group_losses.append(-log_probs[:row["positive_count"]].mean())
+                    positive_log_probs = log_probs[:row["positive_count"]]
+                    weights = torch.tensor(
+                        row.get("positive_weights") or [1.0] * row["positive_count"],
+                        device=positive_log_probs.device,
+                        dtype=positive_log_probs.dtype,
+                    )
+                    group_losses.append(-(positive_log_probs * weights).sum() / weights.sum())
                     offset += size
                 loss = torch.stack(group_losses).mean()
             scaler.scale(loss).backward()
