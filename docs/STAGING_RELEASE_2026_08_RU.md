@@ -46,6 +46,18 @@ python backend/scripts/check_release_hygiene.py
 
 Для защиты от случайного тега используйте `powershell -File .\scripts\create-staging-tag.ps1 -Tag staging-YYYY.MM.DD[-suffix] -BrowserSmokeVerified` после ручной проверки графа и RU/KK/EN в авторизованном браузере. Скрипт сам проверяет чистый worktree, manifest, последний restore-manifest, PostgreSQL на `5433` и UI smoke; без флага браузера или при незапущенном PostgreSQL он завершает работу без создания тега.
 
+Для воспроизводимой API-проверки защищённого графа можно передать локальные
+учётные данные только через переменные окружения:
+
+```powershell
+$env:CURRICULUM_KAG_SMOKE_EMAIL = "..."
+$env:CURRICULUM_KAG_SMOKE_PASSWORD = "..."
+.\scripts\authenticated-api-smoke.ps1 -ProjectVersionId 13
+```
+
+Этот smoke не сохраняет пароль и не заменяет ручную проверку отображения
+графа и переключения RU/KK/EN в браузере.
+
 ## Откат
 
 Остановить backend/frontend, сохранить логи и текущий manifest, восстановить
