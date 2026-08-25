@@ -19,6 +19,7 @@ from sentence_transformers import SentenceTransformer
 
 
 LANGUAGES = ("ru", "kz", "en")
+TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
 
 def localized(value: dict, language: str) -> str:
@@ -28,6 +29,15 @@ def localized(value: dict, language: str) -> str:
 
 def normalize(value: str) -> str:
     return re.sub(r"\s+", " ", value.casefold()).strip()
+
+
+def token_overlap(left: str, right: str) -> float:
+    """Return a deterministic lexical hardness score for an unlinked course."""
+    left_tokens = set(TOKEN_RE.findall(normalize(left)))
+    right_tokens = set(TOKEN_RE.findall(normalize(right)))
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
 
 
 def course_text(course: dict, language: str) -> str:
@@ -50,6 +60,7 @@ def build_groups(
     seed: int,
     language: str,
     min_expert_score: float,
+    negative_strategy: str,
 ) -> tuple[list[dict], dict]:
     rng = random.Random(seed)
     reservoir: list[dict] = []
@@ -83,7 +94,15 @@ def build_groups(
                 if not query or not positive_ids or not negative_ids:
                     continue
                 rng.shuffle(positive_ids)
-                rng.shuffle(negative_ids)
+                if negative_strategy == "lexical":
+                    negative_ids.sort(
+                        key=lambda course_id: token_overlap(
+                            query, course_text(courses[course_id], language)
+                        ),
+                        reverse=True,
+                    )
+                else:
+                    rng.shuffle(negative_ids)
                 positive_ids = positive_ids[:max_positives]
                 negative_ids = negative_ids[:max(1, candidates - len(positive_ids))]
                 docs = [course_text(courses[course_id], language) for course_id in positive_ids + negative_ids]
@@ -137,6 +156,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--language", choices=LANGUAGES, default="ru")
     parser.add_argument("--min-expert-score", type=float, default=0.5)
+    parser.add_argument("--negative-strategy", choices=("random", "lexical"), default="random")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -144,7 +164,7 @@ def main() -> None:
     progress = output.with_name(output.name + "-progress.json")
     groups, stats = build_groups(
         Path(args.input), args.groups, args.candidates, args.max_positives, args.seed,
-        args.language, args.min_expert_score
+        args.language, args.min_expert_score, args.negative_strategy
     )
     common = {
         "status": "prepared",
@@ -155,6 +175,7 @@ def main() -> None:
         "temperature": args.temperature,
         "sampling": stats,
         "min_expert_score": args.min_expert_score,
+        "negative_strategy": args.negative_strategy,
     }
     write_json(progress, common)
     if args.dry_run:
