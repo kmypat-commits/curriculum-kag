@@ -5,7 +5,7 @@
 
 | № | Требование | Статус | Доказательство / остаток |
 |---:|---|---|---|
-| 1 | Retrieval, ranking и assembly вынесены из planner-фасада | Улучшено, частично закрыто | `candidate_retrieval.py`, `variant_ranking.py`, `variant_assembly.py`, `variant_diversification.py`, `variant_policy.py`; `variant_strategy.py` остаётся большим оркестратором и требует следующего AST-прохода |
+| 1 | Retrieval, ranking и assembly вынесены из planner-фасада | Улучшено, частично закрыто | `candidate_retrieval.py`, `variant_ranking.py`, `variant_assembly.py`, `variant_diversification.py`, `variant_policy.py`, `variant_replacements.py`, `admission.py`; поздняя bridge/admission логика вынесена, `variant_strategy.py` остаётся большим оркестратором и требует следующего AST-прохода |
 | 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py`, `semester_domain_repair.py`, `semester_appropriateness.py`, `course_scheduling.py`; regression 72/72 |
 | 3 | Fail-fast EPVO/LO evidence | Закрыто | `evidence_preflight.py`; дефицит возвращается до долгого scheduler и не маскируется bridge |
 | 4 | Project 135 пересобирается только после восстановления evidence | Защищено | Сборка блокируется при дефиците профессиональных LO-связей; пересборка намеренно не запускалась |
