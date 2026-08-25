@@ -36,3 +36,17 @@ scope-membership получил 0,4778. Малый supervised pair-ranker (300 t
 Раздельный RU/KK/EN multilingual-max pilot на 19 validation-программах дал
 Recall@10=0,5877 против 0,6648 у fuzzy-варианта на той же подвыборке; он также
 отклонён.
+
+### 2026-08-25: clean-v3 supervised reranking audit
+
+Добавлен воспроизводимый train-only контрольный эксперимент
+`backend/scripts/benchmark_epvo_supervised.py` на полном PostgreSQL clean-v3
+с programme-disjoint split. На validation (80 программ, 632 LO-запроса,
+300 train-программ, 53 869 пар) получено Recall@10=0,5566, MRR=0,4719,
+nDCG@10=0,4284. На независимом test (80 программ, 646 запросов) —
+Recall@10=0,5007, MRR=0,4506, nDCG@10=0,3919. Результат устойчиво ниже
+ranking-loss кандидата 0,7071 и не продвигается в production. Эксперимент
+подтверждает, что простого pair-classifier с TF-IDF-признаками недостаточно;
+следующий кандидат должен улучшать programme-level hard-negative/listwise
+ранжирование и проверяться на том же полном пуле, а не на оптимистичной
+выборке только связанных курсов.
