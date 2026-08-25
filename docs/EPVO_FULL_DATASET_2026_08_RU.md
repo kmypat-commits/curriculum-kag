@@ -40,4 +40,7 @@ train и test.
 На 67 пригодных validation-программах/564 запросах streaming HashingTF-IDF с
 train-only anchor дал Recall@10=0,5832; на 67 test-программах/562 запросах —
 0,6098 (лучший anchor weight 0,35). MRR test составил 0,6380. Результат близок
-к прежнему baseline и не даёт основания менять production reranker.
+к прежнему baseline и не даёт основания менять production reranker. Проверка
+SBERT 40k на том же full split дала validation Recall@10=0,5829 и test
+Recall@10=0,6137 для лучшего гибрида `0,5 SBERT + 0,25 lexical + 0,25 anchor`;
+из-за отсутствия улучшения на validation модель не продвигается в production.

@@ -97,6 +97,9 @@ def main() -> int:
     parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--programmes", type=int, default=80)
     parser.add_argument("--min-expert-score", type=float, default=0.5)
+    parser.add_argument("--sbert-model", type=Path)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--batch-size", type=int, default=48)
     args = parser.parse_args()
     selected = selected_ids(args.data, args.split, args.programmes)
     tfidf = StreamingTfidf()
@@ -142,6 +145,10 @@ def main() -> int:
             if block is not None:
                 blocks.append(block)
     tfidf.finalize()
+    sbert_model = None
+    if args.sbert_model:
+        from sentence_transformers import SentenceTransformer
+        sbert_model = SentenceTransformer(str(args.sbert_model), device=args.device)
     # Bound repeated catalogue anchors without changing the train-only rule.
     id_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in id_anchors.items()}
     title_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in title_anchors.items()}
@@ -150,6 +157,11 @@ def main() -> int:
     query_count = 0
     variants = (0.15, 0.25, 0.35, 0.50)
     variant_totals = {weight: defaultdict(float) for weight in variants}
+    hybrid_totals = {
+        "sbert_0.5_lex_0.25_anchor_0.25": defaultdict(float),
+        "sbert_0.6_lex_0.2_anchor_0.2": defaultdict(float),
+        "sbert_0.25_lex_0.25_anchor_0.5": defaultdict(float),
+    }
     for block in blocks:
         course_vectors = tfidf.transform(block["courses"])
         lo_vectors = tfidf.transform(block["los"])
@@ -167,6 +179,25 @@ def main() -> int:
             result = rank_metrics(block, (1.0 - weight) * lexical + weight * anchor)
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                 variant_totals[weight][metric] += result[metric] * result["queries"]
+        if sbert_model is not None:
+            sbert_courses = sbert_model.encode(
+                block["courses"], batch_size=args.batch_size,
+                normalize_embeddings=True, show_progress_bar=False,
+            )
+            sbert_los = sbert_model.encode(
+                block["los"], batch_size=args.batch_size,
+                normalize_embeddings=True, show_progress_bar=False,
+            )
+            sbert_scores = np.asarray(sbert_los) @ np.asarray(sbert_courses).T
+            hybrid_scores = {
+                "sbert_0.5_lex_0.25_anchor_0.25": 0.50 * sbert_scores + 0.25 * lexical + 0.25 * anchor,
+                "sbert_0.6_lex_0.2_anchor_0.2": 0.60 * sbert_scores + 0.20 * lexical + 0.20 * anchor,
+                "sbert_0.25_lex_0.25_anchor_0.5": 0.25 * sbert_scores + 0.25 * lexical + 0.50 * anchor,
+            }
+            for name, scores in hybrid_scores.items():
+                result = rank_metrics(block, scores)
+                for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+                    hybrid_totals[name][metric] += result[metric] * result["queries"]
 
     output = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -178,11 +209,18 @@ def main() -> int:
         "train_anchor_edges": train_anchor_edges,
         "vectorizer": "train-only streaming HashingTFIDF char_wb",
         "min_expert_score": args.min_expert_score,
+        "sbert_model": str(args.sbert_model) if args.sbert_model else None,
+        "device": args.device if args.sbert_model else None,
     }
     for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
         output[metric] = totals[metric] / query_count if query_count else 0.0
     for weight, values in variant_totals.items():
         output[f"anchor_weight_{weight:g}"] = {
+            metric: values[metric] / query_count if query_count else 0.0
+            for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
+        }
+    for name, values in hybrid_totals.items():
+        output[name] = {
             metric: values[metric] / query_count if query_count else 0.0
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
         }
