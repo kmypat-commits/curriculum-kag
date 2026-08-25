@@ -1,0 +1,43 @@
+{
+  "method": "full programme-level multi-positive listwise SBERT with train-only dynamic EPVO memory",
+  "created_at": "2026-08-25",
+  "training": {
+    "input": "backend/.runtime/epvo-ranking-postgres-full/programs.jsonl",
+    "train_programmes": 7706,
+    "selected_groups": 12000,
+    "positives": 55835,
+    "negatives": 195200,
+    "epochs": 1,
+    "temperature": 0.07,
+    "min_expert_score": 0.5,
+    "negative_strategy": "lexical",
+    "positive_loss": "graded",
+    "device": "NVIDIA GeForce RTX 4050 Laptop GPU"
+  },
+  "split_policy": "programme-level frozen ranking-v1; train-only memory; no production change",
+  "benchmark_80": {
+    "validation_programmes": 80,
+    "test_programmes": 80,
+    "validation_recall_at_10": 0.645081483828635,
+    "test_baseline_recall_at_10": 0.5960120971400025,
+    "test_recall_at_10": 0.6398238540703179,
+    "test_delta_recall_at_10": 0.04381175693031547,
+    "test_mrr": 0.6542830064941058,
+    "test_ndcg_at_10": 0.5798571000339099,
+    "selected_global_weight": 0.3,
+    "selected_scoped_weight": 0.4
+  },
+  "benchmark_160": {
+    "validation_programmes": 160,
+    "test_programmes": 160,
+    "test_baseline_recall_at_10": 0.586617778794808,
+    "test_recall_at_10": 0.631428999751607,
+    "test_delta_recall_at_10": 0.0448112209567992,
+    "test_mrr": 0.644679175265062,
+    "test_ndcg_at_10": 0.567525912116799,
+    "selected_global_weight": 0.3,
+    "selected_scoped_weight": 0.4
+  },
+  "production_model_changed": false,
+  "promotion_status": "research_only_below_recall_at_10_0.80"
+}
