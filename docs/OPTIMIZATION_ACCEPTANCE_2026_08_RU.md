@@ -5,8 +5,8 @@
 
 | № | Требование | Статус | Доказательство / остаток |
 |---:|---|---|---|
-| 1 | Retrieval, ranking и assembly вынесены из planner-фасада | Улучшено, частично закрыто | `candidate_retrieval.py`, `variant_scope.py`, `variant_ranking.py`, `variant_assembly.py` (real-EPVO top-up и атомарные сборки), `variant_quota.py`, `variant_prerequisites.py`, `variant_admission.py`, `variant_diversification.py`, `variant_policy.py`, `variant_replacements.py`, `admission.py`; scope retrieval, admission, quota safety, prerequisite и bridge-логика вынесены, `variant_strategy.py` остаётся большим оркестратором |
-| 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py` (кредиты), `semester_domain_repair.py` (области), `semester_appropriateness.py` (уместность), `semester_admission_repair.py` (финальный допуск/пререквизиты), `course_scheduling.py`; regression 85/85 |
+| 1 | Retrieval, ranking и assembly вынесены из planner-фасада | Улучшено, частично закрыто | `candidate_retrieval.py`, `variant_scope.py`, `variant_ranking.py`, `variant_assembly.py` (real-EPVO top-up и атомарные сборки), `variant_quota.py`, `variant_prerequisites.py`, `variant_admission.py`, `variant_diversification.py`, `variant_policy.py`, `variant_replacements.py`, `variant_repairs.py`, `admission.py`; scope retrieval, admission, quota safety, prerequisite, credit-repair и bridge-логика вынесены, `variant_strategy.py` остаётся большим оркестратором |
+| 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py` (кредиты), `semester_domain_repair.py` (области), `semester_appropriateness.py` (уместность), `semester_admission_repair.py` (финальный допуск/пререквизиты), `course_scheduling.py`; regression 86/86 |
 | 3 | Fail-fast EPVO/LO evidence | Закрыто | `evidence_preflight.py`; дефицит возвращается до долгого scheduler и не маскируется bridge |
 | 4 | Project 135 пересобирается только после восстановления evidence | Защищено | Сборка блокируется при дефиците профессиональных LO-связей; пересборка намеренно не запускалась |
 | 5 | Browser smoke graph + RU/KK/EN | Улучшено, частично закрыто | UI smoke 10 маршрутов, RU/KK/EN markers, optional OpenAPI-проверка и безопасный `scripts/authenticated-api-smoke.ps1`; интерактивная проверка отображения графа и переключения языков требует ручного входа |
@@ -20,7 +20,7 @@
 
 ## Release gate
 
-Текущие проверки: backend **85/85**, static gate, dependency profile, release
+Текущие проверки: backend **86/86**, static gate, dependency profile, release
 hygiene, frontend production build, PostgreSQL health и Alembic head проходят.
 Без ручной авторизации в браузере тег не создаётся намеренно.
 

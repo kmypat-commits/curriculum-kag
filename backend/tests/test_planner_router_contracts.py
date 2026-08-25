@@ -343,6 +343,39 @@ def test_streaming_benchmark_scope_key_is_stable_for_direction_and_group():
     assert programme_scope_key({}) == ""
 
 
+def test_variant_credit_repair_prefers_real_top_up_before_bridge():
+    from types import SimpleNamespace
+
+    from app.planner.variant_repairs import top_up_with_credit_bridges
+
+    callback_calls = []
+
+    def real_top_up(items):
+        callback_calls.append(list(items))
+        return [*items, {"course_id": 7, "credits": 3}]
+
+    def create_bridge(*_args, **kwargs):
+        assert kwargs["desired_count"] is None
+        return [SimpleNamespace(credits=2)]
+
+    result = top_up_with_credit_bridges(
+        [{"course_id": 1, "credits": 5}],
+        allow_new_courses=True,
+        target=10,
+        maximum=10,
+        max_new_courses=2,
+        variant_type="A",
+        version=object(),
+        db=object(),
+        top_up_real_epvo_callback=real_top_up,
+        ensure_credit_bridge_modules=create_bridge,
+        bridge_item=lambda module: {"bridge_module_id": module.credits},
+    )
+    assert callback_calls == [[{"course_id": 1, "credits": 5}]]
+    assert sum(item.get("credits", 0) for item in result) == 10
+    assert result[-1]["bridge_module_id"] == 2
+
+
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
     from types import SimpleNamespace
 

@@ -106,6 +106,7 @@ from app.planner.variant_quota import (
     protected_quota_course_ids as _protected_quota_course_ids,
     quality_preserved_after_swap as _quality_preserved_after_swap,
 )
+from app.planner.variant_repairs import top_up_with_credit_bridges as _top_up_with_credit_bridges
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
@@ -167,45 +168,19 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     top_up_real_epvo_callback = lambda values: values
 
     def top_up_with_credit_bridges(items: List[Dict]) -> List[Dict]:
-        if not constraints.get("allow_new_courses", True):
-            return items
-        # This helper is called again after quota, duplicate and prerequisite
-        # repairs.  Those repairs can remove a real course and reopen an exact
-        # credit gap.  Retry the real EPVO fill at that final point before a
-        # synthetic bridge is even considered.
-        items = top_up_real_epvo_callback(items)
-        total_now = sum(int(item.get("credits") or 0) for item in items)
-        if total_now >= target:
-            return items
-        current_bridge_count = sum(1 for item in items if item.get("bridge_module_id") is not None)
-        remaining_slots = max(0, int(constraints.get("max_new_courses", 5)) - current_bridge_count)
-        # A late duplicate/prerequisite cleanup can leave a small exact-credit
-        # gap after all configured bridge slots are occupied. One explicit
-        # 3-credit bridge is safer than persisting an invalid below-target plan;
-        # it is recorded as a credit-repair event in the plan metadata.
-        if remaining_slots <= 0 and 0 < target - total_now <= 3:
-            remaining_slots = 1
-        if remaining_slots <= 0:
-            return items
-        auto_modules = ensure_credit_bridge_modules(
-            version,
-            db,
-            min(maximum - total_now, target - total_now),
-            remaining_slots,
-            desired_count=remaining_slots if variant_type == "C" else None,
+        return _top_up_with_credit_bridges(
+            items,
+            allow_new_courses=bool(constraints.get("allow_new_courses", True)),
+            target=target,
+            maximum=maximum,
+            max_new_courses=int(constraints.get("max_new_courses", 5) or 5),
+            variant_type=variant_type,
+            version=version,
+            db=db,
+            top_up_real_epvo_callback=top_up_real_epvo_callback,
+            ensure_credit_bridge_modules=ensure_credit_bridge_modules,
+            bridge_item=_bridge_item,
         )
-        normalized = list(items)
-        for bm in auto_modules:
-            credits = int(bm.credits or 5)
-            if total_now + credits > maximum:
-                continue
-            bridge = _bridge_item(bm)
-            bridge["credits"] = credits
-            normalized.append(bridge)
-            total_now += credits
-            if total_now >= target:
-                break
-        return normalized
 
     def close_professional_lo_gaps(items: List[Dict]) -> List[Dict]:
         if not professional_scope:
