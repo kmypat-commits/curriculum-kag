@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from itertools import combinations
 import math
 import re
@@ -92,7 +93,10 @@ from app.planner.candidate_retrieval import (
 from app.planner.variant_assembly import add_bundle_if_fits, build_prerequisite_bundle
 from app.planner.variant_ranking import rank_variant_candidates, variant_candidate_key
 from app.planner.variant_diversification import _diversify_variant_items
-from app.planner.variant_replacements import apply_confirmed_variant_replacements
+from app.planner.variant_replacements import (
+    apply_confirmed_variant_replacements,
+    replace_redundant_bridges_with_real_courses as _replace_redundant_bridges,
+)
 from app.planner.variant_policy import (
     course_matches_scope_theme as _policy_course_matches_scope_theme,
     foreign_scope_conflict as _policy_foreign_scope_conflict,
@@ -1600,89 +1604,6 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                     break
         return normalized
 
-    def replace_redundant_bridges_with_real_courses(items: List[Dict], protected_bridge_ids: set[int] | None = None) -> List[Dict]:
-        """Replace a bridge only when its LO role is already supported by real courses.
-
-        This prevents historical/forced bridge modules from surviving after a
-        later EPVO repository expansion has supplied suitable real courses.
-        Credit equality keeps the plan envelope unchanged.
-        """
-        normalized = [dict(item) for item in items]
-        protected_bridge_ids = protected_bridge_ids or set()
-        bridge_ids = {
-            int(item.get("bridge_module_id"))
-            for item in normalized
-            if item.get("bridge_module_id") is not None
-        } - protected_bridge_ids
-        if not bridge_ids:
-            return normalized
-        bridge_by_id = {
-            bridge.id: bridge
-            for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids)).all()
-        }
-        selected_real_ids = {
-            int(item["course_id"])
-            for item in normalized
-            if item.get("course_id") is not None
-        }
-        covered_codes = set()
-        for course_id in selected_real_ids:
-            evidence = aggregates.get(course_id, {})
-            if float(evidence.get("max") or 0.0) >= float(settings.COVERAGE_THRESHOLD):
-                covered_codes.update(evidence.get("lo_codes") or set())
-
-        candidates = [
-            course for course in courses.values()
-            if course.id not in selected_real_ids
-            and is_project_domain(course)
-            and scope_rank(course) >= 2
-            and _course_curriculum_role(course, project_domains) != "general"
-            and all(
-                prerequisite_id in selected_real_ids
-                for prerequisite_id in prereq_ids_by_course.get(course.id, [])
-            )
-            and float(aggregates.get(course.id, {}).get("max") or 0.0) >= 0.4
-        ]
-        used = set(selected_real_ids)
-        for index, item in enumerate(normalized):
-            bridge_id = item.get("bridge_module_id")
-            if bridge_id is None or int(bridge_id) in protected_bridge_ids:
-                continue
-            bridge = bridge_by_id.get(int(bridge_id))
-            if not bridge:
-                continue
-            target_codes = set(bridge.target_los or [])
-            if target_codes and not target_codes.issubset(covered_codes):
-                continue
-            same_credit = [
-                course for course in candidates
-                if course.id not in used and int(course.credits or 5) == int(item.get("credits") or 5)
-            ]
-            if not same_credit:
-                continue
-            same_credit.sort(
-                key=lambda course: (
-                    len(set(aggregates.get(course.id, {}).get("lo_codes") or set()) & target_codes),
-                    float(aggregates.get(course.id, {}).get("expert") or 0.0),
-                    float(aggregates.get(course.id, {}).get("max") or 0.0),
-                    priority_rank(course),
-                ),
-                reverse=True,
-            )
-            replacement = same_credit[0]
-            used.add(replacement.id)
-            normalized[index] = {
-                "course_id": replacement.id,
-                "title": replacement.title,
-                "domain": replacement.domain,
-                "credits": int(item.get("credits") or replacement.credits or 5),
-                "recommended_semester": replacement.recommended_semester,
-                "prerequisites": [],
-                "type": replacement.cycle_component or "elective",
-                "selection_method": "redundant_bridge_replaced_by_epvo",
-            }
-        return normalized
-
     def fill_domain_quota(domain_index: int) -> None:
         nonlocal total
         regulatory_selected_credits = sum(
@@ -1908,13 +1829,25 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     )
     result = _trim_to_target_credits(top_up_with_credit_bridges(top_up_with_real_epvo_courses(result)), target, db)
     result = rebalance_domain_quotas(result)
+    replace_redundant_bridge = partial(
+        _replace_redundant_bridges,
+        db=db,
+        courses=courses,
+        aggregates=aggregates,
+        project_domains=project_domains,
+        prerequisite_ids=prereq_ids_by_course,
+        is_project_domain=is_project_domain,
+        scope_rank=scope_rank,
+        course_role=_course_curriculum_role,
+        priority_rank=priority_rank,
+    )
     result = apply_confirmed_variant_replacements(
         result,
         constraints,
         courses,
         prereq_ids_by_course,
         num_semesters,
-        replace_redundant_bridges_with_real_courses,
+        replace_redundant_bridge,
     )
     result = rebalance_domain_quotas(result)
     # Expert replacements are applied late and can change the domain envelope.
@@ -1946,7 +1879,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # repair. Keep the final plan envelope honest: no later stage may leave a
     # plan that fails domain quotas if an equal-credit EPVO swap is available.
     result = rebalance_domain_quotas(result)
-    result = replace_redundant_bridges_with_real_courses(result)
+    result = replace_redundant_bridge(result, None)
     result = _trim_to_target_credits(result, target, db)
     result = rebalance_domain_quotas(result)
     # The last trim/bridge replacement must not remove the sole real source
@@ -1955,7 +1888,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = admit_real_courses(result)
     result = top_up_with_real_epvo_courses(result)
     result = top_up_with_credit_bridges(result)
-    result = replace_redundant_bridges_with_real_courses(result)
+    result = replace_redundant_bridge(result, None)
     result = _trim_to_target_credits(result, target, db)
     result = _fill_existing_bridge_credit_gap(result, target, db)
     result = rebalance_domain_quotas(result)
