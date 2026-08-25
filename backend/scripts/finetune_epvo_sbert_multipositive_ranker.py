@@ -49,6 +49,7 @@ def build_groups(
     max_positives: int,
     seed: int,
     language: str,
+    min_expert_score: float,
 ) -> tuple[list[dict], dict]:
     rng = random.Random(seed)
     reservoir: list[dict] = []
@@ -62,9 +63,18 @@ def build_groups(
             stats["train_programmes"] += 1
             courses = {str(row["id"]): row for row in program.get("courses") or []}
             outcomes = {str(row["id"]): row for row in program.get("outcomes") or []}
+            expert_scores = {
+                (str(edge.get("course_id")), str(edge.get("lo_id"))): float(edge.get("score") or 0.0)
+                for edge in program.get("expert_edges") or []
+                if edge.get("course_id") is not None and edge.get("lo_id") is not None
+            }
             edges_by_lo: dict[str, set[str]] = {}
             for course_id, lo_id in program.get("positive_edges") or []:
-                if str(course_id) in courses and str(lo_id) in outcomes:
+                if (
+                    str(course_id) in courses
+                    and str(lo_id) in outcomes
+                    and expert_scores.get((str(course_id), str(lo_id)), 1.0) >= min_expert_score
+                ):
                     edges_by_lo.setdefault(str(lo_id), set()).add(str(course_id))
             for lo_id, positive_ids in edges_by_lo.items():
                 query = localized(outcomes[lo_id].get("text") or {}, language)
@@ -126,13 +136,15 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.07)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--language", choices=LANGUAGES, default="ru")
+    parser.add_argument("--min-expert-score", type=float, default=0.5)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     output = Path(args.output)
     progress = output.with_name(output.name + "-progress.json")
     groups, stats = build_groups(
-        Path(args.input), args.groups, args.candidates, args.max_positives, args.seed, args.language
+        Path(args.input), args.groups, args.candidates, args.max_positives, args.seed,
+        args.language, args.min_expert_score
     )
     common = {
         "status": "prepared",
@@ -142,6 +154,7 @@ def main() -> None:
         "objective": "multi_positive_listwise_softmax",
         "temperature": args.temperature,
         "sampling": stats,
+        "min_expert_score": args.min_expert_score,
     }
     write_json(progress, common)
     if args.dry_run:
