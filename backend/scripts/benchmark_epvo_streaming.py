@@ -37,6 +37,16 @@ def localized_outcome_text(row: dict, language: str) -> str:
     return localized_value(row.get("text") or row.get("description") or row.get("title"), language)
 
 
+def write_status(path: Path | None, payload: dict) -> None:
+    """Atomically publish progress for a long-running offline benchmark."""
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
 class StreamingTfidf:
     def __init__(self, n_features: int = 2**17) -> None:
         self.vectorizer = HashingVectorizer(
@@ -142,9 +152,25 @@ def main() -> int:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--language", choices=("all", "ru", "kk", "en"), default="all")
+    parser.add_argument(
+        "--status-file",
+        type=Path,
+        help="Optional JSON status file for monitoring a long-running benchmark.",
+    )
     args = parser.parse_args()
     selected_offsets_by_programme = selected_offsets(args.data, args.split, args.programmes)
     selected = set(selected_offsets_by_programme)
+    status = {
+        "status": "running",
+        "stage": "fit_train_statistics",
+        "split": args.split,
+        "selected_programmes": len(selected),
+        "processed_programmes": 0,
+        "queries": 0,
+        "data": str(args.data),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    write_status(args.status_file, status)
     tfidf = StreamingTfidf()
     id_anchors: dict[str, list[str]] = defaultdict(list)
     title_anchors: dict[str, list[str]] = defaultdict(list)
@@ -192,6 +218,13 @@ def main() -> int:
         # of memory makes the benchmark genuinely streaming on the full
         # programme-level export.
     tfidf.finalize()
+    status.update({
+        "stage": "heldout_scoring",
+        "train_programmes": train_programmes,
+        "train_documents": tfidf.documents,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    write_status(args.status_file, status)
     sbert_model = None
     if args.sbert_model:
         from sentence_transformers import SentenceTransformer
@@ -283,6 +316,13 @@ def main() -> int:
                     result = rank_metrics(block, scores)
                     for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                         hybrid_totals[name][metric] += result[metric] * result["queries"]
+            if processed_programmes == 1 or processed_programmes % 10 == 0:
+                status.update({
+                    "processed_programmes": processed_programmes,
+                    "queries": query_count,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                })
+                write_status(args.status_file, status)
 
     output = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -316,6 +356,15 @@ def main() -> int:
         }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    status.update({
+        "status": "complete",
+        "stage": "complete",
+        "processed_programmes": processed_programmes,
+        "queries": query_count,
+        "output": str(args.output),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    write_status(args.status_file, status)
     print(json.dumps(output, ensure_ascii=False))
     return 0
 
