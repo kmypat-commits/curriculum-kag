@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, JSON, Float, DateTime, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, JSON, Float, DateTime, Text, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -60,6 +60,14 @@ class MatchScore(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     evidence_json = Column(JSON)  # List of chunk IDs and reasoning
     graph_path_json = Column(JSON)  # Graph traversal path if applicable
+
+    # Planner read paths always scope matches by programme version and then
+    # by course/LO.  Composite indexes prevent a full match_scores scan when
+    # opening the plan, coverage or graph pages.
+    __table_args__ = (
+        Index("ix_match_scores_version_course", "project_version_id", "course_id"),
+        Index("ix_match_scores_version_lo", "project_version_id", "lo_id"),
+    )
 
 
 class MatchFeedback(Base):
