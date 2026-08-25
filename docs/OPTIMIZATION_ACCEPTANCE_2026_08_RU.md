@@ -119,6 +119,13 @@ train-only blend CrossEncoder + stable-course-id expert memory выбрал ве
 кандидат, а не production-рейтинг; требуется более широкий programme-level
 hard-negative/listwise эксперимент и проверка на полном candidate pool.
 
+Переоценка global + EPVO-group scoped memory на том же исправленном export
+дала Recall@10=0,5362 (40k) и 0,5380 (ranking-loss SBERT) на независимых
+80-programme split; validation выбрал веса global/scoped 0,40/0,35 и
+0,40/0,40 соответственно. Покрытие scoped-кандидатов составило только
+20,6%, поэтому этот сигнал не заменяет semantic-memory и остаётся
+диагностическим.
+
 Проверена также точная память по паре `course_id–LO_id` (87 032 train-only
 экспертных рёбер). На отдельном frozen 80-programme split она сама не дала
 прироста (Recall@10=0,4680, как baseline); CrossEncoder + exact memory дал
