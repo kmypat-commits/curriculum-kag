@@ -35,6 +35,9 @@ python backend/scripts/export_epvo_ranking_dataset_postgres.py `
 train и test.
 
 Важно: прежние числа Recall@10 (например, 0,6099) относятся к отдельному
-быстрому benchmark-срезу из 1 822 программ. Полный export теперь готов; полный
-reranking benchmark будет запускаться потоковым загрузчиком, чтобы не держать
-1,2 ГБ JSONL целиком в памяти.
+быстрому benchmark-срезу из 1 822 программ. Полный export теперь готов;
+потоковый reranking benchmark выполнен без удержания 1,2 ГБ JSONL в памяти.
+На 67 пригодных validation-программах/564 запросах streaming HashingTF-IDF с
+train-only anchor дал Recall@10=0,5832; на 67 test-программах/562 запросах —
+0,6098 (лучший anchor weight 0,35). MRR test составил 0,6380. Результат близок
+к прежнему baseline и не даёт основания менять production reranker.

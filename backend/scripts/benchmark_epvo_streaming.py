@@ -1,0 +1,196 @@
+"""Memory-bounded programme-level EPVO reranking benchmark.
+
+The input JSONL can be larger than RAM.  The file is scanned twice: train text
+statistics and expert anchors are accumulated in compact structures, while
+only the selected held-out programmes are retained.  No held-out edges are
+used for vectorizer statistics or anchor construction.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+from sklearn.feature_extraction.text import HashingVectorizer
+from sklearn.preprocessing import normalize
+
+from benchmark_epvo_hybrid import course_text, outcome_text, rank_metrics, text_value, title_key
+
+
+class StreamingTfidf:
+    def __init__(self, n_features: int = 2**17) -> None:
+        self.vectorizer = HashingVectorizer(
+            analyzer="char_wb", ngram_range=(3, 5), n_features=n_features,
+            alternate_sign=False, norm=None, binary=False,
+        )
+        self.df = np.zeros(n_features, dtype=np.float64)
+        self.documents = 0
+        self.idf: np.ndarray | None = None
+
+    def update(self, values: list[str], batch_size: int = 2048) -> None:
+        values = [value for value in values if value]
+        for start in range(0, len(values), batch_size):
+            matrix = self.vectorizer.transform(values[start:start + batch_size])
+            self.df += np.asarray((matrix > 0).sum(axis=0)).ravel()
+            self.documents += matrix.shape[0]
+
+    def finalize(self) -> None:
+        self.idf = np.log((1.0 + self.documents) / (1.0 + self.df)) + 1.0
+
+    def transform(self, values: list[str]):
+        if self.idf is None:
+            raise RuntimeError("StreamingTfidf.finalize() must run before transform")
+        matrix = self.vectorizer.transform(values).multiply(self.idf)
+        return normalize(matrix, norm="l2", axis=1, copy=False)
+
+
+def selected_ids(path: Path, split: str, limit: int) -> set[str]:
+    candidates: list[tuple[str, str]] = []
+    for line in path.open(encoding="utf-8"):
+        row = json.loads(line)
+        if row.get("split") != split:
+            continue
+        program_id = str(row.get("program_id"))
+        candidates.append((hashlib.sha256(f"stream-v1:{split}:{program_id}".encode()).hexdigest(), program_id))
+    return {program_id for _, program_id in sorted(candidates)[:limit]}
+
+
+def make_block(row: dict, threshold: float) -> dict | None:
+    courses = {str(c.get("id")): c for c in row.get("courses") or [] if course_text(c)}
+    outcomes = {str(o.get("id")): o for o in row.get("outcomes") or [] if outcome_text(o)}
+    edge_scores = {
+        (str(edge.get("course_id")), str(edge.get("lo_id"))): float(edge.get("score") or 0.0)
+        for edge in row.get("expert_edges") or []
+        if edge.get("course_id") is not None and edge.get("lo_id") is not None
+    }
+    links: dict[str, set[str]] = defaultdict(set)
+    for edge in row.get("positive_edges") or []:
+        if len(edge) < 2:
+            continue
+        course_id, lo_id = str(edge[0]), str(edge[1])
+        if course_id in courses and lo_id in outcomes and edge_scores.get((course_id, lo_id), 1.0) >= threshold:
+            links[lo_id].add(course_id)
+    lo_ids = [lo_id for lo_id in outcomes if links.get(lo_id)]
+    if len(courses) < 2 or not lo_ids:
+        return None
+    course_ids = list(courses)
+    return {
+        "course_ids": course_ids,
+        "lo_ids": lo_ids,
+        "courses": [course_text(courses[cid]) for cid in course_ids],
+        "course_titles": [text_value(courses[cid].get("title")) for cid in course_ids],
+        "course_keys": [title_key(courses[cid]) for cid in course_ids],
+        "los": [outcome_text(outcomes[lo_id]) for lo_id in lo_ids],
+        "links": links,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--split", choices=("validation", "test"), default="validation")
+    parser.add_argument("--programmes", type=int, default=80)
+    parser.add_argument("--min-expert-score", type=float, default=0.5)
+    args = parser.parse_args()
+    selected = selected_ids(args.data, args.split, args.programmes)
+    tfidf = StreamingTfidf()
+    id_anchors: dict[str, list[str]] = defaultdict(list)
+    title_anchors: dict[str, list[str]] = defaultdict(list)
+    blocks: list[dict] = []
+    train_programmes = 0
+    train_anchor_edges = 0
+
+    for line in args.data.open(encoding="utf-8"):
+        row = json.loads(line)
+        if row.get("split") == "train":
+            train_programmes += 1
+            tfidf.update(
+                [course_text(course) for course in row.get("courses") or []]
+                + [outcome_text(outcome) for outcome in row.get("outcomes") or []]
+            )
+            courses = {str(c.get("id")): c for c in row.get("courses") or []}
+            outcomes = {str(o.get("id")): o for o in row.get("outcomes") or []}
+            scores = {
+                (str(edge.get("course_id")), str(edge.get("lo_id"))): float(edge.get("score") or 0.0)
+                for edge in row.get("expert_edges") or []
+                if edge.get("course_id") is not None and edge.get("lo_id") is not None
+            }
+            for edge in row.get("positive_edges") or []:
+                if len(edge) < 2:
+                    continue
+                course_id, lo_id = str(edge[0]), str(edge[1])
+                if scores.get((course_id, lo_id), 1.0) < args.min_expert_score:
+                    continue
+                course = courses.get(course_id)
+                outcome = outcomes.get(lo_id)
+                if not course or not outcome:
+                    continue
+                lo = outcome_text(outcome)
+                if not lo:
+                    continue
+                id_anchors[course_id].append(lo)
+                title_anchors[title_key(course)].append(lo)
+                train_anchor_edges += 1
+        elif row.get("split") == args.split and str(row.get("program_id")) in selected:
+            block = make_block(row, args.min_expert_score)
+            if block is not None:
+                blocks.append(block)
+    tfidf.finalize()
+    # Bound repeated catalogue anchors without changing the train-only rule.
+    id_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in id_anchors.items()}
+    title_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in title_anchors.items()}
+
+    totals = defaultdict(float)
+    query_count = 0
+    variants = (0.15, 0.25, 0.35, 0.50)
+    variant_totals = {weight: defaultdict(float) for weight in variants}
+    for block in blocks:
+        course_vectors = tfidf.transform(block["courses"])
+        lo_vectors = tfidf.transform(block["los"])
+        lexical = (lo_vectors @ course_vectors.T).toarray()
+        base = rank_metrics(block, lexical)
+        query_count += base["queries"]
+        for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+            totals[metric] += base[metric] * base["queries"]
+        anchor = np.zeros_like(lexical)
+        for course_index, course_id in enumerate(block["course_ids"]):
+            values = id_anchors.get(course_id, []) + title_anchors.get(block["course_keys"][course_index], [])
+            if values:
+                anchor[:, course_index] = (lo_vectors @ tfidf.transform(list(dict.fromkeys(values))).T).toarray().max(axis=1)
+        for weight in variants:
+            result = rank_metrics(block, (1.0 - weight) * lexical + weight * anchor)
+            for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+                variant_totals[weight][metric] += result[metric] * result["queries"]
+
+    output = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "split": args.split,
+        "programmes": len(blocks),
+        "queries": query_count,
+        "train_programmes": train_programmes,
+        "train_documents": tfidf.documents,
+        "train_anchor_edges": train_anchor_edges,
+        "vectorizer": "train-only streaming HashingTFIDF char_wb",
+        "min_expert_score": args.min_expert_score,
+    }
+    for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+        output[metric] = totals[metric] / query_count if query_count else 0.0
+    for weight, values in variant_totals.items():
+        output[f"anchor_weight_{weight:g}"] = {
+            metric: values[metric] / query_count if query_count else 0.0
+            for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
+        }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(output, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
