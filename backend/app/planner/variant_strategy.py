@@ -101,6 +101,7 @@ from app.planner.variant_ranking import (
 )
 from app.planner.variant_scope import build_epvo_scope_index
 from app.planner.variant_quota import (
+    build_missing_domain_bundle as _build_missing_domain_bundle,
     credits_by_domain as _credits_by_domain,
     protected_quota_course_ids as _protected_quota_course_ids,
     quality_preserved_after_swap as _quality_preserved_after_swap,
@@ -1188,41 +1189,19 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                         break
                 if not swapped:
                     def missing_domain_bundle(course_id: int, visiting: set | None = None):
-                        visiting = visiting or set()
-                        if course_id in ids:
-                            return []
-                        if course_id in visiting:
-                            return None
-                        course = courses.get(course_id)
-                        if (
-                            course is None
-                            or (
-                                course.id not in epvo_domain_index
-                                and not _course_domain_matches(course, project_domains)
-                            )
-                        ):
-                            return None
-                        mapped_domain = project_domain_index(course)
-                        if mapped_domain != domain_index:
-                            foundation_title = _title_key(course.title)
-                            foundation_tokens = (
-                                "алгоритм", "algorithm", "нейрон", "neural",
-                                "данн", "data", "статист", "statistic",
-                                "программ", "program", "информ", "comput",
-                                "математ", "math", "биоинформ", "bioinform",
-                            )
-                            if not any(token in foundation_title for token in foundation_tokens):
-                                return None
-                        bundle_courses: List[Course] = []
-                        for prerequisite_id in prereq_ids_by_course.get(course_id, []):
-                            prerequisite_bundle = missing_domain_bundle(
-                                prerequisite_id, visiting | {course_id}
-                            )
-                            if prerequisite_bundle is None:
-                                return None
-                            bundle_courses.extend(prerequisite_bundle)
-                        bundle_courses.append(course)
-                        return list({value.id: value for value in bundle_courses}.values())
+                        return _build_missing_domain_bundle(
+                            course_id,
+                            selected_ids=ids,
+                            courses=courses,
+                            prerequisite_ids_by_course=prereq_ids_by_course,
+                            target_domain=domain_index,
+                            project_domain_index=project_domain_index,
+                            epvo_domain_index=epvo_domain_index,
+                            project_domains=project_domains,
+                            course_domain_matches=_course_domain_matches,
+                            title_key=_title_key,
+                            visiting=visiting,
+                        )
 
                     bundle_candidates = []
                     for candidate in domain_quota_candidates(domain_index):

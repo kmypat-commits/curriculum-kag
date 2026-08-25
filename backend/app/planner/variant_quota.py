@@ -136,3 +136,63 @@ def protected_quota_course_ids(
         | core_ids
         | unique_lo_ids
     )
+
+
+def build_missing_domain_bundle(
+    course_id: int,
+    *,
+    selected_ids: set[int],
+    courses: Mapping[int, Any],
+    prerequisite_ids_by_course: Mapping[int, list[int]],
+    target_domain: int,
+    project_domain_index: Callable[[Any], int | None],
+    epvo_domain_index: Mapping[int, int],
+    project_domains: list[str],
+    course_domain_matches: Callable[[Any, list[str]], bool],
+    title_key: Callable[[Any], str],
+    visiting: set[int] | None = None,
+) -> list[Any] | None:
+    """Build a bounded prerequisite bundle that reaches one target domain."""
+    visiting = visiting or set()
+    if course_id in selected_ids:
+        return []
+    if course_id in visiting:
+        return None
+    course = courses.get(course_id)
+    if (
+        course is None
+        or (
+            course.id not in epvo_domain_index
+            and not course_domain_matches(course, project_domains)
+        )
+    ):
+        return None
+    mapped_domain = project_domain_index(course)
+    if mapped_domain != target_domain:
+        foundation_tokens = (
+            "алгоритм", "algorithm", "нейрон", "neural", "данн", "data",
+            "статист", "statistic", "программ", "program", "информ",
+            "comput", "математ", "math", "биоинформ", "bioinform",
+        )
+        if not any(token in title_key(course.title) for token in foundation_tokens):
+            return None
+    bundle_courses: list[Any] = []
+    for prerequisite_id in prerequisite_ids_by_course.get(course_id, []):
+        prerequisite_bundle = build_missing_domain_bundle(
+            prerequisite_id,
+            selected_ids=selected_ids,
+            courses=courses,
+            prerequisite_ids_by_course=prerequisite_ids_by_course,
+            target_domain=target_domain,
+            project_domain_index=project_domain_index,
+            epvo_domain_index=epvo_domain_index,
+            project_domains=project_domains,
+            course_domain_matches=course_domain_matches,
+            title_key=title_key,
+            visiting=visiting | {course_id},
+        )
+        if prerequisite_bundle is None:
+            return None
+        bundle_courses.extend(prerequisite_bundle)
+    bundle_courses.append(course)
+    return list({value.id: value for value in bundle_courses}.values())

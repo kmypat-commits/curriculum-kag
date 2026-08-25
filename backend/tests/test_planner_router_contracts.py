@@ -215,6 +215,7 @@ def test_variant_assembly_top_up_prefers_real_scoped_epvo_course():
 
 def test_variant_quota_helpers_preserve_domain_credits_and_unique_lo_sources():
     from app.planner.variant_quota import (
+        build_missing_domain_bundle,
         credits_by_domain,
         protected_quota_course_ids,
         quality_preserved_after_swap,
@@ -258,6 +259,22 @@ def test_variant_quota_helpers_preserve_domain_credits_and_unique_lo_sources():
         baseline_lo_scores={"LO1": 0.8},
         aggregates=aggregates,
     )
+    bundle = build_missing_domain_bundle(
+        2,
+        selected_ids=set(),
+        courses={
+            1: SimpleNamespace(id=1, title="Algorithms"),
+            2: SimpleNamespace(id=2, title="Domain course"),
+        },
+        prerequisite_ids_by_course={2: [1], 1: []},
+        target_domain=0,
+        project_domain_index=lambda _course: 0,
+        epvo_domain_index={1: 0, 2: 0},
+        project_domains=["A"],
+        course_domain_matches=lambda _course, _domains: True,
+        title_key=lambda value: str(value).casefold(),
+    )
+    assert [course.id for course in bundle] == [1, 2]
 
 
 def test_variant_ranking_domain_frontier_applies_admission_and_depth():
