@@ -1,5 +1,6 @@
 ﻿from typing import List, Dict, Tuple, Optional
 from collections import Counter
+import json
 import math
 import re
 from sqlalchemy.orm import Session
@@ -112,7 +113,7 @@ def retrieve_top_k_courses(
                     course_obj.domain, course_obj.credits, chunk_obj.id,
                     chunk_obj.chunk_type, chunk_obj.chunk_text, total_similarity
                 ))
-            except:
+            except (TypeError, ValueError, json.JSONDecodeError, FloatingPointError):
                 continue
         
         # Sort and take top
@@ -283,7 +284,8 @@ def retrieve_similar_chunks(
                     "chunk_text": chunk_obj.chunk_text, "course_code": course_obj.course_id,
                     "course_title": course_obj.title, "similarity": float(similarity)
                 })
-            except: continue
+            except (TypeError, ValueError, json.JSONDecodeError, FloatingPointError):
+                continue
         
         results_list.sort(key=lambda x: x["similarity"], reverse=True)
         return results_list[:k]
