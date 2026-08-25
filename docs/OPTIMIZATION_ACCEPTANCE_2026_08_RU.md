@@ -1,6 +1,6 @@
 # Acceptance-чеклист оптимизации Curriculum-KAG
 
-Снимок: 25.08.2026, после commit `dbf34a8`. Статусы отражают проверяемое состояние,
+Снимок: 25.08.2026, после commit `3b55f43`. Статусы отражают проверяемое состояние,
 а не намерение.
 
 | № | Требование | Статус | Доказательство / остаток |
@@ -14,7 +14,7 @@
 | 7 | Checksum-кэш EPVO/LO | Закрыто | stage cache инвалидируется при in-place checksum/fingerprint изменении; тесты проходят |
 | 8 | Узкие исключения | Закрыто | В production-коде осталось 2 `except Exception`, оба только на transaction rollback boundaries |
 | 9 | Lock-файлы | Закрыто | `backend/requirements.lock`, `frontend/package-lock.json`; dependency profile gate проходит |
-| 10 | Programme-level dataset и Recall@10 ≥ 0,80 | В работе | полный export: 11 017 программ, 833 022 edge (train/validation/test=7 706/1 650/1 661); streaming full validation=0,5832 (67 программ/564 запроса), test=0,6098 (67/562, MRR=0,6380); SBERT 40k hybrid validation=0,5829, test=0,6137 — отклонён по validation; benchmark-срез: лучший test=0,6099; остальные варианты хуже baseline и не внедрены |
+| 10 | Programme-level dataset и Recall@10 ≥ 0,80 | В работе | полный export: 11 017 программ, 833 022 edge (train/validation/test=7 706/1 650/1 661); streaming full validation=0,5832 (67 программ/564 запроса), test=0,6098 (67/562, MRR=0,6380); SBERT 40k all-language validation=0,5829, test=0,6137; RU-only validation=0,5914, test=0,6172 — экспериментальные кандидаты, целевой порог не достигнут и production не менялся |
 | 11 | PostgreSQL restore + Alembic в CI | Закрыто | CI service `pgvector/pgvector:pg16`, endpoint contracts, isolated restore gate; локально сохранён verified backup manifest |
 | 12 | Staging backup/manifest/tag/runbook | Частично закрыто | backup manifest, `staging-manifest.json`, runbook и guarded tag script готовы; tag ждёт ручной browser smoke |
 

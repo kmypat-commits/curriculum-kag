@@ -22,6 +22,21 @@ from sklearn.preprocessing import normalize
 from benchmark_epvo_hybrid import course_text, outcome_text, rank_metrics, text_value, title_key
 
 
+def localized_value(value: object, language: str) -> str:
+    if isinstance(value, dict):
+        aliases = (language, "kz") if language == "kk" else (language,)
+        return next((str(value.get(key) or "").strip() for key in aliases if value.get(key)), "")
+    return str(value or "").strip()
+
+
+def localized_course_text(row: dict, language: str) -> str:
+    return " | ".join(filter(None, (localized_value(row.get("title"), language), localized_value(row.get("description"), language))))
+
+
+def localized_outcome_text(row: dict, language: str) -> str:
+    return localized_value(row.get("text") or row.get("description") or row.get("title"), language)
+
+
 class StreamingTfidf:
     def __init__(self, n_features: int = 2**17) -> None:
         self.vectorizer = HashingVectorizer(
@@ -87,6 +102,14 @@ def make_block(row: dict, threshold: float) -> dict | None:
         "course_keys": [title_key(courses[cid]) for cid in course_ids],
         "los": [outcome_text(outcomes[lo_id]) for lo_id in lo_ids],
         "links": links,
+        "course_langs": {
+            language: [localized_course_text(courses[cid], language) for cid in course_ids]
+            for language in ("ru", "kk", "en")
+        },
+        "lo_langs": {
+            language: [localized_outcome_text(outcomes[lo_id], language) for lo_id in lo_ids]
+            for language in ("ru", "kk", "en")
+        },
     }
 
 
@@ -100,6 +123,7 @@ def main() -> int:
     parser.add_argument("--sbert-model", type=Path)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--batch-size", type=int, default=48)
+    parser.add_argument("--language", choices=("all", "ru", "kk", "en"), default="all")
     args = parser.parse_args()
     selected = selected_ids(args.data, args.split, args.programmes)
     tfidf = StreamingTfidf()
@@ -181,11 +205,11 @@ def main() -> int:
                 variant_totals[weight][metric] += result[metric] * result["queries"]
         if sbert_model is not None:
             sbert_courses = sbert_model.encode(
-                block["courses"], batch_size=args.batch_size,
+                block["courses"] if args.language == "all" else block["course_langs"][args.language], batch_size=args.batch_size,
                 normalize_embeddings=True, show_progress_bar=False,
             )
             sbert_los = sbert_model.encode(
-                block["los"], batch_size=args.batch_size,
+                block["los"] if args.language == "all" else block["lo_langs"][args.language], batch_size=args.batch_size,
                 normalize_embeddings=True, show_progress_bar=False,
             )
             sbert_scores = np.asarray(sbert_los) @ np.asarray(sbert_courses).T
@@ -211,6 +235,7 @@ def main() -> int:
         "min_expert_score": args.min_expert_score,
         "sbert_model": str(args.sbert_model) if args.sbert_model else None,
         "device": args.device if args.sbert_model else None,
+        "language": args.language,
     }
     for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
         output[metric] = totals[metric] / query_count if query_count else 0.0
