@@ -152,6 +152,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_level_scope_allowed_ids: set[int] = set()
 
     min_general_lo_evidence = 0.55
+    # The optimized NSGA-II branch is evaluated before the deterministic
+    # catalogue top-up helper is declared below.  Use a safe no-op callback
+    # until that helper is bound, rather than resolving an unbound local name.
+    top_up_real_epvo_callback = lambda values: values
 
     def top_up_with_credit_bridges(items: List[Dict]) -> List[Dict]:
         if not constraints.get("allow_new_courses", True):
@@ -160,7 +164,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         # repairs.  Those repairs can remove a real course and reopen an exact
         # credit gap.  Retry the real EPVO fill at that final point before a
         # synthetic bridge is even considered.
-        items = top_up_with_real_epvo_courses(items)
+        items = top_up_real_epvo_callback(items)
         total_now = sum(int(item.get("credits") or 0) for item in items)
         if total_now >= target:
             return items
@@ -1041,6 +1045,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if total_now >= target:
                 break
         return admit_real_courses(normalized)
+
+    top_up_real_epvo_callback = top_up_with_real_epvo_courses
 
     def rebalance_domain_quotas(items: List[Dict]) -> List[Dict]:
         if not interdisciplinary:
