@@ -23,8 +23,10 @@
 Текущие проверки: backend **91/91**, static gate, dependency profile, release
 hygiene, frontend production build, PostgreSQL health и Alembic head проходят.
 Последний UI smoke проверил 10 маршрутов; authenticated graph smoke вернул
-51 узел и 84 ребра. Staging manifest пересобран для commit `c96cd45` и
-фиксирует 475 отслеживаемых путей без dirty-файлов.
+51 узел и 84 ребра. Staging manifest пересобран для текущего чистого commit
+и фиксирует 475 отслеживаемых путей без dirty-файлов. PostgreSQL health и
+Alembic head повторно подтверждены; последний verified restore manifest
+имеет `passed=true`, `sha256_verified=true`, а количества строк совпадают.
 Без ручной авторизации в браузере тег не создаётся намеренно.
 
 ### Project 135 evidence gate
