@@ -158,7 +158,12 @@ production не затронут. Для следующего прогона н�
 benchmark (64647 evidence-текстов; coverage 70,5%/50,0%) выбрал на validation
 нулевые веса памяти; frozen test остался Recall@10=0,5836, delta=0.
 Градуированные экспертные оценки сохраняются для evidence и admission, но
-этот prior не внедряется как reranker.
+этот prior не внедряется как reranker. Проверен динамический
+positive-residual gate на том же `ranking-v1` split: validation выбрала
+global/scoped weights 0,2/0,7, frozen test Recall@10=0,6271 против 0,5836
+baseline (+0,0436), MRR=0,6575, nDCG@10=0,5710. Это лучший текущий
+исследовательский reranker, но порог 0,80 не достигнут и promotion не
+выполняется.
 
 Проверена также точная память по паре `course_id–LO_id` (87 032 train-only
 экспертных рёбер). На отдельном frozen 80-programme split она сама не дала
