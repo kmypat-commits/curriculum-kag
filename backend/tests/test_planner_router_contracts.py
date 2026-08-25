@@ -195,6 +195,36 @@ def test_variant_ranking_domain_frontier_applies_admission_and_depth():
     assert [course.id for course in result] == [1]
 
 
+def test_streaming_benchmark_selected_offsets_are_deterministic():
+    import json
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    try:
+        from benchmark_epvo_streaming import selected_offsets
+    finally:
+        sys.path.remove(str(scripts_dir))
+
+    rows = [
+        {"program_id": "p1", "split": "test"},
+        {"program_id": "p2", "split": "validation"},
+        {"program_id": "p3", "split": "test"},
+    ]
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "programs.jsonl"
+        path.write_text(
+            "\n".join(json.dumps(row) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        first = selected_offsets(path, "test", 2)
+        second = selected_offsets(path, "test", 2)
+    assert first == second
+    assert set(first) == {"p1", "p3"}
+
+
 def test_variant_prerequisites_filter_keeps_supported_earlier_edges_only():
     from app.planner.variant_prerequisites import filter_supported_prerequisites
 

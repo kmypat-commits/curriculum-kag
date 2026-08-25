@@ -6,7 +6,7 @@
 | № | Требование | Статус | Доказательство / остаток |
 |---:|---|---|---|
 | 1 | Retrieval, ranking и assembly вынесены из planner-фасада | Улучшено, частично закрыто | `candidate_retrieval.py`, `variant_ranking.py`, `variant_assembly.py`, `variant_prerequisites.py`, `variant_admission.py`, `variant_diversification.py`, `variant_policy.py`, `variant_replacements.py`, `admission.py`; admission, prerequisite и bridge-логика вынесены, `variant_strategy.py` остаётся большим оркестратором |
-| 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py` (кредиты), `semester_domain_repair.py` (области), `semester_appropriateness.py` (уместность), `semester_admission_repair.py` (финальный допуск/пререквизиты), `course_scheduling.py`; regression 80/80 |
+| 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py` (кредиты), `semester_domain_repair.py` (области), `semester_appropriateness.py` (уместность), `semester_admission_repair.py` (финальный допуск/пререквизиты), `course_scheduling.py`; regression 81/81 |
 | 3 | Fail-fast EPVO/LO evidence | Закрыто | `evidence_preflight.py`; дефицит возвращается до долгого scheduler и не маскируется bridge |
 | 4 | Project 135 пересобирается только после восстановления evidence | Защищено | Сборка блокируется при дефиците профессиональных LO-связей; пересборка намеренно не запускалась |
 | 5 | Browser smoke graph + RU/KK/EN | Улучшено, частично закрыто | UI smoke 10 маршрутов, RU/KK/EN markers и optional OpenAPI-проверка graph/semester путей; интерактивный graph smoke требует ручного входа |
@@ -20,7 +20,7 @@
 
 ## Release gate
 
-Текущие проверки: backend **80/80**, static gate, dependency profile, release
+Текущие проверки: backend **81/81**, static gate, dependency profile, release
 hygiene, frontend production build, PostgreSQL health и Alembic head проходят.
 Без ручной авторизации в браузере тег не создаётся намеренно.
 
