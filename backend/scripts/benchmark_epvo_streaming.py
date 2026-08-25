@@ -259,6 +259,10 @@ def main() -> int:
         "sbert_0.6_lex_0.2_anchor_0.2": defaultdict(float),
         "sbert_0.25_lex_0.25_anchor_0.5": defaultdict(float),
     }
+    title_hybrid_totals = {
+        "lex_0.45_title_0.2_anchor_0.35": defaultdict(float),
+        "lex_0.3_title_0.35_anchor_0.35": defaultdict(float),
+    }
     processed_programmes = 0
     # Seek directly to the selected held-out rows after fitting train-only
     # statistics.  Only one held-out programme is materialized at a time; no
@@ -278,8 +282,10 @@ def main() -> int:
                 continue
             processed_programmes += 1
             course_vectors = tfidf.transform(block["courses"])
+            title_vectors = tfidf.transform(block["course_titles"])
             lo_vectors = tfidf.transform(block["los"])
             lexical = (lo_vectors @ course_vectors.T).toarray()
+            title_lexical = (lo_vectors @ title_vectors.T).toarray()
             base = rank_metrics(block, lexical)
             query_count += base["queries"]
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
@@ -300,6 +306,18 @@ def main() -> int:
                 result = rank_metrics(block, (1.0 - weight) * lexical + weight * anchor)
                 for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                     variant_totals[weight][metric] += result[metric] * result["queries"]
+            title_hybrid_scores = {
+                "lex_0.45_title_0.2_anchor_0.35": (
+                    0.45 * lexical + 0.20 * title_lexical + 0.35 * anchor
+                ),
+                "lex_0.3_title_0.35_anchor_0.35": (
+                    0.30 * lexical + 0.35 * title_lexical + 0.35 * anchor
+                ),
+            }
+            for name, scores in title_hybrid_scores.items():
+                result = rank_metrics(block, scores)
+                for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+                    title_hybrid_totals[name][metric] += result[metric] * result["queries"]
             graded_result = rank_metrics(block, 0.65 * lexical + 0.35 * graded_anchor)
             graded_anchor_totals["queries"] += graded_result["queries"]
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
@@ -358,6 +376,11 @@ def main() -> int:
     }
     for name, values in hybrid_totals.items():
         output[name] = None if sbert_model is None else {
+            metric: values[metric] / query_count if query_count else 0.0
+            for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
+        }
+    for name, values in title_hybrid_totals.items():
+        output[name] = {
             metric: values[metric] / query_count if query_count else 0.0
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
         }
