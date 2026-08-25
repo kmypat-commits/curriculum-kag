@@ -24,6 +24,35 @@ def add_bundle_if_fits(
     return current + addition_credits, True
 
 
+def assemble_foundation_frontier(
+    candidate_ids: Iterable[int],
+    *,
+    selected: Dict[int, Dict],
+    bundle_for_course: Callable[[int], list[Dict]],
+    rank_key: Callable[[int], tuple],
+    foundation_target: int,
+    maximum_credits: int,
+) -> int:
+    """Add ranked zero-depth foundation roots until the target is reached.
+
+    The planner supplies the project-specific candidate and prerequisite
+    bundle callbacks.  This helper only owns the deterministic assembly loop,
+    preserving the historical rule that the root item is committed while the
+    bundle builder decides whether its prerequisites are admissible.
+    """
+    total = 0
+    for course_id in sorted(candidate_ids, key=rank_key, reverse=True):
+        bundle = bundle_for_course(course_id)
+        item = bundle[-1] if bundle else None
+        if not item or total + int(item.get("credits") or 0) > maximum_credits:
+            continue
+        selected[course_id] = item
+        total += int(item.get("credits") or 0)
+        if total >= foundation_target:
+            break
+    return total
+
+
 def build_prerequisite_bundle(
     course_id: int,
     *,

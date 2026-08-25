@@ -146,6 +146,23 @@ def test_variant_assembly_adds_bundle_atomically():
     assert set(selected) == {1}
 
 
+def test_variant_assembly_foundation_frontier_commits_ranked_roots():
+    from app.planner.variant_assembly import assemble_foundation_frontier
+
+    selected = {}
+    bundles = {1: [{"course_id": 1, "credits": 5}], 2: [{"course_id": 2, "credits": 3}]}
+    total = assemble_foundation_frontier(
+        [1, 2],
+        selected=selected,
+        bundle_for_course=bundles.get,
+        rank_key=lambda course_id: (course_id,),
+        foundation_target=5,
+        maximum_credits=30,
+    )
+    assert total == 8
+    assert set(selected) == {2, 1}
+
+
 def test_variant_prerequisites_filter_keeps_supported_earlier_edges_only():
     from app.planner.variant_prerequisites import filter_supported_prerequisites
 

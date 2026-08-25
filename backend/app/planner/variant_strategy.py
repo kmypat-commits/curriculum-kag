@@ -89,7 +89,11 @@ from app.planner.candidate_retrieval import (
     _repair_missing_ict_competencies,
     _select_exact_professional_subset,
 )
-from app.planner.variant_assembly import add_bundle_if_fits, build_prerequisite_bundle
+from app.planner.variant_assembly import (
+    add_bundle_if_fits,
+    assemble_foundation_frontier,
+    build_prerequisite_bundle,
+)
 from app.planner.variant_admission import (
     is_project_domain_course as _is_project_domain_course,
     remove_weak_general_items as _remove_weak_general_items,
@@ -911,7 +915,6 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             is_project_domain=is_project_domain,
             scope_rank=scope_rank,
         )
-    total = 0
     foundation_target = max(0, int(constraints.get("max_credits_per_semester", target / max(num_semesters, 1))) - 3)
     foundation_ids = sorted(
         (cid for cid in courses if is_project_domain(courses[cid]) and course_depth(cid) == 0),
@@ -930,12 +933,26 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         ) if cid in aggregates else (0, 0, 0),
         reverse=True,
     )
-    for cid in foundation_ids:
-        foundation_bundle = bundle(cid)
-        item = foundation_bundle[-1] if foundation_bundle else None
-        if not item or total + item["credits"] > maximum: continue
-        selected[cid] = item; total += item["credits"]
-        if total >= foundation_target: break
+    total = assemble_foundation_frontier(
+        foundation_ids,
+        selected=selected,
+        bundle_for_course=bundle,
+        rank_key=lambda cid: variant_candidate_key(
+            cid,
+            aggregates=aggregates,
+            courses=courses,
+            prerequisite_ids_by_course=prereq_ids_by_course,
+            course_depth=course_depth,
+            role_rank=role_rank,
+            scope_rank=scope_rank,
+            priority_rank=priority_rank,
+            semester_stability_rank=semester_stability_rank,
+            variant_type=variant_type,
+            project_domains=(version.project.domain1, version.project.domain2),
+        ) if cid in aggregates else (0, 0, 0),
+        foundation_target=foundation_target,
+        maximum_credits=maximum,
+    )
 
     def selected_domain_credits(domain_index: int) -> int:
         value = 0.0
