@@ -131,6 +131,12 @@ train-only blend CrossEncoder + stable-course-id expert memory выбрал ве
 кандидат, а не production-рейтинг; требуется более широкий programme-level
 hard-negative/listwise эксперимент и проверка на полном candidate pool.
 
+Инженерный quality gate дополнен: retrieval больше не скрывает неожиданные
+исключения широким `except`. Нормальные повреждённые/несовместимые векторы
+пропускаются с сохранением результата остальных кандидатов, а ошибки кода
+остаются видимыми для диагностики. После изменения 91/91 backend-тестов,
+статический gate, проверка UTF-8 и release hygiene прошли успешно.
+
 Переоценка global + EPVO-group scoped memory на том же исправленном export
 дала Recall@10=0,5362 (40k) и 0,5380 (ranking-loss SBERT) на независимых
 80-programme split; validation выбрал веса global/scoped 0,40/0,35 и
