@@ -179,6 +179,40 @@ def test_variant_assembly_domain_credit_total_uses_shared_domain_share():
     ) == 6
 
 
+def test_variant_assembly_top_up_prefers_real_scoped_epvo_course():
+    from app.planner.variant_assembly import top_up_with_real_epvo_courses
+
+    course = SimpleNamespace(
+        id=2,
+        course_id="EPVO-2",
+        title="Scoped course",
+        domain="D",
+        credits=5,
+        recommended_semester=2,
+        cycle_component="elective",
+    )
+    result = top_up_with_real_epvo_courses(
+        [{"course_id": 1, "title": "Existing", "credits": 5}],
+        target_credits=10,
+        maximum_credits=15,
+        courses={2: course},
+        prerequisite_ids_by_course={2: []},
+        aggregates={2: {"professional_lo_codes": {"LO1"}, "max": 0.8}},
+        num_semesters=4,
+        title_key=lambda value: str(value).casefold(),
+        is_project_domain=lambda _course: True,
+        scope_rank=lambda _course: 3,
+        priority_rank=lambda _course: 10,
+        course_depth=lambda _course_id: 1,
+        course_matches_scope_theme=lambda _course: True,
+        has_strong_exact_scope_evidence=lambda _course: True,
+        unique_items_by_title=lambda items: items,
+        admit_real_courses=lambda items: items,
+    )
+    assert [item["course_id"] for item in result] == [1, 2]
+    assert result[-1]["selection_method"] == "real_epvo_credit_top_up"
+
+
 def test_variant_ranking_domain_frontier_applies_admission_and_depth():
     from app.planner.variant_ranking import rank_domain_quota_candidates
 

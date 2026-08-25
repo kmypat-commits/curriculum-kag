@@ -84,6 +84,7 @@ from app.planner.variant_assembly import (
     assemble_foundation_frontier,
     build_prerequisite_bundle,
     selected_domain_credits,
+    top_up_with_real_epvo_courses as _top_up_with_real_epvo_courses,
 )
 from app.planner.variant_admission import (
     is_project_domain_course as _is_project_domain_course,
@@ -901,61 +902,24 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         domain_quota_candidate_cache[domain_index] = cached
         return cached
 
-    def top_up_with_real_epvo_courses(items: List[Dict]) -> List[Dict]:
-        """Prefer real scoped EPVO courses before synthetic credit bridges."""
-        normalized = _unique_items_by_title(admit_real_courses(items))
-        total_now = sum(int(item.get("credits") or 0) for item in normalized)
-        if total_now >= target:
-            return normalized
-        selected_ids = {int(item.get("course_id")) for item in normalized if item.get("course_id")}
-        selected_titles = {_title_key(item.get("title")) for item in normalized if item.get("title")}
-        candidates = []
-        for course in courses.values():
-            if course.id in selected_ids or _title_key(course.title) in selected_titles:
-                continue
-            if not str(course.course_id or "").startswith("EPVO-"):
-                continue
-            if not is_project_domain(course) or scope_rank(course) <= 0:
-                continue
-            if not course_matches_scope_theme(course) and not has_strong_exact_scope_evidence(course):
-                continue
-            if course_depth(course.id) >= num_semesters:
-                continue
-            prerequisites = prereq_ids_by_course.get(course.id, [])
-            if any(pre_id not in selected_ids for pre_id in prerequisites):
-                continue
-            evidence = aggregates.get(course.id, {})
-            if not evidence.get("professional_lo_codes"):
-                continue
-            candidates.append(course)
-        candidates.sort(key=lambda course: (
-            -scope_rank(course),
-            -priority_rank(course),
-            -float(aggregates.get(course.id, {}).get("max") or 0.0),
-            course.recommended_semester or 99,
-            course.id,
-        ))
-        for course in candidates:
-            credits = int(course.credits or 5)
-            if total_now + credits > maximum:
-                continue
-            normalized.append({
-                "course_id": course.id,
-                "title": course.title,
-                "domain": course.domain,
-                "credits": credits,
-                "recommended_semester": course.recommended_semester,
-                "prerequisites": prereq_ids_by_course.get(course.id, []),
-                "type": course.cycle_component or "elective",
-                "epvo_exact_scope": scope_rank(course) >= 3,
-                "selection_method": "real_epvo_credit_top_up",
-            })
-            selected_ids.add(course.id)
-            selected_titles.add(_title_key(course.title))
-            total_now += credits
-            if total_now >= target:
-                break
-        return admit_real_courses(normalized)
+    top_up_with_real_epvo_courses = partial(
+        _top_up_with_real_epvo_courses,
+        target_credits=target,
+        maximum_credits=maximum,
+        courses=courses,
+        prerequisite_ids_by_course=prereq_ids_by_course,
+        aggregates=aggregates,
+        num_semesters=num_semesters,
+        title_key=_title_key,
+        is_project_domain=is_project_domain,
+        scope_rank=scope_rank,
+        priority_rank=priority_rank,
+        course_depth=course_depth,
+        course_matches_scope_theme=course_matches_scope_theme,
+        has_strong_exact_scope_evidence=has_strong_exact_scope_evidence,
+        unique_items_by_title=_unique_items_by_title,
+        admit_real_courses=admit_real_courses,
+    )
 
     top_up_real_epvo_callback = top_up_with_real_epvo_courses
 

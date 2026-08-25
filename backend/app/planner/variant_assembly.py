@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Mapping
 
 
 def add_bundle_if_fits(
@@ -119,3 +119,88 @@ def build_prerequisite_bundle(
             "epvo_exact_scope": scope_rank(course) >= 3,
         })
     return result
+
+
+def top_up_with_real_epvo_courses(
+    items: list[Dict],
+    *,
+    target_credits: int,
+    maximum_credits: int,
+    courses: Mapping[int, Any],
+    prerequisite_ids_by_course: Mapping[int, list[int]],
+    aggregates: Mapping[int, Mapping[str, Any]],
+    num_semesters: int,
+    title_key: Callable[[Any], str],
+    is_project_domain: Callable[[Any], bool],
+    scope_rank: Callable[[Any], int],
+    priority_rank: Callable[[Any], int],
+    course_depth: Callable[[int], int],
+    course_matches_scope_theme: Callable[[Any], bool],
+    has_strong_exact_scope_evidence: Callable[[Any], bool],
+    unique_items_by_title: Callable[[list[Dict]], list[Dict]],
+    admit_real_courses: Callable[[list[Dict]], list[Dict]],
+) -> list[Dict]:
+    """Fill a credit gap with real scoped EPVO courses before bridges.
+
+    Candidate retrieval and admission are callbacks so this primitive does
+    not know project policy.  It only owns the deterministic assembly order:
+    unique/admitted items first, then unused EPVO courses with professional LO
+    evidence, bounded prerequisites and available credit capacity.
+    """
+    normalized = unique_items_by_title(admit_real_courses(items))
+    total_now = sum(int(item.get("credits") or 0) for item in normalized)
+    if total_now >= target_credits:
+        return normalized
+    selected_ids = {
+        int(item.get("course_id")) for item in normalized if item.get("course_id")
+    }
+    selected_titles = {
+        title_key(item.get("title")) for item in normalized if item.get("title")
+    }
+    candidates = []
+    for course in courses.values():
+        if course.id in selected_ids or title_key(course.title) in selected_titles:
+            continue
+        if not str(course.course_id or "").startswith("EPVO-"):
+            continue
+        if not is_project_domain(course) or scope_rank(course) <= 0:
+            continue
+        if not course_matches_scope_theme(course) and not has_strong_exact_scope_evidence(course):
+            continue
+        if course_depth(course.id) >= num_semesters:
+            continue
+        prerequisites = prerequisite_ids_by_course.get(course.id, [])
+        if any(pre_id not in selected_ids for pre_id in prerequisites):
+            continue
+        evidence = aggregates.get(course.id, {})
+        if not evidence.get("professional_lo_codes"):
+            continue
+        candidates.append(course)
+    candidates.sort(key=lambda course: (
+        -scope_rank(course),
+        -priority_rank(course),
+        -float(aggregates.get(course.id, {}).get("max") or 0.0),
+        course.recommended_semester or 99,
+        course.id,
+    ))
+    for course in candidates:
+        credits = int(course.credits or 5)
+        if total_now + credits > maximum_credits:
+            continue
+        normalized.append({
+            "course_id": course.id,
+            "title": course.title,
+            "domain": course.domain,
+            "credits": credits,
+            "recommended_semester": course.recommended_semester,
+            "prerequisites": prerequisite_ids_by_course.get(course.id, []),
+            "type": course.cycle_component or "elective",
+            "epvo_exact_scope": scope_rank(course) >= 3,
+            "selection_method": "real_epvo_credit_top_up",
+        })
+        selected_ids.add(course.id)
+        selected_titles.add(title_key(course.title))
+        total_now += credits
+        if total_now >= target_credits:
+            break
+    return admit_real_courses(normalized)
