@@ -37,6 +37,14 @@ def localized_outcome_text(row: dict, language: str) -> str:
     return localized_value(row.get("text") or row.get("description") or row.get("title"), language)
 
 
+def programme_scope_key(row: dict) -> str:
+    """Stable direction/group key used only for train-only scope anchors."""
+    return "|".join(
+        str(row.get(key) or "").strip()
+        for key in ("training_direction_code", "program_group_code")
+    )
+
+
 def write_status(path: Path | None, payload: dict) -> None:
     """Atomically publish progress for a long-running offline benchmark."""
     if path is None:
@@ -134,6 +142,7 @@ def make_block(row: dict, threshold: float) -> dict | None:
         "courses": [course_text(courses[cid]) for cid in course_ids],
         "course_titles": [text_value(courses[cid].get("title")) for cid in course_ids],
         "course_keys": [title_key(courses[cid]) for cid in course_ids],
+        "scope_key": programme_scope_key(row),
         "los": [outcome_text(outcomes[lo_id]) for lo_id in lo_ids],
         "links": links,
         "course_langs": {
@@ -192,6 +201,7 @@ def main() -> int:
     )
     id_anchors: dict[str, list[str]] = defaultdict(list)
     title_anchors: dict[str, list[str]] = defaultdict(list)
+    scope_title_anchors: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     graded_id_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
     graded_title_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
     train_programmes = 0
@@ -232,6 +242,7 @@ def main() -> int:
                 expert_score = scores.get((course_id, lo_id), 1.0)
                 id_anchors[course_id].append(lo)
                 title_anchors[title_key(course)].append(lo)
+                scope_title_anchors[programme_scope_key(row)][title_key(course)].append(lo)
                 graded_id_anchors[course_id].append((lo, expert_score))
                 graded_title_anchors[title_key(course)].append((lo, expert_score))
                 train_anchor_edges += 1
@@ -255,6 +266,10 @@ def main() -> int:
     # Bound repeated catalogue anchors without changing the train-only rule.
     id_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in id_anchors.items()}
     title_anchors = {key: list(dict.fromkeys(values))[:128] for key, values in title_anchors.items()}
+    scope_title_anchors = {
+        scope: {key: list(dict.fromkeys(values))[:128] for key, values in anchors.items()}
+        for scope, anchors in scope_title_anchors.items()
+    }
 
     def bound_graded(values: list[tuple[str, float]]) -> list[tuple[str, float]]:
         strongest: dict[str, float] = {}
@@ -282,6 +297,9 @@ def main() -> int:
     word_hybrid_totals = {
         "word_lex_0.65_anchor_0.35": defaultdict(float),
         "char_0.3_word_0.2_title_0.15_anchor_0.35": defaultdict(float),
+    }
+    scope_hybrid_totals = {
+        "lex_0.45_title_0.2_scope_anchor_0.35": defaultdict(float),
     }
     processed_programmes = 0
     # Seek directly to the selected held-out rows after fitting train-only
@@ -314,7 +332,9 @@ def main() -> int:
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                 totals[metric] += base[metric] * base["queries"]
             anchor = np.zeros_like(lexical)
+            scope_anchor = np.zeros_like(lexical)
             graded_anchor = np.zeros_like(lexical)
+            scoped_titles = scope_title_anchors.get(block["scope_key"], {})
             for course_index, course_id in enumerate(block["course_ids"]):
                 values = id_anchors.get(course_id, []) + title_anchors.get(block["course_keys"][course_index], [])
                 if values:
@@ -325,6 +345,11 @@ def main() -> int:
                     weighted_strengths = np.asarray([0.5 + 0.5 * score for _, score in weighted_values])
                     similarities = (lo_vectors @ tfidf.transform(weighted_texts).T).toarray()
                     graded_anchor[:, course_index] = (similarities * weighted_strengths).max(axis=1)
+                scoped_values = scoped_titles.get(block["course_keys"][course_index], [])
+                if scoped_values:
+                    scope_anchor[:, course_index] = (
+                        lo_vectors @ tfidf.transform(scoped_values).T
+                    ).toarray().max(axis=1)
             for weight in variants:
                 result = rank_metrics(block, (1.0 - weight) * lexical + weight * anchor)
                 for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
@@ -352,6 +377,15 @@ def main() -> int:
                 result = rank_metrics(block, scores)
                 for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                     word_hybrid_totals[name][metric] += result[metric] * result["queries"]
+            scope_hybrid_scores = {
+                "lex_0.45_title_0.2_scope_anchor_0.35": (
+                    0.45 * lexical + 0.20 * title_lexical + 0.35 * scope_anchor
+                ),
+            }
+            for name, scores in scope_hybrid_scores.items():
+                result = rank_metrics(block, scores)
+                for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+                    scope_hybrid_totals[name][metric] += result[metric] * result["queries"]
             graded_result = rank_metrics(block, 0.65 * lexical + 0.35 * graded_anchor)
             graded_anchor_totals["queries"] += graded_result["queries"]
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
@@ -419,6 +453,11 @@ def main() -> int:
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
         }
     for name, values in word_hybrid_totals.items():
+        output[name] = {
+            metric: values[metric] / query_count if query_count else 0.0
+            for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
+        }
+    for name, values in scope_hybrid_totals.items():
         output[name] = {
             metric: values[metric] / query_count if query_count else 0.0
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")

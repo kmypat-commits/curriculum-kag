@@ -323,6 +323,26 @@ def test_streaming_benchmark_selected_offsets_are_deterministic():
     assert set(first) == {"p1", "p3"}
 
 
+def test_streaming_benchmark_scope_key_is_stable_for_direction_and_group():
+    import sys
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    try:
+        from benchmark_epvo_streaming import programme_scope_key
+    finally:
+        sys.path.remove(str(scripts_dir))
+
+    assert programme_scope_key(
+        {
+            "training_direction_code": "  6B01 ",
+            "program_group_code": " B001 ",
+        }
+    ) == "6B01|B001"
+    assert programme_scope_key({}) == "|"
+
+
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
     from types import SimpleNamespace
 
