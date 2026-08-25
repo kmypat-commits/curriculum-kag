@@ -9,7 +9,7 @@
 | 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py`, `semester_domain_repair.py`, `semester_appropriateness.py`, `course_scheduling.py`; regression 72/72 |
 | 3 | Fail-fast EPVO/LO evidence | Закрыто | `evidence_preflight.py`; дефицит возвращается до долгого scheduler и не маскируется bridge |
 | 4 | Project 135 пересобирается только после восстановления evidence | Защищено | Сборка блокируется при дефиците профессиональных LO-связей; пересборка намеренно не запускалась |
-| 5 | Browser smoke graph + RU/KK/EN | Частично закрыто | HTTP smoke 10 маршрутов и RU/KK/EN markers; интерактивный graph smoke требует ручного входа |
+| 5 | Browser smoke graph + RU/KK/EN | Улучшено, частично закрыто | UI smoke 10 маршрутов, RU/KK/EN markers и optional OpenAPI-проверка graph/semester путей; интерактивный graph smoke требует ручного входа |
 | 6 | Progress генерации в PostgreSQL | Закрыто | `plan_build_status` и `planner_state`; Alembic head на PostgreSQL |
 | 7 | Checksum-кэш EPVO/LO | Закрыто | stage cache инвалидируется при in-place checksum/fingerprint изменении; тесты проходят |
 | 8 | Узкие исключения | Закрыто | В production-коде осталось 2 `except Exception`, оба только на transaction rollback boundaries |

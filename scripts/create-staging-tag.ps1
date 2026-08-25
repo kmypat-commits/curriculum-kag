@@ -32,7 +32,7 @@ try {
     $port = Get-NetTCPConnection -LocalPort 5433 -State Listen -ErrorAction SilentlyContinue
     if (-not $port) { throw "PostgreSQL is not listening on localhost:5433; run runtime gates before tagging." }
     $env:CURRICULUM_SKIP_PUBLIC_RELEASE = "1"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui-smoke.ps1 -TimeoutSec 5
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui-smoke.ps1 -TimeoutSec 5 -CheckApi
     if ($LASTEXITCODE -ne 0) { throw "UI smoke failed." }
     if (git tag --list $Tag) { throw "Tag already exists: $Tag" }
     git tag -a $Tag -m "Curriculum-KAG staging release $Tag"
