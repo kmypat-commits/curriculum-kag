@@ -59,6 +59,16 @@ def main():
     benchmarks = []
     ranking_path = RESULTS / "epvo-ranking-benchmark" / "metrics.json"
     ranking = read(ranking_path) if ranking_path.exists() else {}
+    # A tiny smoke benchmark is useful for checking the script, but must never
+    # be promoted into the scientific passport as a programme-level result.
+    # The full-pool report is expected to contain a materially larger frozen
+    # sample; keep the values visible in the raw artifact while withholding
+    # them from model summaries when the sample is too small.
+    ranking_sample_ok = (
+        int(ranking.get("programmes") or 0) >= 20
+        and int(ranking.get("queries") or 0) >= 100
+        and ranking.get("candidate_pool_source") == "programme_level"
+    )
     for name, path in benchmark_paths.items():
         if not path.exists():
             continue
@@ -69,10 +79,10 @@ def main():
             "examples": test.get("examples"), "roc_auc": test.get("roc_auc"), "pr_auc": test.get("pr_auc"),
             "f1": test.get("f1"), "precision": test.get("precision"), "recall": test.get("recall"),
             "accuracy": test.get("accuracy"), "threshold": test.get("threshold"),
-            "recall_at_5": ranking.get("recall_at_5") if name == "sbert_finetuned_40k" else None,
-            "recall_at_10": ranking.get("recall_at_10") if name == "sbert_finetuned_40k" else None,
-            "mrr": ranking.get("mrr") if name == "sbert_finetuned_40k" else None,
-            "ndcg_at_10": ranking.get("ndcg_at_10") if name == "sbert_finetuned_40k" else None,
+            "recall_at_5": ranking.get("recall_at_5") if name == "sbert_finetuned_40k" and ranking_sample_ok else None,
+            "recall_at_10": ranking.get("recall_at_10") if name == "sbert_finetuned_40k" and ranking_sample_ok else None,
+            "mrr": ranking.get("mrr") if name == "sbert_finetuned_40k" and ranking_sample_ok else None,
+            "ndcg_at_10": ranking.get("ndcg_at_10") if name == "sbert_finetuned_40k" and ranking_sample_ok else None,
         })
     engine = create_engine(args.database_url)
     with engine.connect() as db:
@@ -99,8 +109,17 @@ def main():
         "seed": manifest.get("seed"), "counts": manifest.get("counts"), "normalized": normalized,
         "files": files, "split_policy": "program-level train/validation/test split from the frozen EPVO manifest",
         "benchmarks": benchmarks,
-        "ranking_metrics_status": "measured" if ranking else "not_measured",
-        "ranking_metrics_note": "Ranking metrics use a deterministic sample of frozen test programmes and are not inferred from classification metrics.",
+        "ranking_metrics_status": (
+            "measured" if ranking_sample_ok else
+            "insufficient_sample" if ranking else "not_measured"
+        ),
+        "ranking_metrics_note": (
+            "Ranking metrics use a deterministic programme-level frozen sample and are not inferred from classification metrics."
+            if ranking_sample_ok else
+            "A ranking artifact exists but is too small for the passport (minimum 20 programmes and 100 queries); raw metrics remain outside the summary."
+            if ranking else
+            "No programme-level ranking artifact was found."
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(passport, ensure_ascii=False, indent=2), encoding="utf-8")
