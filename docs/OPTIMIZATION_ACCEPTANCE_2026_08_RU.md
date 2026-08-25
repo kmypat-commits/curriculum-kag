@@ -1,6 +1,6 @@
 # Acceptance-чеклист оптимизации Curriculum-KAG
 
-Снимок: 25.08.2026, commit `f66fb41`. Статусы отражают проверяемое состояние,
+Снимок: 25.08.2026, commit `c772b86`. Статусы отражают проверяемое состояние,
 а не намерение.
 
 | № | Требование | Статус | Доказательство / остаток |
@@ -14,7 +14,7 @@
 | 7 | Checksum-кэш EPVO/LO | Закрыто | stage cache инвалидируется при in-place checksum/fingerprint изменении; тесты проходят |
 | 8 | Узкие исключения | Закрыто | В production-коде осталось 2 `except Exception`, оба только на transaction rollback boundaries |
 | 9 | Lock-файлы | Закрыто | `backend/requirements.lock`, `frontend/package-lock.json`; dependency profile gate проходит |
-| 10 | Programme-level dataset и Recall@10 ≥ 0,80 | В работе | graded export: 1 822 программы, 128 703 edge; лучший честный test Recall@10=0,6099, production reranker не изменён |
+| 10 | Programme-level dataset и Recall@10 ≥ 0,80 | В работе | graded export: 1 822 программы, 128 703 edge; лучший честный test Recall@10=0,6099; listwise/ID-пилоты хуже, production reranker не изменён |
 | 11 | PostgreSQL restore + Alembic в CI | Закрыто | CI service `pgvector/pgvector:pg16`, endpoint contracts, isolated restore gate; локально сохранён verified backup manifest |
 | 12 | Staging backup/manifest/tag/runbook | Частично закрыто | backup manifest, `staging-manifest.json`, runbook и guarded tag script готовы; tag ждёт ручной browser smoke |
 
