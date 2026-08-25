@@ -225,6 +225,59 @@ def test_streaming_benchmark_selected_offsets_are_deterministic():
     assert set(first) == {"p1", "p3"}
 
 
+def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
+    from types import SimpleNamespace
+
+    import app.planner.variant_scope as scope_module
+    from app.planner.variant_scope import build_epvo_scope_index
+
+    row = SimpleNamespace(
+        approved_course_id=10,
+        group_codes=["G1"],
+        direction_codes=["D1"],
+        source_programs=["p1", "p2"],
+        typical_semester=2,
+        title_ru="Анализ данных",
+        title_kk="Деректерді талдау",
+        title_en="Data analysis",
+    )
+
+    class Query:
+        def filter(self, *_args):
+            return self
+
+        def all(self):
+            return [row]
+
+    class Database:
+        def query(self, _model):
+            return Query()
+
+    previous = scope_module.epvo_row_relevance_score
+    scope_module.epvo_row_relevance_score = lambda _row, _version: 0.8
+    try:
+        result = build_epvo_scope_index(
+            Database(),
+            version=SimpleNamespace(),
+            constraints={
+                "group_code": "G1",
+                "direction_code": "D1",
+                "total_semesters": 4,
+            },
+            aggregates={10: {"max": 0.8, "expert": 1.0}},
+            courses={10: SimpleNamespace(id=10)},
+            title_key=lambda value: str(value).casefold(),
+        )
+    finally:
+        scope_module.epvo_row_relevance_score = previous
+
+    assert result.level_scope_allowed_ids == {10}
+    assert result.scope_by_course[10] == 3
+    assert result.priority_by_course[10] > 0
+    assert result.semester_values_by_course[10] == [2]
+    assert result.domain_index_by_course[10] == 0
+
+
 def test_variant_prerequisites_filter_keeps_supported_earlier_edges_only():
     from app.planner.variant_prerequisites import filter_supported_prerequisites
 

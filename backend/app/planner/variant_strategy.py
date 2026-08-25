@@ -5,19 +5,12 @@ from itertools import combinations
 import math
 from typing import Dict, List
 
-from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.bridge_module import BridgeModule
 from app.models.course import Course, course_prerequisites
 from app.models.embedding import MatchScore
-from app.models.epvo import (
-    EpvoDirection,
-    EpvoDisciplineLoLink,
-    EpvoDisciplineNormalized,
-    EpvoGroup,
-)
 from app.models.plan import Plan, PlanItem
 from app.models.project import LearningOutcome, ProjectVersion
 from app.planner.admission import (
@@ -32,7 +25,7 @@ from app.planner.course_policy import (
     education_level_course_allowed as _education_level_course_allowed,
     project_domain_terms as _project_domain_terms,
 )
-from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.domain_evidence import domain_label_matches
 from app.planner.goso import merge_goso_items
 from app.planner.scheduler_catalogue import (
     foundation_equivalent_title_key as _foundation_equivalent_title_key,
@@ -64,10 +57,7 @@ from app.planner.verifier import (
     _ict_competency_requirements,
     verify_curriculum_plan,
 )
-from app.services.epvo_repository import (
-    epvo_row_matches_education_level,
-    epvo_row_relevance_score,
-)
+from app.services.epvo_repository import epvo_row_matches_education_level
 
 from app.planner.bridge_creation import (
     _bridge_item,
@@ -108,6 +98,7 @@ from app.planner.variant_ranking import (
     rank_domain_quota_candidates,
     variant_candidate_key,
 )
+from app.planner.variant_scope import build_epvo_scope_index
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
@@ -559,103 +550,22 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         course.id: course for course in course_query.all()
         if not _is_component_placeholder_title(_title_key(course.title))
     }
-    group_codes = [
-        str(value or "").strip()
-        for value in (constraints.get("group_code"), constraints.get("secondary_group_code"))
-        if str(value or "").strip()
-    ]
-    direction_codes = [
-        str(value or "").strip()
-        for value in (constraints.get("direction_code"), constraints.get("secondary_direction_code"))
-        if str(value or "").strip()
-    ]
-    primary_group = str(constraints.get("group_code") or "").strip()
-    secondary_group = str(constraints.get("secondary_group_code") or "").strip()
-    primary_direction = str(constraints.get("direction_code") or "").strip()
-    secondary_direction = str(constraints.get("secondary_direction_code") or "").strip()
-    epvo_scope = {}
-    epvo_priority = {}
-    epvo_scope_by_id: Dict[int, int] = {}
-    epvo_priority_by_id: Dict[int, int] = {}
-    epvo_domain_evidence: Dict[int, List[int]] = {}
-    epvo_semester_values: Dict[int, List[int]] = {}
-    if group_codes or direction_codes:
-        scope_conditions = [
-            cast(EpvoDisciplineNormalized.group_codes, String).like(f'%"{code}"%')
-            for code in group_codes
-        ] + [
-            cast(EpvoDisciplineNormalized.direction_codes, String).like(f'%"{code}"%')
-            for code in direction_codes
-        ]
-        matched_rows = db.query(EpvoDisciplineNormalized).filter(
-            EpvoDisciplineNormalized.approved_course_id.isnot(None),
-            EpvoDisciplineNormalized.approved_course_id.in_(list(aggregates) or [-1]),
-            or_(*scope_conditions),
-        ).all()
-        for row in matched_rows:
-            row_groups = row.group_codes or []
-            row_directions = row.direction_codes or []
-            rank_value = (
-                3 if any(code in row_groups for code in group_codes)
-                else 2 if any(code in row_directions for code in direction_codes)
-                else 0
-            )
-            if rank_value <= 0:
-                continue
-            source_count = len(row.source_programs or [])
-            relevance_value = epvo_row_relevance_score(row, version)
-            programme_evidence = aggregates.get(int(row.approved_course_id), {})
-            strong_program_evidence = (
-                float(programme_evidence.get("max") or 0.0) >= float(settings.COVERAGE_THRESHOLD)
-                or float(programme_evidence.get("expert") or 0.0) >= 0.5
-            )
-            # Exact membership in the selected EPVO group already proves the
-            # catalogue scope and education level.  The lightweight row-title
-            # relevance heuristic is only a guard for the broader direction
-            # fallback; it must not discard a D094/M094/B057 discipline that
-            # has a strong project-specific discipline--LO score.
-            if relevance_value < 0.52 and rank_value < 3 and not strong_program_evidence:
-                continue
-            epvo_level_scope_allowed_ids.add(int(row.approved_course_id))
-            typical_semester = int(row.typical_semester or 0)
-            if 1 <= typical_semester <= int(constraints.get("total_semesters") or 8):
-                epvo_semester_values.setdefault(int(row.approved_course_id), []).append(typical_semester)
-            # Project-specific expert evidence is already present in
-            # MatchScore. Avoid aggregating the entire multi-million-link EPVO
-            # table for every A/B/C variant merely as a tie-breaker.
-            priority_value = int(relevance_value * 1000) + rank_value * 100 + min(source_count, 50) * 5
-            primary_scope = (
-                3 if primary_group and primary_group in row_groups
-                else 2 if primary_direction and primary_direction in row_directions
-                else 0
-            )
-            secondary_scope = (
-                3 if secondary_group and secondary_group in row_groups
-                else 2 if secondary_direction and secondary_direction in row_directions
-                else 0
-            )
-            mapped_course = courses.get(row.approved_course_id)
-            if mapped_course:
-                epvo_scope_by_id[mapped_course.id] = max(
-                    epvo_scope_by_id.get(mapped_course.id, 0), rank_value,
-                )
-                epvo_priority_by_id[mapped_course.id] = max(
-                    epvo_priority_by_id.get(mapped_course.id, 0), priority_value,
-                )
-                evidence = epvo_domain_evidence.setdefault(mapped_course.id, [0, 0])
-                evidence[0] = max(evidence[0], primary_scope)
-                evidence[1] = max(evidence[1], secondary_scope)
-            for title in (row.title_ru, row.title_kk, row.title_en):
-                if title:
-                    key = _title_key(title)
-                    epvo_scope[key] = max(epvo_scope.get(key, 0), rank_value)
-                    epvo_priority[key] = max(epvo_priority.get(key, 0), priority_value)
-        for course_id, (primary_score, secondary_score) in epvo_domain_evidence.items():
-            if primary_score or secondary_score:
-                epvo_domain_shares[course_id] = domain_credit_shares(
-                    primary_score, secondary_score
-                )
-                epvo_domain_index[course_id] = 1 if secondary_score > primary_score else 0
+    scope_index = build_epvo_scope_index(
+        db,
+        version=version,
+        constraints=constraints,
+        aggregates=aggregates,
+        courses=courses,
+        title_key=_title_key,
+    )
+    epvo_scope = scope_index.scope_by_title
+    epvo_priority = scope_index.priority_by_title
+    epvo_scope_by_id = scope_index.scope_by_course
+    epvo_priority_by_id = scope_index.priority_by_course
+    epvo_semester_values = scope_index.semester_values_by_course
+    epvo_level_scope_allowed_ids = scope_index.level_scope_allowed_ids
+    epvo_domain_index = scope_index.domain_index_by_course
+    epvo_domain_shares = scope_index.domain_shares_by_course
 
     # In professional EPVO projects an unscored catalogue row cannot pass the
     # evidence guard. Keeping all ~20k repository courses in every repair and
