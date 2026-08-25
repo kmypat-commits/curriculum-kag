@@ -97,7 +97,8 @@ def programme_block(program: dict) -> tuple[dict[str, str], dict[str, str], dict
 
 
 def mine_examples(
-    programmes: list[dict], model_path: str, limit: int, batch_size: int, status_path: Path
+    programmes: list[dict], model_path: str, limit: int, batch_size: int, status_path: Path,
+    graded_labels: bool = False,
 ) -> tuple[list[InputExample], dict]:
     model = SentenceTransformer(model_path, device="cuda", local_files_only=True)
     rng = random.Random(42)
@@ -105,6 +106,11 @@ def mine_examples(
     stats = {"programmes": 0, "queries": 0, "positives": 0, "hard_negatives": 0}
     for index, program in enumerate(programmes, start=1):
         courses, outcomes, links = programme_block(program)
+        expert_scores = {
+            (str(edge.get("course_id")), str(edge.get("lo_id"))): float(edge["score"])
+            for edge in program.get("expert_edges") or []
+            if edge.get("score") is not None
+        }
         if len(courses) < 2 or not links:
             continue
         course_ids = list(courses)
@@ -126,7 +132,8 @@ def mine_examples(
                 continue
             stats["queries"] += 1
             for course_id in positives:
-                samples.append(InputExample(texts=[outcomes[lo_id], courses[course_id]], label=1.0))
+                label = expert_scores.get((course_id, lo_id), 1.0) if graded_labels else 1.0
+                samples.append(InputExample(texts=[outcomes[lo_id], courses[course_id]], label=label))
                 stats["positives"] += 1
             for course_id in negatives:
                 samples.append(InputExample(texts=[outcomes[lo_id], courses[course_id]], label=0.0))
@@ -140,7 +147,7 @@ def mine_examples(
     torch.cuda.empty_cache()
     rng.shuffle(samples)
     samples = samples[:limit]
-    return samples, {**stats, "selected_examples": len(samples), "policy": "top-2 declared positives and top-2 unlinked within-programme hard negatives"}
+    return samples, {**stats, "selected_examples": len(samples), "graded_labels": graded_labels, "policy": "top-2 declared positives and top-2 unlinked within-programme hard negatives"}
 
 
 def ranking_metrics(scores_by_query: list[tuple[np.ndarray, set[int]]]) -> dict:
@@ -199,6 +206,7 @@ def main() -> None:
     parser.add_argument("--train-batch", type=int, default=4)
     parser.add_argument("--cross-batch", type=int, default=24)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
+    parser.add_argument("--graded-labels", action="store_true", help="use EPVO expert strength as positive regression labels")
     args = parser.parse_args()
 
     experiment = ROOT / "experiment-results" / args.name
@@ -210,7 +218,7 @@ def main() -> None:
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is required")
         train_programmes = selected_programmes(Path(args.data), "train", args.train_programmes, "crossencoder-v1")
-        examples, mining = mine_examples(train_programmes, args.bi_encoder, args.examples, 48, status_path)
+        examples, mining = mine_examples(train_programmes, args.bi_encoder, args.examples, 48, status_path, args.graded_labels)
         experiment.mkdir(parents=True, exist_ok=True)
         with (experiment / "mined-pairs.jsonl").open("w", encoding="utf-8") as target:
             for item in examples:
