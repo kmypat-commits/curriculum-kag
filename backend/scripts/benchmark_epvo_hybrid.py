@@ -127,6 +127,7 @@ def main() -> int:
     train_anchors: dict[str, list[str]] = defaultdict(list)
     train_anchor_los_by_text: dict[str, list[str]] = defaultdict(list)
     train_anchor_los_by_title: dict[str, list[str]] = defaultdict(list)
+    train_anchor_los_by_id: dict[str, list[str]] = defaultdict(list)
     for row in rows:
         if row.get("split") != "train":
             continue
@@ -150,6 +151,7 @@ def main() -> int:
                 lo_text = outcome_text(outcome)
                 train_anchors[key].append(lo_text)
                 train_anchor_los_by_text[course_text(course)].append(lo_text)
+                train_anchor_los_by_id[course_id].append(lo_text)
                 title_text = text_value(course.get("title"))
                 if title_text:
                     train_anchor_los_by_title[title_text].append(lo_text)
@@ -181,6 +183,21 @@ def main() -> int:
             indices.append(index)
         title_anchor_lo_indices.append(indices)
     title_anchor_lo_matrix = vectorizer.transform(title_anchor_lo_values) if title_anchor_lo_values else None
+    id_anchor_texts = list(train_anchor_los_by_id)
+    id_anchor_index = {value: index for index, value in enumerate(id_anchor_texts)}
+    id_anchor_lo_texts = [train_anchor_los_by_id[value] for value in id_anchor_texts]
+    id_anchor_lo_indices: list[list[int]] = []
+    id_anchor_lo_values: list[str] = []
+    id_anchor_lo_index: dict[str, int] = {}
+    for anchor_los in id_anchor_lo_texts:
+        indices = []
+        for value in anchor_los:
+            index = id_anchor_lo_index.setdefault(value, len(id_anchor_lo_values))
+            if index == len(id_anchor_lo_values):
+                id_anchor_lo_values.append(value)
+            indices.append(index)
+        id_anchor_lo_indices.append(indices)
+    id_anchor_lo_matrix = vectorizer.transform(id_anchor_lo_values) if id_anchor_lo_values else None
 
     blocks: dict[str, dict] = {}
     for row in rows:
@@ -261,6 +278,7 @@ def main() -> int:
     anchor_values = {weight: defaultdict(list) for weight in (0.25, 0.5, 0.75)}
     fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     title_fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
+    id_anchor_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     context_values = {weight: defaultdict(list) for weight in (0.10, 0.20, 0.30, 0.40)}
     hybrid_values = {name: defaultdict(list) for name in (
         "sbert_0.5_lex_0.25_anchor_0.25",
@@ -333,6 +351,24 @@ def main() -> int:
             for metric, value in variant_metrics.items():
                 if metric != "queries":
                     aggregate[metric].append(value * variant_metrics["queries"])
+        id_anchor_scores = np.zeros_like(lexical_scores)
+        if id_anchor_lo_matrix is not None:
+            id_lo_similarity = (lo_vectors @ id_anchor_lo_matrix.T).toarray()
+            for course_index, course_id in enumerate(block["course_ids"]):
+                anchor_index = id_anchor_index.get(course_id)
+                if anchor_index is None:
+                    continue
+                id_anchor_scores[:, course_index] = id_lo_similarity[
+                    :, id_anchor_lo_indices[anchor_index]
+                ].max(axis=1)
+        for weight, aggregate in id_anchor_values.items():
+            variant_metrics = rank_metrics(
+                block,
+                (1 - weight) * lexical_scores + weight * id_anchor_scores,
+            )
+            for metric, value in variant_metrics.items():
+                if metric != "queries":
+                    aggregate[metric].append(value * variant_metrics["queries"])
         for weight, aggregate in context_values.items():
             variant_metrics = rank_metrics(
                 block,
@@ -380,6 +416,11 @@ def main() -> int:
         }
     for weight, aggregate in title_fuzzy_values.items():
         metrics[f"title_fuzzy_anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in id_anchor_values.items():
+        metrics[f"id_anchor_weight_{weight:g}"] = {
             name: float(sum(values) / total_queries) if total_queries else 0.0
             for name, values in aggregate.items()
         }
