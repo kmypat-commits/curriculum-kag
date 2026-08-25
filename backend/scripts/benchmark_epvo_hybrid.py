@@ -128,9 +128,19 @@ def main() -> int:
     train_anchor_los_by_text: dict[str, list[str]] = defaultdict(list)
     train_anchor_los_by_title: dict[str, list[str]] = defaultdict(list)
     train_anchor_los_by_id: dict[str, list[str]] = defaultdict(list)
+    train_scope_anchor_los: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    train_scope_title_anchor_los: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    train_scope_course_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    train_scope_title_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for row in rows:
         if row.get("split") != "train":
             continue
+        scope_key = "|".join(str(row.get(key) or "").strip() for key in ("training_direction_code", "program_group_code"))
+        for course in row.get("courses") or []:
+            if course_text(course):
+                train_scope_course_counts[scope_key][str(course.get("id"))] += 1
+                if title_key(course):
+                    train_scope_title_counts[scope_key][title_key(course)] += 1
         courses = {str(course.get("id")): course for course in row.get("courses") or [] if course_text(course)}
         outcomes = {str(outcome.get("id")): outcome for outcome in row.get("outcomes") or [] if outcome_text(outcome)}
         edge_scores = {
@@ -152,9 +162,11 @@ def main() -> int:
                 train_anchors[key].append(lo_text)
                 train_anchor_los_by_text[course_text(course)].append(lo_text)
                 train_anchor_los_by_id[course_id].append(lo_text)
+                train_scope_anchor_los[scope_key][course_id].append(lo_text)
                 title_text = text_value(course.get("title"))
                 if title_text:
                     train_anchor_los_by_title[title_text].append(lo_text)
+                    train_scope_title_anchor_los[scope_key][title_key(course)].append(lo_text)
     fuzzy_anchor_texts = list(train_anchor_los_by_text)
     fuzzy_anchor_lo_texts = [train_anchor_los_by_text[value] for value in fuzzy_anchor_texts]
     fuzzy_lo_texts: list[str] = []
@@ -236,6 +248,7 @@ def main() -> int:
                 "los": [outcome_text(outcomes[lo_id]) for lo_id in lo_ids],
                 "links": links,
                 "programme_context": programme_context,
+                "scope_key": "|".join(str(row.get(key) or "").strip() for key in ("training_direction_code", "program_group_code")),
             }
     if not blocks:
         raise SystemExit("No benchmark queries remain after expert-score filtering")
@@ -279,6 +292,8 @@ def main() -> int:
     fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     title_fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     id_anchor_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
+    scope_anchor_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35, 0.50)}
+    scope_membership_values = {weight: defaultdict(list) for weight in (0.10, 0.20, 0.30, 0.40)}
     context_values = {weight: defaultdict(list) for weight in (0.10, 0.20, 0.30, 0.40)}
     hybrid_values = {name: defaultdict(list) for name in (
         "sbert_0.5_lex_0.25_anchor_0.25",
@@ -369,6 +384,38 @@ def main() -> int:
             for metric, value in variant_metrics.items():
                 if metric != "queries":
                     aggregate[metric].append(value * variant_metrics["queries"])
+        scope_anchor_scores = np.zeros_like(lexical_scores)
+        scope_id_anchors = train_scope_anchor_los.get(block["scope_key"], {})
+        scope_title_anchors = train_scope_title_anchor_los.get(block["scope_key"], {})
+        for course_index, course_id in enumerate(block["course_ids"]):
+            anchors = list(scope_id_anchors.get(course_id, []))
+            anchors.extend(scope_title_anchors.get(block["course_keys"][course_index], []))
+            if anchors:
+                scope_anchor_scores[:, course_index] = (
+                    lo_vectors @ vectorizer.transform(list(dict.fromkeys(anchors))).T
+                ).toarray().max(axis=1)
+        for weight, aggregate in scope_anchor_values.items():
+            variant_metrics = rank_metrics(
+                block, (1 - weight) * lexical_scores + weight * scope_anchor_scores,
+            )
+            for metric, value in variant_metrics.items():
+                if metric != "queries":
+                    aggregate[metric].append(value * variant_metrics["queries"])
+        scope_membership_scores = np.zeros_like(lexical_scores)
+        scope_course_counts = train_scope_course_counts.get(block["scope_key"], {})
+        scope_title_counts = train_scope_title_counts.get(block["scope_key"], {})
+        for course_index, course_id in enumerate(block["course_ids"]):
+            scope_membership_scores[:, course_index] = min(
+                1.0,
+                float(scope_course_counts.get(course_id, 0) or scope_title_counts.get(block["course_keys"][course_index], 0)) / 3.0,
+            )
+        for weight, aggregate in scope_membership_values.items():
+            variant_metrics = rank_metrics(
+                block, (1 - weight) * lexical_scores + weight * scope_membership_scores,
+            )
+            for metric, value in variant_metrics.items():
+                if metric != "queries":
+                    aggregate[metric].append(value * variant_metrics["queries"])
         for weight, aggregate in context_values.items():
             variant_metrics = rank_metrics(
                 block,
@@ -421,6 +468,16 @@ def main() -> int:
         }
     for weight, aggregate in id_anchor_values.items():
         metrics[f"id_anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in scope_anchor_values.items():
+        metrics[f"scope_anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in scope_membership_values.items():
+        metrics[f"scope_membership_weight_{weight:g}"] = {
             name: float(sum(values) / total_queries) if total_queries else 0.0
             for name, values in aggregate.items()
         }
