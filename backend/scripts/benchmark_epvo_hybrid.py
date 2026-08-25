@@ -34,12 +34,27 @@ def text_value(value: object) -> str:
     return str(value or "").strip()
 
 
+def localized_value(value: object, language: str) -> str:
+    if isinstance(value, dict):
+        aliases = (language, "kz") if language == "kk" else (language,)
+        return next((str(value.get(key) or "").strip() for key in aliases if value.get(key)), "")
+    return str(value or "").strip()
+
+
 def course_text(row: dict) -> str:
     return " | ".join(filter(None, (text_value(row.get("title")), text_value(row.get("description")))))
 
 
 def outcome_text(row: dict) -> str:
     return text_value(row.get("text") or row.get("description") or row.get("title"))
+
+
+def localized_course_text(row: dict, language: str) -> str:
+    return " | ".join(filter(None, (localized_value(row.get("title"), language), localized_value(row.get("description"), language))))
+
+
+def localized_outcome_text(row: dict, language: str) -> str:
+    return localized_value(row.get("text") or row.get("description") or row.get("title"), language)
 
 
 def title_key(row: dict) -> str:
@@ -249,6 +264,14 @@ def main() -> int:
                 "links": links,
                 "programme_context": programme_context,
                 "scope_key": "|".join(str(row.get(key) or "").strip() for key in ("training_direction_code", "program_group_code")),
+                "course_langs": {
+                    language: [localized_course_text(courses[course_id], language) for course_id in course_ids]
+                    for language in ("ru", "kk", "en")
+                },
+                "lo_langs": {
+                    language: [localized_outcome_text(outcomes[lo_id], language) for lo_id in lo_ids]
+                    for language in ("ru", "kk", "en")
+                },
             }
     if not blocks:
         raise SystemExit("No benchmark queries remain after expert-score filtering")
@@ -291,6 +314,7 @@ def main() -> int:
     anchor_values = {weight: defaultdict(list) for weight in (0.25, 0.5, 0.75)}
     fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     title_fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
+    multilingual_values = {weight: defaultdict(list) for weight in (0.25, 0.50, 0.75, 1.00)}
     id_anchor_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     scope_anchor_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35, 0.50)}
     scope_membership_values = {weight: defaultdict(list) for weight in (0.10, 0.20, 0.30, 0.40)}
@@ -316,6 +340,23 @@ def main() -> int:
         total_queries += int(block_metrics["queries"])
         for key, value in block_metrics.items():
             values[key].append(value)
+        language_scores = []
+        for language in ("ru", "kk", "en"):
+            course_values = block["course_langs"][language]
+            lo_values = block["lo_langs"][language]
+            if not any(course_values) or not any(lo_values):
+                continue
+            language_scores.append((vectorizer.transform(lo_values) @ vectorizer.transform(course_values).T).toarray())
+        if language_scores:
+            language_stack = np.stack(language_scores)
+            multilingual_max = language_stack.max(axis=0)
+            for weight, aggregate in multilingual_values.items():
+                variant_metrics = rank_metrics(
+                    block, (1 - weight) * lexical_scores + weight * multilingual_max,
+                )
+                for metric, value in variant_metrics.items():
+                    if metric != "queries":
+                        aggregate[metric].append(value * variant_metrics["queries"])
         # Keep a second, leakage-safe variant: replace part of lexical score
         # with the best train-only LO anchor for an exactly recurring title.
         anchor_scores = np.zeros_like(lexical_scores)
@@ -463,6 +504,11 @@ def main() -> int:
         }
     for weight, aggregate in title_fuzzy_values.items():
         metrics[f"title_fuzzy_anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in multilingual_values.items():
+        metrics[f"multilingual_max_weight_{weight:g}"] = {
             name: float(sum(values) / total_queries) if total_queries else 0.0
             for name, values in aggregate.items()
         }
