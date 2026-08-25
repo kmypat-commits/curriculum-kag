@@ -678,19 +678,21 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids_in_plan)).all()
             })
 
-        def credits_by_domain() -> List[float]:
-            return _credits_by_domain(
-                normalized,
-                courses=courses,
-                project_domain_share=project_domain_share,
-                project_domain_index=project_domain_index,
-                secondary_bridge_ids=secondary_bridge_ids,
-                core_bridge_id=core_bridge_id,
-                domain_bridge_codes=domain_bridge_codes,
-            )
+        credits_by_domain = partial(
+            _credits_by_domain,
+            courses=courses,
+            project_domain_share=project_domain_share,
+            project_domain_index=project_domain_index,
+            secondary_bridge_ids=secondary_bridge_ids,
+            core_bridge_id=core_bridge_id,
+            domain_bridge_codes=domain_bridge_codes,
+        )
 
-        def selected_ids() -> set:
-            return {item.get("course_id") for item in normalized if item.get("course_id") is not None}
+        selected_ids = lambda: {
+            item.get("course_id")
+            for item in normalized
+            if item.get("course_id") is not None
+        }
 
         baseline_course_ids = selected_ids()
         baseline_courses = [courses[course_id] for course_id in baseline_course_ids if course_id in courses]
@@ -711,24 +713,21 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                     float(baseline_lo_scores.get(str(lo_code)) or 0.0), float(score or 0.0)
                 )
 
-        def quality_preserved(trial_items: List[Dict]) -> bool:
-            return _quality_preserved_after_swap(
-                trial_items,
-                baseline_core_ids=baseline_core_ids,
-                baseline_professional_codes=baseline_professional_codes,
-                baseline_lo_scores=baseline_lo_scores,
-                aggregates=aggregates,
-            )
-
-        def protected_ids() -> set:
-            return _protected_quota_course_ids(
-                normalized,
-                courses=courses,
-                aggregates=aggregates,
-                constraints=constraints,
-                project_domains=project_domains,
-                curriculum_role=_course_curriculum_role,
-            )
+        quality_preserved = partial(
+            _quality_preserved_after_swap,
+            baseline_core_ids=baseline_core_ids,
+            baseline_professional_codes=baseline_professional_codes,
+            baseline_lo_scores=baseline_lo_scores,
+            aggregates=aggregates,
+        )
+        protected_ids = partial(
+            _protected_quota_course_ids,
+            courses=courses,
+            aggregates=aggregates,
+            constraints=constraints,
+            project_domains=project_domains,
+            curriculum_role=_course_curriculum_role,
+        )
 
         for domain_index in (0, 1):
             guard = 0
@@ -748,7 +747,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                     and all(pre_id in ids for pre_id in prereq_ids_by_course.get(course.id, []))
                 ][:80]
                 swapped = False
-                protected = protected_ids()
+                protected = protected_ids(normalized)
                 for candidate in candidates:
                     candidate_credits = int(candidate.credits or 5)
                     replaceable = []
