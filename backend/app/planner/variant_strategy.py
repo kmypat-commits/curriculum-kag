@@ -93,6 +93,17 @@ from app.planner.variant_assembly import add_bundle_if_fits, build_prerequisite_
 from app.planner.variant_ranking import rank_variant_candidates, variant_candidate_key
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import apply_confirmed_variant_replacements
+from app.planner.variant_policy import (
+    course_matches_scope_theme as _policy_course_matches_scope_theme,
+    foreign_scope_conflict as _policy_foreign_scope_conflict,
+    priority_rank as _policy_priority_rank,
+    project_domain_index as _policy_project_domain_index,
+    project_domain_share as _policy_project_domain_share,
+    role_rank as _policy_role_rank,
+    scope_rank as _policy_scope_rank,
+    semester_stability_rank as _policy_semester_stability_rank,
+    strong_exact_scope_evidence as _policy_strong_exact_scope_evidence,
+)
 
 def select_courses_for_variant(project_version_id: int, db: Session, variant_type: str) -> List[Dict]:
     version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
@@ -551,26 +562,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         return _unique_items_by_title(normalized)
 
     def project_domain_index(course: Course) -> int | None:
-        for index, project_domain in enumerate(project_domains):
-            if domain_label_matches(course.domain, [project_domain]):
-                return index
-        # Fall back to the scoped EPVO evidence only when the repository's
-        # explicit domain label is generic or absent. This prevents a tie in
-        # multi-group EPVO rows from assigning an explicitly medical course
-        # to the primary ICT domain.
-        mapped = epvo_domain_index.get(course.id)
-        if mapped in (0, 1):
-            return mapped
-        return None
+        return _policy_project_domain_index(course, project_domains, epvo_domain_index)
 
     def project_domain_share(course: Course | None, domain_index: int) -> float:
         """Return a course's non-duplicated contribution to one domain quota."""
-        if course is None:
-            return 0.0
-        shares = epvo_domain_shares.get(course.id)
-        if shares is not None:
-            return shares[domain_index]
-        return 1.0 if project_domain_index(course) == domain_index else 0.0
+        return _policy_project_domain_share(
+            course, domain_index, epvo_domain_shares, project_domain_index
+        )
 
     weights = {lo.id: lo.weight or 1.0 for lo in version.learning_outcomes}
     lo_codes_by_id = {lo.id: lo.lo_code for lo in version.learning_outcomes}
@@ -735,11 +733,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         }
 
     def scope_rank(course: Course) -> int:
-        return epvo_scope_by_id.get(course.id, epvo_scope.get(_title_key(course.title), 0))
+        return _policy_scope_rank(course, epvo_scope_by_id, epvo_scope)
     def priority_rank(course: Course) -> int:
-        if course is None:
-            return 0
-        return epvo_priority_by_id.get(course.id, epvo_priority.get(_title_key(course.title), 0))
+        return _policy_priority_rank(course, epvo_priority_by_id, epvo_priority)
     def semester_stability_rank(course: Course | None) -> float:
         """Prefer candidates whose scoped EPVO semester evidence is stable.
 
@@ -748,20 +744,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         that no scoped semester evidence is available and therefore never
         penalizes a candidate by itself.
         """
-        if course is None:
-            return 0.0
-        values = []
-        course_code = str(course.course_id or "")
-        if course_code.startswith("EPVO-"):
-            try:
-                values = epvo_semester_values.get(int(course_code.split("-", 1)[1]), [])
-            except (TypeError, ValueError):
-                values = []
-        if not values:
-            return 0.0
-        return -float(max(values) - min(values)) + min(0.25, len(values) / 100.0)
+        return _policy_semester_stability_rank(course, epvo_semester_values)
     def role_rank(course: Course | None) -> int:
-        return _course_role_rank(course, project_domains)
+        return _policy_role_rank(course, project_domains)
 
     domain_text = " ".join(project_domains).lower()
     ict_programme = any(marker in domain_text for marker in ("информац", "коммуникац", "it", "computer", "software", "digital", "кибер"))
@@ -769,59 +754,17 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     agro_programme = any(marker in domain_text for marker in ("агро", "сельск", "растен", "почв"))
 
     def has_foreign_scope_conflict(course: Course) -> bool:
-        text = _title_key(" ".join(str(value or "") for value in (
-            course.title, course.description, course.domain,
-        )))
-        topic_groups = (
-            (("химич", "химия", "chemical", "chemistry"), ("хим", "chemical", "chemistry")),
-            (("нефт", "газов", "petroleum", "oil and gas"), ("нефт", "газ", "petroleum")),
-            (("горн", "геолог", "mining", "geology"), ("горн", "геолог", "mining")),
-            (("медицин", "клинич", "пациент", "medical", "clinical"), ("медицин", "здрав", "medical", "health")),
-            (("агро", "сельск", "растен", "почв", "crop", "soil"), ("агро", "сельск", "растен", "почв")),
-            (("ветерин", "veterinary"), ("ветерин", "veterinary")),
-            (("строител", "civil engineering", "construction"), ("строител", "construction")),
-        )
-        return any(
-            any(marker in text for marker in topic_markers)
-            and not any(marker in domain_text for marker in allowed_domain_markers)
-            for topic_markers, allowed_domain_markers in topic_groups
-        )
+        return _policy_foreign_scope_conflict(course, domain_text)
 
     def course_matches_scope_theme(course: Course) -> bool:
-        if has_foreign_scope_conflict(course):
-            return False
-        text = " ".join(str(value or "") for value in (course.title, course.description, course.domain)).lower()
-        if ict_programme:
-            if any(marker in text for marker in (
-                "здоров", "здравоохран", "пациент", "стоматолог", "клинич",
-                "физи", "лабораторная физика", "теоретическая физика",
-                "электродинами", "скалярн", "калибровоч",
-                "философ", "общекультур", "лингвист", "языкозн",
-            )):
-                return any(marker in text for marker in (
-                    "информац", "цифр", "программир", "разработк", "алгоритм", "данные", "данных", "база данных",
-                    "кибер", "криптограф", "software", "digital", "data", "computer", "algorithm",
-                ))
-            return any(marker in text for marker in (
-                "информац", "цифр", "программир", "разработк", "алгоритм", "данные", "данных", "база данных",
-                "сеть", "кибер", "криптограф", "искусствен", "машинн", "software",
-                "digital", "data", "computer", "algorithm", "network", "security",
-                "математ", "алгебр", "исчислен", "статист", "вероятност", "дискрет",
-                "логик", "оптимизац", "calculus", "algebra", "statistics", "probability",
-            ))
-        if medical_programme:
-            return any(marker in text for marker in ("медицин", "клинич", "пациент", "здоров", "анатом", "физиолог", "фармак", "clinical", "health", "medical"))
-        if agro_programme:
-            return any(marker in text for marker in ("агро", "сельск", "растен", "почв", "урож", "животн", "agro", "crop", "soil"))
-        return True
+        return _policy_course_matches_scope_theme(
+            course, project_domains, domain_text, ict_programme, medical_programme, agro_programme
+        )
 
     def has_strong_exact_scope_evidence(course: Course) -> bool:
         """Let exact EPVO group evidence override a shallow keyword mismatch."""
-        evidence = aggregates.get(course.id, {})
-        return (
-            not has_foreign_scope_conflict(course)
-            and scope_rank(course) >= 3
-            and bool(evidence.get("professional_lo_codes"))
+        return _policy_strong_exact_scope_evidence(
+            course, aggregates, scope_rank, domain_text
         )
 
     def admit_real_courses(items: List[Dict]) -> List[Dict]:
