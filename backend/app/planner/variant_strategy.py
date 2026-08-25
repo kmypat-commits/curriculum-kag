@@ -105,6 +105,7 @@ from app.planner.variant_quota import (
     credits_by_domain as _credits_by_domain,
     protected_quota_course_ids as _protected_quota_course_ids,
     quality_preserved_after_swap as _quality_preserved_after_swap,
+    required_domain_credits as _required_domain_credits,
 )
 from app.planner.variant_repairs import top_up_with_credit_bridges as _top_up_with_credit_bridges
 from app.planner.variant_coverage import (
@@ -649,26 +650,18 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         domain_quota_tolerance = max(
             0.0, float(constraints.get("domain_quota_tolerance_credits", 3) or 0)
         )
-        required = [
-            max(
-                0.0,
-                math.ceil(
-                    max(
-                        0,
-                        int(constraints.get("total_credits", quota_total_credits) or quota_total_credits)
-                        - sum(
-                            int(item.get("credits") or 0)
-                            for item in items
-                            if item.get("regulatory_required")
-                        ),
-                    )
-                    * min_domain_percent[index]
-                    / 100
-                )
-                - domain_quota_tolerance,
-            )
-            for index in range(2)
-        ]
+        required = _required_domain_credits(
+            total_credits=int(
+                constraints.get("total_credits", quota_total_credits) or quota_total_credits
+            ),
+            minimum_percentages=min_domain_percent,
+            regulatory_credits=sum(
+                int(item.get("credits") or 0)
+                for item in items
+                if item.get("regulatory_required")
+            ),
+            tolerance=domain_quota_tolerance,
+        )
         if not any(required):
             return items
         normalized = [dict(item) for item in items]

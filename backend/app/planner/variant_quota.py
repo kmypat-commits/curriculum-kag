@@ -3,7 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import math
 from typing import Any
+
+
+def required_domain_credits(
+    *,
+    total_credits: int,
+    minimum_percentages: list[float],
+    regulatory_credits: int,
+    tolerance: float,
+) -> list[float]:
+    """Compute minimum non-regulatory credits required per selected domain."""
+    remaining = max(0, int(total_credits) - int(regulatory_credits))
+    return [
+        max(0.0, math.ceil(remaining * float(percent) / 100.0) - float(tolerance))
+        for percent in minimum_percentages
+    ]
 
 
 def credits_by_domain(

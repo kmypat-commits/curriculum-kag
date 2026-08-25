@@ -394,6 +394,17 @@ def test_variant_coverage_uses_probabilistic_union_and_strongest_signal():
     assert coverage_objective([{"course_id": 10}], state=state)[0] == 0
 
 
+def test_variant_quota_required_domain_credits_excludes_regulatory_volume():
+    from app.planner.variant_quota import required_domain_credits
+
+    assert required_domain_credits(
+        total_credits=120,
+        minimum_percentages=[40, 30],
+        regulatory_credits=20,
+        tolerance=3,
+    ) == [37.0, 27.0]
+
+
 def test_variant_scope_retrieval_keeps_group_and_domain_evidence_separate():
     from types import SimpleNamespace
 
