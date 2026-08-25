@@ -190,8 +190,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 return False
         if cyber_forensics_program:
             return _course_curriculum_role(course, project_domains) == "core"
-            if professional_scope and _course_curriculum_role(course, project_domains) == "general":
-                evidence = aggregates.get(course.id, {})
+        if professional_scope and _course_curriculum_role(course, project_domains) == "general":
+            evidence = aggregates.get(course.id, {})
             # In interdisciplinary professional programmes generic catalogue
             # items (languages, history, entrepreneurship, etc.) must not fill
             # the curriculum unless they have at least a weak explicit LO link.
