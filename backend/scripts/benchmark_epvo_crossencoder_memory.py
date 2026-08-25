@@ -25,13 +25,7 @@ if LOCAL_SITE_PACKAGES.exists():
 
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
-from run_epvo_crossencoder_ranker import (
-    collect_scores,
-    programme_block,
-    query_text,
-    ranking_metrics,
-    selected_programmes,
-)
+from run_epvo_crossencoder_ranker import programme_block, query_text, ranking_metrics
 
 
 def iter_programmes(path: Path):
@@ -158,12 +152,14 @@ def collect_memory_rows(
             normalize_embeddings=True, show_progress_bar=False,
         )
         bi_scores = np.asarray(qv) @ np.asarray(cv).T
-        pairs = [[outcomes[lo_id], courses[course_id]] for lo_id in lo_ids for course_id in course_ids]
-        cross_scores = np.asarray(
-            cross_encoder.predict(pairs, batch_size=cross_batch, show_progress_bar=False)
-        ).reshape(len(lo_ids), len(course_ids))
         positions = {key: index for index, key in enumerate(course_ids)}
         for row, lo_id in enumerate(lo_ids):
+            # Score one query at a time.  Building the full LO x course
+            # Cartesian list caused multi-gigabyte peaks on large programmes.
+            pairs = [[outcomes[lo_id], courses[course_id]] for course_id in course_ids]
+            cross_row = np.asarray(
+                cross_encoder.predict(pairs, batch_size=cross_batch, show_progress_bar=False)
+            )
             memory_scores = np.zeros(len(course_ids), dtype=np.float32)
             query = np.asarray(qv[row])
             for col, course_id in enumerate(course_ids):
@@ -171,7 +167,7 @@ def collect_memory_rows(
                 if vectors is not None and len(vectors):
                     memory_scores[col] = float(np.max(np.asarray(vectors) @ query))
             relevant = {positions[key] for key in links[lo_id] if key in positions}
-            rows.append((bi_scores[row], cross_scores[row], memory_scores, relevant))
+            rows.append((bi_scores[row], cross_row, memory_scores, relevant))
     return rows
 
 
