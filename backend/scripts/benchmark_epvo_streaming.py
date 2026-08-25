@@ -357,7 +357,7 @@ def main() -> int:
         for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
     }
     for name, values in hybrid_totals.items():
-        output[name] = {
+        output[name] = None if sbert_model is None else {
             metric: values[metric] / query_count if query_count else 0.0
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
         }
