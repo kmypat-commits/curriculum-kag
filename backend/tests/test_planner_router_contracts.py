@@ -51,6 +51,15 @@ def test_variant_strategy_imports_its_bridge_dependencies():
     assert callable(select_courses_for_variant)
 
 
+def test_semester_repair_facade_keeps_admission_repair_isolated():
+    from app.planner.semester_repair import _repair_final_admission_misplacements
+
+    assert callable(_repair_final_admission_misplacements)
+    assert _repair_final_admission_misplacements.__module__.endswith(
+        "semester_admission_repair"
+    )
+
+
 def test_variant_ranking_keeps_best_unique_titles():
     from app.planner.variant_ranking import ranked_unique_candidate_ids
 
