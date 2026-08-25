@@ -48,9 +48,15 @@ def write_status(path: Path | None, payload: dict) -> None:
 
 
 class StreamingTfidf:
-    def __init__(self, n_features: int = 2**17) -> None:
+    def __init__(
+        self,
+        n_features: int = 2**17,
+        *,
+        analyzer: str = "char_wb",
+        ngram_range: tuple[int, int] = (3, 5),
+    ) -> None:
         self.vectorizer = HashingVectorizer(
-            analyzer="char_wb", ngram_range=(3, 5), n_features=n_features,
+            analyzer=analyzer, ngram_range=ngram_range, n_features=n_features,
             alternate_sign=False, norm=None, binary=False, dtype=np.float32,
         )
         self.df = np.zeros(n_features, dtype=np.float32)
@@ -179,6 +185,11 @@ def main() -> int:
     })
     write_status(args.status_file, status)
     tfidf = StreamingTfidf()
+    word_tfidf = StreamingTfidf(
+        n_features=2**16,
+        analyzer="word",
+        ngram_range=(1, 2),
+    )
     id_anchors: dict[str, list[str]] = defaultdict(list)
     title_anchors: dict[str, list[str]] = defaultdict(list)
     graded_id_anchors: dict[str, list[tuple[str, float]]] = defaultdict(list)
@@ -191,6 +202,10 @@ def main() -> int:
         if row.get("split") == "train":
             train_programmes += 1
             tfidf.update(
+                [course_text(course) for course in row.get("courses") or []]
+                + [outcome_text(outcome) for outcome in row.get("outcomes") or []]
+            )
+            word_tfidf.update(
                 [course_text(course) for course in row.get("courses") or []]
                 + [outcome_text(outcome) for outcome in row.get("outcomes") or []]
             )
@@ -225,6 +240,7 @@ def main() -> int:
         # of memory makes the benchmark genuinely streaming on the full
         # programme-level export.
     tfidf.finalize()
+    word_tfidf.finalize()
     status.update({
         "stage": "heldout_scoring",
         "train_programmes": train_programmes,
@@ -263,6 +279,10 @@ def main() -> int:
         "lex_0.45_title_0.2_anchor_0.35": defaultdict(float),
         "lex_0.3_title_0.35_anchor_0.35": defaultdict(float),
     }
+    word_hybrid_totals = {
+        "word_lex_0.65_anchor_0.35": defaultdict(float),
+        "char_0.3_word_0.2_title_0.15_anchor_0.35": defaultdict(float),
+    }
     processed_programmes = 0
     # Seek directly to the selected held-out rows after fitting train-only
     # statistics.  Only one held-out programme is materialized at a time; no
@@ -284,8 +304,11 @@ def main() -> int:
             course_vectors = tfidf.transform(block["courses"])
             title_vectors = tfidf.transform(block["course_titles"])
             lo_vectors = tfidf.transform(block["los"])
+            word_course_vectors = word_tfidf.transform(block["courses"])
+            word_lo_vectors = word_tfidf.transform(block["los"])
             lexical = (lo_vectors @ course_vectors.T).toarray()
             title_lexical = (lo_vectors @ title_vectors.T).toarray()
+            word_lexical = (word_lo_vectors @ word_course_vectors.T).toarray()
             base = rank_metrics(block, lexical)
             query_count += base["queries"]
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
@@ -318,6 +341,17 @@ def main() -> int:
                 result = rank_metrics(block, scores)
                 for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
                     title_hybrid_totals[name][metric] += result[metric] * result["queries"]
+            word_hybrid_scores = {
+                "word_lex_0.65_anchor_0.35": 0.65 * word_lexical + 0.35 * anchor,
+                "char_0.3_word_0.2_title_0.15_anchor_0.35": (
+                    0.30 * lexical + 0.20 * word_lexical
+                    + 0.15 * title_lexical + 0.35 * anchor
+                ),
+            }
+            for name, scores in word_hybrid_scores.items():
+                result = rank_metrics(block, scores)
+                for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
+                    word_hybrid_totals[name][metric] += result[metric] * result["queries"]
             graded_result = rank_metrics(block, 0.65 * lexical + 0.35 * graded_anchor)
             graded_anchor_totals["queries"] += graded_result["queries"]
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10"):
@@ -380,6 +414,11 @@ def main() -> int:
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
         }
     for name, values in title_hybrid_totals.items():
+        output[name] = {
+            metric: values[metric] / query_count if query_count else 0.0
+            for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
+        }
+    for name, values in word_hybrid_totals.items():
         output[name] = {
             metric: values[metric] / query_count if query_count else 0.0
             for metric in ("recall_at_5", "recall_at_10", "mrr", "ndcg_at_10")
