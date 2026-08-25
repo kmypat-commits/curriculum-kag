@@ -90,3 +90,28 @@ full-pool кандидат, но он ниже 0,80 и не заменяет pro
 Комбинация graded listwise SBERT и train-only expert-memory выбрала вес 0,25
 и дала test Recall@10=0,6050, MRR=0,6919, nDCG@10=0,5756. Это немного хуже
 40k + memory (0,6061), поэтому простое смешивание сигналов отклонено.
+
+### 2026-08-25: programme-level CrossEncoder на исправленном graded export
+
+Запущен отдельный CUDA-пилот `run_epvo_crossencoder_ranker.py` на
+`epvo-ranking-postgres-graded-v1`. Экспорт содержит 1 771 programme-level
+запись и сохраняет исходные экспертные уровни связи; для обучения выбраны
+120 train-программ, 3 000 пар (1 433 positive и 1 588 programme-local
+hard-negative). На независимых 60 validation/test программах CrossEncoder
+выбрал на validation blend weight 0,90. Frozen test Recall@10 вырос с
+0,5047 у 40k baseline до 0,5521 (+0,0474), MRR — до 0,4802, nDCG@10 — до
+0,4349. Прирост устойчивый на данном срезе, но абсолютный Recall ещё ниже
+целевого 0,80; модель остаётся экспериментальной и production-реранкер не
+меняется. Следующий честный шаг — расширить test до 80 программ и проверить
+добавление train-only expert memory, не подбирая вес по test.
+
+Расширенный повторный прогон сохранил CrossEncoder как
+`models/epvo-crossencoder-graded-pilot-v2` и устранил дефект воспроизводимости
+(явное сохранение финального checkpoint). На 80 validation/test программах
+train-only blend CrossEncoder + stable-course-id expert memory выбрал веса
+0,90/0,05 по validation и дал frozen test Recall@10=0,5891 против 0,5095
+того же baseline (+0,0796), MRR=0,4525 и nDCG@10=0,4302. Память включала
+19 783 стабильных course ID и 11 144 экспертно подтверждённых LO-текста.
+Абсолютный Recall всё ещё ниже 0,80, поэтому это лучший экспериментальный
+кандидат, а не production-рейтинг; требуется более широкий programme-level
+hard-negative/listwise эксперимент и проверка на полном candidate pool.

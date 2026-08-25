@@ -234,6 +234,11 @@ def main() -> None:
             optimizer_params={"lr": args.learning_rate}, use_amp=True,
             output_path=str(model_output), save_best_model=False, show_progress_bar=True,
         )
+        # Some sentence-transformers versions only write checkpoints when a
+        # evaluator is configured. Persist the final research artifact
+        # explicitly so a later frozen benchmark is reproducible.
+        model_output.mkdir(parents=True, exist_ok=True)
+        cross_encoder.save(str(model_output))
         save(status_path, {**status, "status": "benchmark_validation", "mining": mining})
 
         validation = selected_programmes(Path(args.data), "validation", args.validation_programmes, "ranking-v1")
