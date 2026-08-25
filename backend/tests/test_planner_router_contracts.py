@@ -213,6 +213,53 @@ def test_variant_assembly_top_up_prefers_real_scoped_epvo_course():
     assert result[-1]["selection_method"] == "real_epvo_credit_top_up"
 
 
+def test_variant_quota_helpers_preserve_domain_credits_and_unique_lo_sources():
+    from app.planner.variant_quota import (
+        credits_by_domain,
+        protected_quota_course_ids,
+        quality_preserved_after_swap,
+    )
+
+    courses = {
+        1: SimpleNamespace(id=1),
+        2: SimpleNamespace(id=2),
+    }
+    items = [
+        {"course_id": 1, "credits": 5, "prerequisites": [], "domain_quota_reserve": True},
+        {"course_id": 2, "credits": 3, "prerequisites": [1]},
+        {"bridge_module_id": 7, "credits": 4},
+    ]
+    assert credits_by_domain(
+        items,
+        courses=courses,
+        project_domain_share=lambda _course, index: 1.0 if index == 0 else 0.0,
+        project_domain_index=lambda _course: 0,
+        secondary_bridge_ids={7},
+        core_bridge_id=None,
+        domain_bridge_codes={},
+    ) == [8.0, 4.0]
+    aggregates = {
+        1: {"professional_lo_codes": {"LO1"}, "lo_scores": {"LO1": 0.8}},
+        2: {"professional_lo_codes": {"LO2"}, "lo_scores": {"LO2": 0.7}},
+    }
+    protected = protected_quota_course_ids(
+        items[:2],
+        courses=courses,
+        aggregates=aggregates,
+        constraints={},
+        project_domains=["A"],
+        curriculum_role=lambda _course, _domains: "core" if _course.id == 1 else "elective",
+    )
+    assert protected == {1, 2}
+    assert quality_preserved_after_swap(
+        items[:2],
+        baseline_core_ids={1},
+        baseline_professional_codes={"LO1"},
+        baseline_lo_scores={"LO1": 0.8},
+        aggregates=aggregates,
+    )
+
+
 def test_variant_ranking_domain_frontier_applies_admission_and_depth():
     from app.planner.variant_ranking import rank_domain_quota_candidates
 

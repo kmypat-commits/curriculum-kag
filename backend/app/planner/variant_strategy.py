@@ -100,6 +100,11 @@ from app.planner.variant_ranking import (
     variant_candidate_key,
 )
 from app.planner.variant_scope import build_epvo_scope_index
+from app.planner.variant_quota import (
+    credits_by_domain as _credits_by_domain,
+    protected_quota_course_ids as _protected_quota_course_ids,
+    quality_preserved_after_swap as _quality_preserved_after_swap,
+)
 from app.planner.variant_diversification import _diversify_variant_items
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
@@ -971,31 +976,15 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             })
 
         def credits_by_domain() -> List[float]:
-            values = [0.0, 0.0]
-            for item in normalized:
-                course = courses.get(item.get("course_id"))
-                if course is not None:
-                    credits = float(item.get("credits") or 0)
-                    shares = [
-                        project_domain_share(course, index)
-                        for index in range(2)
-                    ]
-                    if any(shares):
-                        values[0] += credits * shares[0]
-                        values[1] += credits * shares[1]
-                        continue
-                index = project_domain_index(course) if course else None
-                if index in (0, 1):
-                    values[index] += float(item.get("credits") or 0)
-                    continue
-                bridge_id = item.get("bridge_module_id")
-                credits = float(item.get("credits") or 0)
-                if bridge_id in secondary_bridge_ids:
-                    values[1] += credits
-                elif bridge_id == core_bridge_id or str(domain_bridge_codes.get(bridge_id) or "").startswith(("AUTO_BRIDGE_", "QUALITY_BRIDGE_")):
-                    values[0] += credits / 2.0
-                    values[1] += credits / 2.0
-            return values
+            return _credits_by_domain(
+                normalized,
+                courses=courses,
+                project_domain_share=project_domain_share,
+                project_domain_index=project_domain_index,
+                secondary_bridge_ids=secondary_bridge_ids,
+                core_bridge_id=core_bridge_id,
+                domain_bridge_codes=domain_bridge_codes,
+            )
 
         def selected_ids() -> set:
             return {item.get("course_id") for item in normalized if item.get("course_id") is not None}
@@ -1020,87 +1009,22 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 )
 
         def quality_preserved(trial_items: List[Dict]) -> bool:
-            """Reject quota swaps that improve percentages by breaking quality."""
-            trial_ids = {
-                item.get("course_id") for item in trial_items
-                if item.get("course_id") is not None
-            }
-            if not baseline_core_ids.issubset(trial_ids):
-                return False
-            trial_codes = {
-                str(code)
-                for course_id in trial_ids
-                for code in (aggregates.get(course_id, {}).get("professional_lo_codes") or set())
-            }
-            if not baseline_professional_codes.issubset(trial_codes):
-                return False
-            trial_lo_scores = {}
-            for course_id in trial_ids:
-                for lo_code, score in (aggregates.get(course_id, {}).get("lo_scores") or {}).items():
-                    trial_lo_scores[str(lo_code)] = max(
-                        float(trial_lo_scores.get(str(lo_code)) or 0.0), float(score or 0.0)
-                    )
-            return all(
-                float(trial_lo_scores.get(lo_code) or 0.0) + 1e-9 >= score
-                for lo_code, score in baseline_lo_scores.items()
+            return _quality_preserved_after_swap(
+                trial_items,
+                baseline_core_ids=baseline_core_ids,
+                baseline_professional_codes=baseline_professional_codes,
+                baseline_lo_scores=baseline_lo_scores,
+                aggregates=aggregates,
             )
 
         def protected_ids() -> set:
-            ids = selected_ids()
-            prerequisite_ids = {
-                prerequisite_id
-                for item in normalized
-                for prerequisite_id in (item.get("prerequisites") or [])
-                if prerequisite_id in ids
-            }
-            expert_confirmed_ids = {
-                int(course_id)
-                for mapping_name in ("confirmed_bridge_replacements", "confirmed_course_replacements")
-                for course_id in (constraints.get(mapping_name) or {}).values()
-                if str(course_id).isdigit()
-            }
-            quota_reserve_ids = {
-                int(item["course_id"])
-                for item in normalized
-                if item.get("course_id") is not None
-                and item.get("domain_quota_reserve")
-            }
-            competency_ids = {
-                int(item["course_id"])
-                for item in normalized
-                if item.get("course_id") is not None
-                and item.get("competency_required")
-            }
-            # Quota repair must never remove the only professional LO source
-            # or a core competency block. Such a swap can make the numeric
-            # domain percentage look better while silently producing an
-            # invalid curriculum.
-            core_ids = {
-                int(item["course_id"])
-                for item in normalized
-                if item.get("course_id") is not None
-                and courses.get(item.get("course_id")) is not None
-                and _course_curriculum_role(courses[item["course_id"]], project_domains) == "core"
-            }
-            lo_sources: Dict[str, set[int]] = {}
-            for item in normalized:
-                course_id = item.get("course_id")
-                evidence = aggregates.get(course_id, {})
-                for lo_code in evidence.get("professional_lo_codes") or set():
-                    lo_sources.setdefault(str(lo_code), set()).add(int(course_id))
-            unique_lo_ids = {
-                course_id
-                for source_ids in lo_sources.values()
-                if len(source_ids) == 1
-                for course_id in source_ids
-            }
-            return (
-                prerequisite_ids
-                | expert_confirmed_ids
-                | quota_reserve_ids
-                | competency_ids
-                | core_ids
-                | unique_lo_ids
+            return _protected_quota_course_ids(
+                normalized,
+                courses=courses,
+                aggregates=aggregates,
+                constraints=constraints,
+                project_domains=project_domains,
+                curriculum_role=_course_curriculum_role,
             )
 
         for domain_index in (0, 1):
