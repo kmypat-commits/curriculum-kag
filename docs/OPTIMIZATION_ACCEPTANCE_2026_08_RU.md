@@ -86,3 +86,7 @@ Train-only graded expert-memory reranker на том же export выбрал в
 validation и на test повысил Recall@10 с 0,5944 до 0,6061 (+0,0117), MRR с
 0,6774 до 0,6880 и nDCG@10 с 0,5622 до 0,5759. Это лучший текущий corrected
 full-pool кандидат, но он ниже 0,80 и не заменяет production-рейтинг.
+
+Комбинация graded listwise SBERT и train-only expert-memory выбрала вес 0,25
+и дала test Recall@10=0,6050, MRR=0,6919, nDCG@10=0,5756. Это немного хуже
+40k + memory (0,6061), поэтому простое смешивание сигналов отклонено.
