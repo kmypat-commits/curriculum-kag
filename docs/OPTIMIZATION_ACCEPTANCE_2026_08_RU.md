@@ -9,7 +9,7 @@
 | 2 | Semester repair разделён по ответственности | Закрыто | `semester_load_repair.py` (кредиты), `semester_domain_repair.py` (области), `semester_appropriateness.py` (уместность), `semester_admission_repair.py` (финальный допуск/пререквизиты), `course_scheduling.py`; regression 91/91 |
 | 3 | Fail-fast EPVO/LO evidence | Закрыто | `evidence_preflight.py`; дефицит возвращается до долгого scheduler и не маскируется bridge |
 | 4 | Project 135 пересобирается только после восстановления evidence | Защищено | Сборка блокируется при дефиците профессиональных LO-связей; пересборка намеренно не запускалась |
-| 5 | Browser smoke graph + RU/KK/EN | Улучшено, частично закрыто | Повторно пройдены UI smoke 10 маршрутов и authenticated API smoke: граф 51 узел/84 ребра, RU/KK/EN markers; интерактивная проверка отображения графа и переключения языков всё ещё требует ручного входа |
+| 5 | Browser smoke graph + RU/KK/EN | Улучшено, частично закрыто | Повторно пройдены UI smoke 10 маршрутов и authenticated API smoke для A/B/C: граф 51/84, 49/83 и 53/90 nodes/edges; RU/KK/EN markers; интерактивная проверка отображения графа и переключения языков всё ещё требует ручного входа |
 | 6 | Progress генерации в PostgreSQL | Закрыто | `plan_build_status` и `planner_state`; Alembic head на PostgreSQL |
 | 7 | Checksum-кэш EPVO/LO | Закрыто | stage cache инвалидируется при in-place checksum/fingerprint изменении; тесты проходят |
 | 8 | Узкие исключения | Закрыто | В production-коде осталось 2 `except Exception`, оба только на transaction rollback boundaries |
@@ -22,8 +22,8 @@
 
 Текущие проверки: backend **91/91**, static gate, dependency profile, release
 hygiene, frontend production build, PostgreSQL health и Alembic head проходят.
-Последний UI smoke проверил 10 маршрутов; authenticated graph smoke вернул
-51 узел и 84 ребра. Staging manifest пересобран для текущего чистого commit
+Последний UI smoke проверил 10 маршрутов; authenticated graph smoke проверил
+варианты A/B/C (51/84, 49/83 и 53/90 nodes/edges). Staging manifest пересобран для текущего чистого commit
 и фиксирует 475 отслеживаемых путей без dirty-файлов. PostgreSQL health и
 Alembic head повторно подтверждены; последний verified restore manifest
 имеет `passed=true`, `sha256_verified=true`, а количества строк совпадают.
