@@ -23,6 +23,7 @@ from app.models.epvo import (
 from app.models.plan import Plan, PlanItem
 from app.models.project import LearningOutcome, ProjectVersion
 from app.planner.admission import (
+    admit_real_course_items as _admit_real_course_items,
     audit_final_course_admission as _audit_final_course_admission,
     credible_professional_lo_by_course as _credible_professional_lo_by_course,
     minimum_appropriate_semester as _minimum_appropriate_semester,
@@ -771,60 +772,16 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             course, aggregates, scope_rank, domain_text
         )
 
-    def admit_real_courses(items: List[Dict]) -> List[Dict]:
-        """Final evidence gate shared by every A/B/C selection path.
-
-        Credits and a high rank are not sufficient. Every real non-regulatory
-        discipline must have a credible programme LO and pass the selected
-        EPVO level/scope. Bridges are kept explicit and are never disguised as
-        real-course evidence.
-        """
-        admitted: List[Dict] = []
-        jurisdiction_kz = str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
-        for raw_item in items:
-            item = dict(raw_item)
-            course_id = item.get("course_id")
-            if course_id is None:
-                admitted.append(item)
-                continue
-            course = courses.get(int(course_id))
-            if course is None or _is_component_placeholder_title(_title_key(item.get("title") or course.title)):
-                continue
-            course_code = str(course.course_id or "")
-            if course_code.startswith("GOSO-KZ-"):
-                if jurisdiction_kz:
-                    item["regulatory_required"] = True
-                    item["admission_reason"] = "mandatory_goso_kz"
-                    admitted.append(item)
-                continue
-            if not _education_level_course_allowed(course, constraints.get("education_level")):
-                continue
-            evidence = aggregates.get(course.id, {})
-            # Generic GSOS outcomes justify only explicit GOSO courses.
-            # An ordinary EPVO elective must support at least one programme-
-            # specific professional outcome.
-            credible_los = set(evidence.get("professional_lo_codes") or set())
-            if not credible_los:
-                continue
-            if course_code.startswith("EPVO-") and scope_rank(course) <= 0:
-                continue
-            if (
-                course_code.startswith("EPVO-")
-                and not course_matches_scope_theme(course)
-                and not has_strong_exact_scope_evidence(course)
-            ):
-                continue
-            if not is_project_domain(course):
-                continue
-            item["admission_reason"] = (
-                "epvo_scope_and_lo"
-                if scope_rank(course) > 0 or course_code.startswith("EPVO-")
-                else "local_course_and_lo"
-            )
-            item["admission_los"] = sorted(credible_los)
-            item["admission_score"] = round(float(evidence.get("max") or 0.0), 4)
-            admitted.append(item)
-        return _unique_items_by_title(admitted)
+    admit_real_courses = partial(
+        _admit_real_course_items,
+        constraints=constraints,
+        courses=courses,
+        aggregates=aggregates,
+        scope_rank=scope_rank,
+        is_project_domain=is_project_domain,
+        course_matches_scope_theme=course_matches_scope_theme,
+        has_strong_exact_scope_evidence=has_strong_exact_scope_evidence,
+    )
 
     raw_prereq_ids_by_course = prereq_ids_by_course
     generic_prerequisite_terms = {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Callable, Dict, List, Mapping
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,11 @@ from app.planner.course_policy import (
 )
 from app.planner.scheduler_domain_rules import course_domain_matches
 from app.planner.semester_rules import minimum_appropriate_semester as item_minimum_appropriate_semester
+from app.planner.scheduler_catalogue import (
+    is_component_placeholder_title,
+    unique_items_by_title,
+)
+from app.planner.scheduler_utils import title_key
 from app.services.epvo_repository import epvo_row_matches_education_level
 
 
@@ -49,6 +54,70 @@ def credible_professional_lo_by_course(
         if code and not code.startswith("LO-GOSO-") and max(float(match.score or 0.0), expert) >= 0.4:
             credible_professional.setdefault(int(match.course_id), set()).add(code)
     return credible_professional
+
+
+def admit_real_course_items(
+    items: List[Dict],
+    constraints: Mapping[str, object],
+    courses: Mapping[int, Course],
+    aggregates: Mapping[int, Mapping[str, object]],
+    scope_rank: Callable[[Course], int],
+    is_project_domain: Callable[[Course], bool],
+    course_matches_scope_theme: Callable[[Course], bool],
+    has_strong_exact_scope_evidence: Callable[[Course], bool],
+) -> List[Dict]:
+    """Apply the final evidence/education-level gate to selected real courses.
+
+    Bridge items stay explicit. This helper is intentionally independent from
+    candidate retrieval so the selector cannot accidentally admit a course
+    merely because it filled a credit slot.
+    """
+    admitted: List[Dict] = []
+    jurisdiction_kz = str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
+    education_level = constraints.get("education_level")
+    for raw_item in items:
+        item = dict(raw_item)
+        course_id = item.get("course_id")
+        if course_id is None:
+            admitted.append(item)
+            continue
+        course = courses.get(int(course_id))
+        if course is None or is_component_placeholder_title(
+            title_key(item.get("title") or course.title)
+        ):
+            continue
+        course_code = str(course.course_id or "")
+        if course_code.startswith("GOSO-KZ-"):
+            if jurisdiction_kz:
+                item["regulatory_required"] = True
+                item["admission_reason"] = "mandatory_goso_kz"
+                admitted.append(item)
+            continue
+        if not education_level_course_allowed(course, education_level):
+            continue
+        evidence = aggregates.get(course.id, {})
+        credible_los = set(evidence.get("professional_lo_codes") or set())
+        if not credible_los:
+            continue
+        if course_code.startswith("EPVO-") and scope_rank(course) <= 0:
+            continue
+        if (
+            course_code.startswith("EPVO-")
+            and not course_matches_scope_theme(course)
+            and not has_strong_exact_scope_evidence(course)
+        ):
+            continue
+        if not is_project_domain(course):
+            continue
+        item["admission_reason"] = (
+            "epvo_scope_and_lo"
+            if scope_rank(course) > 0 or course_code.startswith("EPVO-")
+            else "local_course_and_lo"
+        )
+        item["admission_los"] = sorted(credible_los)
+        item["admission_score"] = round(float(evidence.get("max") or 0.0), 4)
+        admitted.append(item)
+    return unique_items_by_title(admitted)
 
 
 def audit_final_course_admission(schedule: Dict, project_version: ProjectVersion, db: Session) -> Dict:
