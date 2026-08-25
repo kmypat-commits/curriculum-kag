@@ -75,18 +75,28 @@ def build_groups(
             stats["train_programmes"] += 1
             courses = {str(row["id"]): row for row in program.get("courses") or []}
             outcomes = {str(row["id"]): row for row in program.get("outcomes") or []}
-            expert_scores = {
-                (str(edge.get("course_id")), str(edge.get("lo_id"))): float(edge.get("score") or 0.0)
-                for edge in program.get("expert_edges") or []
-                if edge.get("course_id") is not None and edge.get("lo_id") is not None
-            }
+            # ``None`` means that the programme declared the link but no
+            # external expert vote was recorded.  Keep that distinction: it
+            # is eligible when min_expert_score=0, but must not become a zero
+            # loss weight (zero weights make the listwise denominator NaN).
+            expert_scores = {}
+            for edge in program.get("expert_edges") or []:
+                if edge.get("course_id") is None or edge.get("lo_id") is None:
+                    continue
+                raw_score = edge.get("score")
+                expert_scores[(str(edge.get("course_id")), str(edge.get("lo_id")))] = (
+                    None if raw_score is None else float(raw_score)
+                )
             edges_by_lo: dict[str, set[str]] = {}
-            scores_by_edge: dict[tuple[str, str], float] = {}
+            scores_by_edge: dict[tuple[str, str], float | None] = {}
             for course_id, lo_id in program.get("positive_edges") or []:
                 if (
                     str(course_id) in courses
                     and str(lo_id) in outcomes
-                    and expert_scores.get((str(course_id), str(lo_id)), 1.0) >= min_expert_score
+                    and (
+                        expert_scores.get((str(course_id), str(lo_id)), 1.0) is None
+                        or expert_scores.get((str(course_id), str(lo_id)), 1.0) >= min_expert_score
+                    )
                 ):
                     course_key, lo_key = str(course_id), str(lo_id)
                     edges_by_lo.setdefault(lo_key, set()).add(course_key)
@@ -98,11 +108,18 @@ def build_groups(
                 if not query or not positive_ids or not negative_ids:
                     continue
                 rng.shuffle(positive_ids)
-                positive_weights = [
-                    scores_by_edge.get((course_id, str(lo_id)), 1.0)
-                    if positive_loss == "graded" else 1.0
-                    for course_id in positive_ids
-                ]
+                positive_weights = []
+                for course_id in positive_ids:
+                    if positive_loss != "graded":
+                        positive_weights.append(1.0)
+                        continue
+                    raw_weight = scores_by_edge.get((course_id, str(lo_id)), 1.0)
+                    # Unlabelled declared links are valid positives with a
+                    # neutral weight; an explicit zero vote remains a tiny
+                    # graded signal but can never make the loss undefined.
+                    positive_weights.append(
+                        1.0 if raw_weight is None else max(float(raw_weight), 1e-3)
+                    )
                 if negative_strategy == "lexical":
                     negative_ids.sort(
                         key=lambda course_id: token_overlap(
