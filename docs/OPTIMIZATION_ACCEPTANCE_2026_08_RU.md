@@ -81,3 +81,8 @@ Graded listwise pilot на 80 одинаковых validation/test програ�
 исходной 40k-моделью: Recall@10=0,4905/0,4946 против 0,4919/0,4928,
 а test MRR вырос 0,4030 → 0,4211. Прирост Recall недостаточен для promotion;
 кандидат остаётся экспериментальным.
+
+Train-only graded expert-memory reranker на том же export выбрал вес 0,35 по
+validation и на test повысил Recall@10 с 0,5944 до 0,6061 (+0,0117), MRR с
+0,6774 до 0,6880 и nDCG@10 с 0,5622 до 0,5759. Это лучший текущий corrected
+full-pool кандидат, но он ниже 0,80 и не заменяет production-рейтинг.
