@@ -136,7 +136,17 @@ hard-negative/listwise эксперимент и проверка на полн�
 80-programme split; validation выбрал веса global/scoped 0,40/0,35 и
 0,40/0,40 соответственно. Покрытие scoped-кандидатов составило только
 20,6%, поэтому этот сигнал не заменяет semantic-memory и остаётся
-диагностическим.
+ диагностическим.
+
+Полный PostgreSQL programme-level export уже восстановлен без лимита:
+11 017 программ, 833 022 pair-rows, 615 414 positive links, split
+7 706/1 650/1 661; экспертная шкала сохранена (включая 0,25/0,75 и
+дробные агрегаты). На этом полном export leakage-safe scope-memory дал
+validation Recall@10=0,6374 и frozen test=0,6259 против 0,5836 baseline
+(+0,0423), при scoped coverage 45,1%. Попытка CrossEncoder+memory на полном
+файле остановлена до результата из-за роста private memory до 6,5 ГБ;
+production не затронут. Для следующего прогона нужен split-batched evaluator
+с явным освобождением модели между пакетами.
 
 Проверена также точная память по паре `course_id–LO_id` (87 032 train-only
 экспертных рёбер). На отдельном frozen 80-programme split она сама не дала

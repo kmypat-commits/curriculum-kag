@@ -33,12 +33,15 @@ from run_epvo_crossencoder_ranker import (
 )
 
 
-def read_programmes(path: Path) -> list[dict]:
+def iter_programmes(path: Path):
+    """Stream programme records; full EPVO exports can exceed a gigabyte."""
     with path.open(encoding="utf-8") as source:
-        return [json.loads(line) for line in source]
+        for line in source:
+            if line.strip():
+                yield json.loads(line)
 
 
-def build_memory(programmes: list[dict]) -> dict[str, list[str]]:
+def build_memory(programmes, target_course_ids: set[str] | None = None) -> dict[str, list[str]]:
     memory: dict[str, list[str]] = defaultdict(list)
     for program in programmes:
         courses, outcomes, _ = programme_block(program)
@@ -53,6 +56,8 @@ def build_memory(programmes: list[dict]) -> dict[str, list[str]]:
                 continue
             course_id = str(edge.get("course_id"))
             lo_id = str(edge.get("lo_id"))
+            if target_course_ids is not None and course_id not in target_course_ids:
+                continue
             if course_id in courses and lo_id in outcome_by_id:
                 if outcome_by_id[lo_id] not in memory[course_id]:
                     memory[course_id].append(outcome_by_id[lo_id])
@@ -129,17 +134,23 @@ def main() -> None:
     parser.add_argument("--cross-batch", type=int, default=24)
     args = parser.parse_args()
     data = Path(args.data)
-    all_programmes = read_programmes(data)
-    train = [item for item in all_programmes if item.get("split") == "train"]
-    memory = build_memory(train)
+    validation = selected_programmes(data, "validation", args.programmes, "cross-memory-v2")
+    test = selected_programmes(data, "test", args.programmes, "cross-memory-v2")
+    target_course_ids = {
+        str(course.get("id"))
+        for program in validation + test
+        for course in program.get("courses") or []
+    }
+    memory = build_memory(
+        (item for item in iter_programmes(data) if item.get("split") == "train"),
+        target_course_ids,
+    )
     memory_texts = sorted({text for values in memory.values() for text in values})
     model = SentenceTransformer(args.bi_encoder, device="cuda", local_files_only=True)
     encoded = model.encode(memory_texts, batch_size=args.batch_size, normalize_embeddings=True, show_progress_bar=False)
     lookup = dict(zip(memory_texts, encoded))
     memory_vectors = {course: np.asarray([lookup[text] for text in texts]) for course, texts in memory.items()}
     cross = CrossEncoder(args.cross_encoder, num_labels=1, max_length=192, device="cuda", local_files_only=True)
-    validation = selected_programmes(data, "validation", args.programmes, "cross-memory-v2")
-    test = selected_programmes(data, "test", args.programmes, "cross-memory-v2")
     validation_rows = collect_memory_rows(validation, model, cross, memory, memory_vectors, args.batch_size, args.cross_batch)
     choices = []
     for cross_weight in np.linspace(0.0, 1.0, 11):
