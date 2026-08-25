@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import heapq
 import json
 import math
 import sys
@@ -39,6 +40,72 @@ def iter_programmes(path: Path):
         for line in source:
             if line.strip():
                 yield json.loads(line)
+
+
+def compact_programme(program: dict, *, include_expert_edges: bool = False) -> dict:
+    """Keep only fields consumed by this research benchmark.
+
+    Full EPVO records may contain large duplicated localized payloads.  The
+    reranker needs course/outcome text, programme context and links only;
+    retaining the rest makes long full-pool runs needlessly memory hungry.
+    """
+    compact = {
+        "program_id": program.get("program_id"),
+        "split": program.get("split"),
+        "program_goal": program.get("program_goal") or {},
+        "training_direction": program.get("training_direction") or {},
+        "program_group": program.get("program_group") or {},
+        "courses": [
+            {
+                "id": item.get("id"),
+                "title": item.get("title") or {},
+                "description": item.get("description") or {},
+            }
+            for item in program.get("courses") or []
+        ],
+        "outcomes": [
+            {"id": item.get("id"), "text": item.get("text") or {}}
+            for item in program.get("outcomes") or []
+        ],
+        "positive_edges": [
+            [edge[0], edge[1]]
+            for edge in program.get("positive_edges") or []
+            if isinstance(edge, (list, tuple)) and len(edge) >= 2
+        ],
+    }
+    if include_expert_edges:
+        compact["expert_edges"] = [
+            {
+                "course_id": edge.get("course_id"),
+                "lo_id": edge.get("lo_id"),
+                "score": edge.get("score"),
+            }
+            for edge in program.get("expert_edges") or []
+        ]
+    return compact
+
+
+def iter_compact_programmes(path: Path, split: str, *, include_expert_edges: bool = False):
+    """Stream compact records without retaining the full source object."""
+    for program in iter_programmes(path):
+        if program.get("split") == split:
+            yield compact_programme(program, include_expert_edges=include_expert_edges)
+
+
+def selected_compact_programmes(path: Path, split: str, count: int, seed_prefix: str) -> list[dict]:
+    """Deterministically select records while retaining compact payloads only."""
+    ranked: list[tuple[int, int, dict]] = []
+    serial = 0
+    for program in iter_compact_programmes(path, split):
+        program_id = str(program.get("program_id"))
+        rank = int(hashlib.sha256(f"{seed_prefix}:{split}:{program_id}".encode()).hexdigest(), 16)
+        serial += 1
+        item = (-rank, serial, program)
+        if len(ranked) < count:
+            heapq.heappush(ranked, item)
+        elif rank < -ranked[0][0]:
+            heapq.heapreplace(ranked, item)
+    return [program for _, _, program in sorted(ranked, key=lambda item: -item[0])]
 
 
 def build_memory(programmes, target_course_ids: set[str] | None = None) -> dict[str, list[str]]:
@@ -134,15 +201,15 @@ def main() -> None:
     parser.add_argument("--cross-batch", type=int, default=24)
     args = parser.parse_args()
     data = Path(args.data)
-    validation = selected_programmes(data, "validation", args.programmes, "cross-memory-v2")
-    test = selected_programmes(data, "test", args.programmes, "cross-memory-v2")
+    validation = selected_compact_programmes(data, "validation", args.programmes, "cross-memory-v3")
+    test = selected_compact_programmes(data, "test", args.programmes, "cross-memory-v3")
     target_course_ids = {
         str(course.get("id"))
         for program in validation + test
         for course in program.get("courses") or []
     }
     memory = build_memory(
-        (item for item in iter_programmes(data) if item.get("split") == "train"),
+        iter_compact_programmes(data, "train", include_expert_edges=True),
         target_course_ids,
     )
     memory_texts = sorted({text for values in memory.values() for text in values})
