@@ -126,6 +126,7 @@ def main() -> int:
     # universities) but never reads held-out programme edges.
     train_anchors: dict[str, list[str]] = defaultdict(list)
     train_anchor_los_by_text: dict[str, list[str]] = defaultdict(list)
+    train_anchor_los_by_title: dict[str, list[str]] = defaultdict(list)
     for row in rows:
         if row.get("split") != "train":
             continue
@@ -149,6 +150,9 @@ def main() -> int:
                 lo_text = outcome_text(outcome)
                 train_anchors[key].append(lo_text)
                 train_anchor_los_by_text[course_text(course)].append(lo_text)
+                title_text = text_value(course.get("title"))
+                if title_text:
+                    train_anchor_los_by_title[title_text].append(lo_text)
     fuzzy_anchor_texts = list(train_anchor_los_by_text)
     fuzzy_anchor_lo_texts = [train_anchor_los_by_text[value] for value in fuzzy_anchor_texts]
     fuzzy_lo_texts: list[str] = []
@@ -163,6 +167,20 @@ def main() -> int:
             indices.append(index)
         fuzzy_lo_indices.append(indices)
     fuzzy_lo_matrix = vectorizer.transform(fuzzy_lo_texts) if fuzzy_lo_texts else None
+    title_anchor_texts = list(train_anchor_los_by_title)
+    title_anchor_lo_texts = [train_anchor_los_by_title[value] for value in title_anchor_texts]
+    title_anchor_lo_indices: list[list[int]] = []
+    title_anchor_lo_values: list[str] = []
+    title_anchor_lo_index: dict[str, int] = {}
+    for anchor_los in title_anchor_lo_texts:
+        indices = []
+        for value in anchor_los:
+            index = title_anchor_lo_index.setdefault(value, len(title_anchor_lo_values))
+            if index == len(title_anchor_lo_values):
+                title_anchor_lo_values.append(value)
+            indices.append(index)
+        title_anchor_lo_indices.append(indices)
+    title_anchor_lo_matrix = vectorizer.transform(title_anchor_lo_values) if title_anchor_lo_values else None
 
     blocks: dict[str, dict] = {}
     for row in rows:
@@ -196,6 +214,7 @@ def main() -> int:
                 "course_ids": course_ids,
                 "lo_ids": lo_ids,
                 "courses": [course_text(courses[course_id]) for course_id in course_ids],
+                "course_titles": [text_value(courses[course_id].get("title")) for course_id in course_ids],
                 "course_keys": [title_key(courses[course_id]) for course_id in course_ids],
                 "los": [outcome_text(outcomes[lo_id]) for lo_id in lo_ids],
                 "links": links,
@@ -223,12 +242,25 @@ def main() -> int:
                 for anchor_index in nearest
                 if all_course_similarity[row_index, anchor_index] > 0
             ]
+    title_fuzzy_lookup: dict[str, list[tuple[int, float]]] = {}
+    if title_anchor_texts and title_anchor_lo_matrix is not None:
+        unique_test_titles = sorted({value for block in blocks.values() for value in block["course_titles"] if value})
+        title_vectors = vectorizer.transform(title_anchor_texts)
+        all_title_similarity = (vectorizer.transform(unique_test_titles) @ title_vectors.T).toarray()
+        for row_index, value in enumerate(unique_test_titles):
+            nearest = np.argsort(-all_title_similarity[row_index])[:8]
+            title_fuzzy_lookup[value] = [
+                (int(anchor_index), float(all_title_similarity[row_index, anchor_index]))
+                for anchor_index in nearest
+                if all_title_similarity[row_index, anchor_index] > 0
+            ]
 
     metrics = {"programmes": len(blocks), "queries": 0}
     values = defaultdict(list)
     total_queries = 0
     anchor_values = {weight: defaultdict(list) for weight in (0.25, 0.5, 0.75)}
     fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
+    title_fuzzy_values = {weight: defaultdict(list) for weight in (0.15, 0.25, 0.35)}
     context_values = {weight: defaultdict(list) for weight in (0.10, 0.20, 0.30, 0.40)}
     hybrid_values = {name: defaultdict(list) for name in (
         "sbert_0.5_lex_0.25_anchor_0.25",
@@ -279,8 +311,25 @@ def main() -> int:
                         fuzzy_scores[:, course_index],
                         course_score * lo_similarity[:, fuzzy_lo_indices[anchor_index]].max(axis=1),
                     )
+        title_fuzzy_scores = np.zeros_like(lexical_scores)
+        if title_fuzzy_lookup and title_anchor_lo_matrix is not None:
+            title_lo_similarity = (lo_vectors @ title_anchor_lo_matrix.T).toarray()
+            for course_index, title_value in enumerate(block["course_titles"]):
+                for anchor_index, course_score in title_fuzzy_lookup.get(title_value, []):
+                    title_fuzzy_scores[:, course_index] = np.maximum(
+                        title_fuzzy_scores[:, course_index],
+                        course_score * title_lo_similarity[:, title_anchor_lo_indices[anchor_index]].max(axis=1),
+                    )
         for weight, aggregate in fuzzy_values.items():
             variant_metrics = rank_metrics(block, (1 - weight) * lexical_scores + weight * fuzzy_scores)
+            for metric, value in variant_metrics.items():
+                if metric != "queries":
+                    aggregate[metric].append(value * variant_metrics["queries"])
+        for weight, aggregate in title_fuzzy_values.items():
+            variant_metrics = rank_metrics(
+                block,
+                (1 - weight) * lexical_scores + weight * title_fuzzy_scores,
+            )
             for metric, value in variant_metrics.items():
                 if metric != "queries":
                     aggregate[metric].append(value * variant_metrics["queries"])
@@ -326,6 +375,11 @@ def main() -> int:
         }
     for weight, aggregate in fuzzy_values.items():
         metrics[f"fuzzy_anchor_weight_{weight:g}"] = {
+            name: float(sum(values) / total_queries) if total_queries else 0.0
+            for name, values in aggregate.items()
+        }
+    for weight, aggregate in title_fuzzy_values.items():
+        metrics[f"title_fuzzy_anchor_weight_{weight:g}"] = {
             name: float(sum(values) / total_queries) if total_queries else 0.0
             for name, values in aggregate.items()
         }
