@@ -120,6 +120,34 @@ def test_variant_assembly_adds_bundle_atomically():
     assert set(selected) == {1}
 
 
+def test_variant_prerequisites_filter_keeps_supported_earlier_edges_only():
+    from app.planner.variant_prerequisites import filter_supported_prerequisites
+
+    courses = {
+        1: SimpleNamespace(title="Python programming", recommended_semester=1),
+        2: SimpleNamespace(title="Advanced Python programming", recommended_semester=2),
+        3: SimpleNamespace(title="Unrelated late course", recommended_semester=3),
+    }
+    result = filter_supported_prerequisites(
+        {2: [1], 3: [2]},
+        courses=courses,
+        aggregates={1: {"max": 0.0}, 2: {"max": 0.0}},
+        num_semesters=4,
+        normalize_title=lambda value: str(value or "").casefold(),
+        excluded_prefixes=("advanced",),
+    )
+    assert result == {2: [1]}
+
+
+def test_variant_prerequisite_depth_is_cycle_safe_and_memoized():
+    from app.planner.variant_prerequisites import make_course_depth
+
+    courses = {1: object(), 2: object(), 3: object()}
+    depth = make_course_depth({1: [2], 2: [3], 3: [1]}, courses=courses, num_semesters=4)
+    assert depth(1) == 8
+    assert depth(99) == 5
+
+
 def test_build_claim_blocks_a_duplicate_even_when_status_storage_is_unavailable():
     from app.api import planner_state
 

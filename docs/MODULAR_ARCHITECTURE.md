@@ -22,7 +22,10 @@ workers from starting the same plan build; polling resumes after a restart.
 Course selection is split behind the stable `course_selection.py` facade:
 `candidate_retrieval.py` retrieves and filters scoped courses,
 `variant_admission.py` applies the pure education-level/domain/evidence gate,
-`variant_strategy.py` builds deterministic A/B/C variants, and
+`variant_ranking.py` owns deterministic candidate ordering,
+`variant_prerequisites.py` filters evidenced earlier edges and computes depth,
+`variant_assembly.py` owns prerequisite bundles, `variant_strategy.py` builds
+deterministic A/B/C variants, and
 `bridge_creation.py` owns bridge and credit-gap construction.
 
 Plan-build progress is persisted in PostgreSQL table `plan_build_status`, so a
@@ -68,7 +71,7 @@ Every structural extraction must pass:
 
 `backend/tests/test_planner_router_contracts.py` protects the composed route
 contract for build, coverage, graph, replacement, and syllabus routers.
-It also protects the duplicate-build fallback: a temporary status-store outage
+It also covers ranking/assembly/prerequisite primitives and protects the duplicate-build fallback: a temporary status-store outage
 must not permit a second build for the same version in one worker.
 
 For an initial non-generative latency baseline, run

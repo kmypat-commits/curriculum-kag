@@ -3,8 +3,6 @@ from __future__ import annotations
 from functools import partial
 from itertools import combinations
 import math
-import re
-from statistics import median
 from typing import Dict, List
 
 from sqlalchemy import String, cast, func, or_
@@ -95,6 +93,10 @@ from app.planner.variant_assembly import add_bundle_if_fits, build_prerequisite_
 from app.planner.variant_admission import (
     is_project_domain_course as _is_project_domain_course,
     remove_weak_general_items as _remove_weak_general_items,
+)
+from app.planner.variant_prerequisites import (
+    filter_supported_prerequisites,
+    make_course_depth,
 )
 from app.planner.variant_ranking import rank_variant_candidates, variant_candidate_key
 from app.planner.variant_diversification import _diversify_variant_items
@@ -740,46 +742,23 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         "основ", "введен", "систем", "метод", "технолог", "управлен", "анализ",
         "соврем", "дисциплин", "course", "system", "method", "technology", "management",
     }
-
-    def prerequisite_title_stems(course: Course) -> set[str]:
-        return {
-            token[:7]
-            for token in re.findall(r"[\w]+", _title_key(course.title), flags=re.UNICODE)
-            if len(token) >= 5 and not any(token.startswith(value) for value in generic_prerequisite_terms)
-        }
-
-    # The repository contains historical and automatically inferred edges.
-    # For generation, retain only an earlier prerequisite that is supported by
-    # this programme's LO evidence or by a clear subject-title relationship.
-    filtered_prerequisites: Dict[int, List[int]] = {}
-    for course_id, prerequisite_ids in raw_prereq_ids_by_course.items():
-        course = courses.get(course_id)
-        if not course:
-            continue
-        course_stems = prerequisite_title_stems(course)
-        for prerequisite_id in prerequisite_ids:
-            prerequisite = courses.get(prerequisite_id)
-            if not prerequisite:
-                continue
-            if int(prerequisite.recommended_semester or 1) >= int(course.recommended_semester or 1):
-                continue
-            evidence_score = float(aggregates.get(prerequisite_id, {}).get("max") or 0.0)
-            shared_stems = course_stems & prerequisite_title_stems(prerequisite)
-            if evidence_score < 0.25 and len(shared_stems) < 2:
-                continue
-            filtered_prerequisites.setdefault(course_id, []).append(prerequisite_id)
-    prereq_ids_by_course = filtered_prerequisites
-
     num_semesters = int(constraints.get("total_semesters", 8))
-    depth_cache = {}
-    def course_depth(cid, path=None):
-        if cid in depth_cache: return depth_cache[cid]
-        path = path or set()
-        if cid in path or cid not in courses: return num_semesters + 1
-        prereqs = prereq_ids_by_course.get(cid, [])
-        value = 0 if not prereqs else 1 + max(course_depth(pre_id, path | {cid}) for pre_id in prereqs)
-        depth_cache[cid] = value
-        return value
+    # The repository contains historical and automatically inferred edges.
+    # Keep only earlier edges supported by programme evidence or a clear
+    # subject-title relationship before ranking and assembly.
+    prereq_ids_by_course = filter_supported_prerequisites(
+        raw_prereq_ids_by_course,
+        courses=courses,
+        aggregates=aggregates,
+        num_semesters=num_semesters,
+        normalize_title=_title_key,
+        excluded_prefixes=generic_prerequisite_terms,
+    )
+    course_depth = make_course_depth(
+        prereq_ids_by_course,
+        courses=courses,
+        num_semesters=num_semesters,
+    )
     # A 100-course frontier is sufficient for a one-domain catalogue but can
     # starve a two-direction programme: 40/40 domain quotas may require
     # separate prerequisite chains from both EPVO groups.  Keep the larger
