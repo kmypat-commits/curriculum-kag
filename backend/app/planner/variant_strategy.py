@@ -944,6 +944,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = rebalance_domain_quotas(result)
     result = _fill_existing_bridge_credit_gap(result, target, db)
     result = top_up_with_credit_bridges(result)
+    # The final bridge top-up may increase a flexible module by one credit to
+    # close a residual gap.  Enforce the target envelope once more before
+    # diversification so every variant is independently admissible (not only
+    # the common A schedule).
+    result = _trim_to_target_credits(result, target, db)
     # Final pass: all credit/domain/LO repairs above can converge B/C back to A.
     # Diversify only after the last mutation so an accepted plan keeps its
     # variant identity. The helper preserves same-credit courses, professional
