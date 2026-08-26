@@ -149,6 +149,18 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     return $false
 }
 
+function Warn-IfDockerRestoreMayExhaustSystemDisk {
+    # Docker Desktop stores its WSL disk on C: by default. A PostgreSQL
+    # restore temporarily needs roughly the database size again, even when
+    # project data and dumps are stored on D:. Warn early instead of letting
+    # Docker stall the machine during a recovery drill.
+    $systemDrive = Get-PSDrive -Name C -ErrorAction SilentlyContinue
+    if ($systemDrive -and $systemDrive.Free -lt 12GB) {
+        $freeGb = [math]::Round($systemDrive.Free / 1GB, 1)
+        Write-Host "Warning: only $freeGb GB is free on C:. PostgreSQL restore verification may require more space because Docker Desktop uses its WSL disk there. Free space or move Docker data to D: before a restore drill." -ForegroundColor Yellow
+    }
+}
+
 function Start-PostgresShadowIfNeeded {
     if (Wait-TcpPort "localhost" 5433 2) { return $true }
     $composeFile = Join-Path $root "docker-compose.postgres-only.yml"
@@ -156,6 +168,7 @@ function Start-PostgresShadowIfNeeded {
     $docker = Find-DockerCli
     if (-not $docker) { return $false }
     if (-not (Start-DockerDesktopIfNeeded $docker)) { return $false }
+    Warn-IfDockerRestoreMayExhaustSystemDisk
 
     Write-Host "Starting local PostgreSQL shadow database..." -ForegroundColor Cyan
     Push-Location $root
