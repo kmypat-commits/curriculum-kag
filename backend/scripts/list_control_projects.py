@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import json
 import argparse
+import sys
 
 from audit_control_programs_api import login, request_json
+
+
+if hasattr(sys.stdout, "reconfigure"):
+    # The script is also used from legacy Windows PowerShell consoles where
+    # the active CP1251 code page cannot print Kazakh characters.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def main() -> None:

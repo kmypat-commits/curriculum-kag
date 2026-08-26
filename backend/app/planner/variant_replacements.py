@@ -58,7 +58,13 @@ def apply_confirmed_variant_replacements(
         }
 
     confirmed_bridges = _int_mapping(constraints.get("confirmed_bridge_replacements"))
-    result = replace_redundant_bridges(result, set(confirmed_bridges))
+    # ``replace_redundant_bridges_with_real_courses`` is partially bound with
+    # ``db`` and catalogue context. Passing the protected IDs positionally
+    # would bind them as its second positional parameter (``db``) as well.
+    result = replace_redundant_bridges(
+        result,
+        protected_bridge_ids=set(confirmed_bridges),
+    )
     for index, item in enumerate(result):
         course = courses.get(confirmed_bridges.get(int(item.get("bridge_module_id") or 0)))
         if not course:
