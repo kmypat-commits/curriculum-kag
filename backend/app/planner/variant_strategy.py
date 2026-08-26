@@ -949,6 +949,24 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # diversification so every variant is independently admissible (not only
     # the common A schedule).
     result = _trim_to_target_credits(result, target, db)
+    # Whole-course trimming cannot resolve a one-credit overage when every
+    # remaining real course is protected.  Flex only an existing bridge in
+    # that narrow case; its evidence/LO links remain unchanged and the final
+    # plan still has an exact target total.
+    excess = max(0, sum(int(item.get("credits") or 0) for item in result) - target)
+    if excess:
+        for item in result:
+            if excess <= 0 or item.get("bridge_module_id") is None:
+                continue
+            current_credits = int(item.get("credits") or 0)
+            reduction = min(excess, max(0, current_credits - 1))
+            if reduction <= 0:
+                continue
+            item["credits"] = current_credits - reduction
+            module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
+            if module:
+                module.credits = item["credits"]
+            excess -= reduction
     # Final pass: all credit/domain/LO repairs above can converge B/C back to A.
     # Diversify only after the last mutation so an accepted plan keeps its
     # variant identity. The helper preserves same-credit courses, professional
