@@ -136,9 +136,9 @@ def rebalance_domain_quotas(
         # only after the plan-sized safety limit or when no valid swap is
         # available, not at an arbitrary fixed count.
         guard_limit = max(20, len(normalized) * 2)
-        while credits_by_domain()[domain_index] < required[domain_index] and guard < guard_limit:
+        while credits_by_domain(normalized)[domain_index] < required[domain_index] and guard < guard_limit:
             guard += 1
-            current = credits_by_domain()
+            current = credits_by_domain(normalized)
             ids = selected_ids()
             titles = {_title_key(item.get("title")) for item in normalized if item.get("title")}
             candidates = [
