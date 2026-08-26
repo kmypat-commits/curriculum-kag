@@ -483,6 +483,14 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # remain an experiment for standard one-domain programmes only.
     optimized = db.info[optimizer_cache_key].get(variant_type)
     if optimized:
+        # The optimizer may emit synthetic bridges as part of its seed. Apply
+        # the project policy immediately, before any variant-specific repair;
+        # an explicit zero budget must never leak a bridge into A/B.
+        if int(constraints.get("max_new_courses", 5) or 0) <= 0:
+            optimized = [
+                dict(item) for item in optimized
+                if item.get("bridge_module_id") is None
+            ]
         quality_bridge = db.query(BridgeModule).filter(
             BridgeModule.project_version_id == project_version_id,
             BridgeModule.course_id == f"QUALITY_BRIDGE_{project_version_id}",
