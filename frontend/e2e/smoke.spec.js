@@ -19,3 +19,9 @@ test('protected project route does not render a blank screen', async ({ page }) 
   await expect(page.locator('body')).not.toHaveText('');
   await expect(page.locator('body')).toContainText(/Войти|Login|Curriculum|KAG/i);
 });
+
+test('protected graph route does not render a blank screen', async ({ page }) => {
+  await page.goto('/projects/13/graph');
+  await expect(page.locator('body')).not.toHaveText('');
+  await expect(page.locator('body')).toContainText(/Войти|Login|Curriculum|KAG/i);
+});
