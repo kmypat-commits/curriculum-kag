@@ -929,7 +929,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # repair. Keep the final plan envelope honest: no later stage may leave a
     # plan that fails domain quotas if an equal-credit EPVO swap is available.
     result = rebalance_domain_quotas(result)
-    result = replace_redundant_bridge(result, None)
+    result = replace_redundant_bridge(result, protected_bridge_ids=None)
     result = _trim_to_target_credits(result, target, db)
     result = rebalance_domain_quotas(result)
     # The last trim/bridge replacement must not remove the sole real source
@@ -938,7 +938,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = admit_real_courses(result)
     result = top_up_with_real_epvo_courses(result)
     result = top_up_with_credit_bridges(result)
-    result = replace_redundant_bridge(result, None)
+    result = replace_redundant_bridge(result, protected_bridge_ids=None)
     result = _trim_to_target_credits(result, target, db)
     result = _fill_existing_bridge_credit_gap(result, target, db)
     result = rebalance_domain_quotas(result)
