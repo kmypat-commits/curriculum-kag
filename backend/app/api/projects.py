@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.project import Project, ProjectVersion, LearningOutcome
 from app.services.auth import get_current_user
+from app.services.rbac import has_role
 from app.config import settings
 from app.services.ai_contracts import validate_suggestions
 from app.services.pydantic_ai_adapter import run_suggestions as run_pydantic_ai_suggestions
@@ -18,6 +19,16 @@ import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _may_access_project(current_user: User, project: Project) -> bool:
+    return has_role(current_user, "admin") or project.created_by == current_user.id
+
+
+def _require_project_access(current_user: User, project: Project) -> None:
+    # Return 404 rather than confirming the existence of another user's work.
+    if not _may_access_project(current_user, project):
+        raise HTTPException(status_code=404, detail="Проект не найден")
 
 
 def _invalid_epvo_codes(constraints: Dict) -> List[str]:
@@ -320,7 +331,8 @@ async def get_project(
     
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
-    
+    _require_project_access(current_user, project)
+
     # Get latest version
     latest_version = db.query(ProjectVersion).filter(
         ProjectVersion.project_id == project_id
@@ -362,6 +374,7 @@ async def update_project_constraints(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
+    _require_project_access(current_user, project)
     project.constraints_json = payload.constraints
     db.commit()
     return {"status": "success", "project_id": project.id, "constraints": project.constraints_json}
@@ -375,7 +388,10 @@ async def list_projects(
     current_user: User = Depends(get_current_user)
 ):
     """List all projects"""
-    projects = db.query(Project).offset(skip).limit(limit).all()
+    query = db.query(Project)
+    if not has_role(current_user, "admin"):
+        query = query.filter(Project.created_by == current_user.id)
+    projects = query.offset(skip).limit(limit).all()
     # Load the latest version for the whole page in two queries.  The old
     # implementation queried versions (and then learning outcomes lazily) once
     # per project, which made the dashboard degrade linearly as the catalogue
@@ -427,7 +443,8 @@ async def delete_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
-        
+    _require_project_access(current_user, project)
+
     db.delete(project)
     db.commit()
     return {"message": "Project deleted successfully"}
@@ -445,7 +462,19 @@ async def update_lo_weights(
     current_user: User = Depends(get_current_user)
 ):
     """Update weights for multiple learning outcomes"""
+    requested_ids = [item.lo_id for item in updates]
+    if not requested_ids:
+        return {"status": "success", "updated": 0}
+    rows = (
+        db.query(LearningOutcome, Project)
+        .join(ProjectVersion, ProjectVersion.id == LearningOutcome.project_version_id)
+        .join(Project, Project.id == ProjectVersion.project_id)
+        .filter(LearningOutcome.id.in_(requested_ids))
+        .all()
+    )
+    if len(rows) != len(set(requested_ids)) or any(not _may_access_project(current_user, project) for _, project in rows):
+        raise HTTPException(status_code=404, detail="Результат обучения не найден")
     for item in updates:
         db.query(LearningOutcome).filter(LearningOutcome.id == item.lo_id).update({"weight": item.weight})
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "updated": len(updates)}
