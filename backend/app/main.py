@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 import os
@@ -81,6 +82,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(SlowRequestMiddleware)
+# Plan/graph responses can be hundreds of KB of JSON.  Compress only larger
+# payloads; small health and metadata responses remain untouched.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
 
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
