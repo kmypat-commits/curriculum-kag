@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.services.rbac import has_role
 
 
 router = APIRouter()
@@ -43,6 +44,13 @@ class GitOverview(BaseModel):
 
 class CreateBranchRequest(BaseModel):
     branch_name: str = Field(min_length=1, max_length=80)
+
+
+def require_git_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Restrict local repository inspection and branch creation to administrators."""
+    if not has_role(current_user, "admin"):
+        raise HTTPException(status_code=403, detail="Действия с версиями проекта доступны только администратору")
+    return current_user
 
 
 def _git(*args: str) -> str:
@@ -112,7 +120,7 @@ def _bounded_diff(text: str) -> dict:
 
 
 @router.get("/overview", response_model=GitOverview)
-async def git_overview(current_user: User = Depends(get_current_user)):
+async def git_overview(current_user: User = Depends(require_git_admin)):
     branch = _git("branch", "--show-current") or "detached HEAD"
     status_raw = _git("status", "--porcelain")
     commits_raw = _git(
@@ -132,14 +140,14 @@ async def git_overview(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/commits/{commit_hash}/diff")
-async def commit_diff(commit_hash: str, current_user: User = Depends(get_current_user)):
+async def commit_diff(commit_hash: str, current_user: User = Depends(require_git_admin)):
     _git("rev-parse", "--verify", f"{commit_hash}^{{commit}}")
     payload = _bounded_diff(_git("show", "--stat", "--patch", "--find-renames", commit_hash))
     return {"commit": commit_hash, **payload}
 
 
 @router.get("/commits/{commit_hash}/compare-current")
-async def compare_with_current(commit_hash: str, current_user: User = Depends(get_current_user)):
+async def compare_with_current(commit_hash: str, current_user: User = Depends(require_git_admin)):
     _git("rev-parse", "--verify", f"{commit_hash}^{{commit}}")
     payload = _bounded_diff(_git("diff", "--stat", "--patch", "--find-renames", f"{commit_hash}..HEAD"))
     return {"commit": commit_hash, **payload}
@@ -149,7 +157,7 @@ async def compare_with_current(commit_hash: str, current_user: User = Depends(ge
 async def create_branch_from_commit(
     commit_hash: str,
     payload: CreateBranchRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_git_admin),
 ):
     _git("rev-parse", "--verify", f"{commit_hash}^{{commit}}")
     branch_name = payload.branch_name.strip()

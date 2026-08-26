@@ -25,6 +25,11 @@ def tracked_paths() -> list[Path]:
 def main() -> int:
     failures: list[str] = []
     for path in tracked_paths():
+        # During a local move Git still lists the source path until the next
+        # commit.  A deleted path cannot be published, so assess only files
+        # that are present in the worktree.
+        if not path.exists():
+            continue
         relative = path.relative_to(ROOT).as_posix()
         lower = f"/{relative.lower()}"
         name = path.name.lower()

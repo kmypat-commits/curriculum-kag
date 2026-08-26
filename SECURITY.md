@@ -20,8 +20,13 @@ Do not disclose credentials or a reproducible vulnerability in a public issue. C
 - treat uploaded datasets and office documents as untrusted input;
 - keep optional LLM keys in deployment secrets, never in the browser.
 
-The current build-progress registry is process-local. Use one backend worker
-until progress and locking are persisted in PostgreSQL or Redis; multiple
-workers can otherwise report inconsistent generation status.
+Build progress and generation claims are persisted in PostgreSQL. Before a
+multi-worker deployment, run the concurrency contract tests and retain the
+unique build-claim constraint; do not replace this coordination mechanism with
+process-local memory.
+
+The in-app Git version routes are restricted to the `admin` role. Deployments
+must still ensure that the repository directory is readable only by the service
+account and that branch creation is not exposed to untrusted users.
 
 Curriculum data may contain institutional or unpublished programme information. Administrators are responsible for retention rules and access control appropriate to their institution.

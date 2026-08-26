@@ -103,23 +103,28 @@ def build_groups(
                     scores_by_edge[(course_key, lo_key)] = expert_scores.get((course_key, lo_key), 1.0)
             for lo_id, positive_ids in edges_by_lo.items():
                 query = localized(outcomes[lo_id].get("text") or {}, language)
-                positive_ids = list(positive_ids)
+                # A set is useful while collecting duplicate edges, but its
+                # iteration order is deliberately undefined across Python
+                # processes.  Sort before applying the seeded shuffle, and
+                # keep each course paired with its loss weight throughout so
+                # a reproducible shuffle cannot misalign documents and labels.
+                positive_pairs: list[tuple[str, float]] = []
+                for course_id in sorted(positive_ids):
+                    if positive_loss != "graded":
+                        weight = 1.0
+                    else:
+                        raw_weight = scores_by_edge.get((course_id, str(lo_id)), 1.0)
+                        # Unlabelled declared links are valid positives with a
+                        # neutral weight; an explicit zero vote remains a tiny
+                        # graded signal but can never make the loss undefined.
+                        weight = 1.0 if raw_weight is None else max(float(raw_weight), 1e-3)
+                    positive_pairs.append((course_id, weight))
+                rng.shuffle(positive_pairs)
+                positive_ids = [course_id for course_id, _ in positive_pairs]
+                positive_weights = [weight for _, weight in positive_pairs]
                 negative_ids = [course_id for course_id in courses if course_id not in set(positive_ids)]
                 if not query or not positive_ids or not negative_ids:
                     continue
-                rng.shuffle(positive_ids)
-                positive_weights = []
-                for course_id in positive_ids:
-                    if positive_loss != "graded":
-                        positive_weights.append(1.0)
-                        continue
-                    raw_weight = scores_by_edge.get((course_id, str(lo_id)), 1.0)
-                    # Unlabelled declared links are valid positives with a
-                    # neutral weight; an explicit zero vote remains a tiny
-                    # graded signal but can never make the loss undefined.
-                    positive_weights.append(
-                        1.0 if raw_weight is None else max(float(raw_weight), 1e-3)
-                    )
                 if negative_strategy == "lexical":
                     negative_ids.sort(
                         key=lambda course_id: token_overlap(

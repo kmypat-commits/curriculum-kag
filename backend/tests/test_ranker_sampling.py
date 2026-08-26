@@ -58,7 +58,9 @@ def test_all_label_sampling_keeps_unlabelled_and_zero_votes_finite():
         path = Path(directory) / "programmes.jsonl"
         path.write_text(json.dumps(programme, ensure_ascii=False) + "\n", encoding="utf-8")
         groups, _ = build_groups(path, 10, 3, 8, 42, "ru", 0.0, "lexical", "graded")
+        repeated_groups, _ = build_groups(path, 10, 3, 8, 42, "ru", 0.0, "lexical", "graded")
 
     assert groups[0]["positive_count"] == 2
     assert all(weight > 0 for weight in groups[0]["positive_weights"])
-    assert groups[0]["positive_weights"] == [0.001, 1.0]
+    assert groups == repeated_groups
+    assert sorted(groups[0]["positive_weights"]) == [0.001, 1.0]

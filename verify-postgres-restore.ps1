@@ -13,7 +13,22 @@ $dumpPath = Join-Path (Split-Path $manifestPath -Parent) $metadata.dump_file
 if (-not (Test-Path -LiteralPath $dumpPath)) {
     throw "Backup dump not found: $dumpPath"
 }
-$actualHash = (Get-FileHash -LiteralPath $dumpPath -Algorithm SHA256).Hash.ToLowerInvariant()
+function Get-Sha256([string]$Path) {
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            return ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $hasher.Dispose()
+    }
+}
+$actualHash = Get-Sha256 $dumpPath
 if ($actualHash -ne [string]$metadata.sha256) {
     throw "Backup checksum mismatch."
 }
