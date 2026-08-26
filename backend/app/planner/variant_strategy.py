@@ -1005,4 +1005,22 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         domain_index = project_domain_index(course) if course else None
         if domain_index in (0, 1) and project_domains[domain_index]:
             item["domain"] = project_domains[domain_index]
-    return _unique_items_by_title(result)
+    # Diversification is the final mutating stage.  Normalize once more after
+    # it so a replacement cannot reintroduce a one-credit overage.
+    result = _unique_items_by_title(result)
+    result = _trim_to_target_credits(result, target, db)
+    excess = max(0, sum(int(item.get("credits") or 0) for item in result) - target)
+    if excess:
+        for item in result:
+            if excess <= 0 or item.get("bridge_module_id") is None:
+                continue
+            current_credits = int(item.get("credits") or 0)
+            reduction = min(excess, max(0, current_credits - 1))
+            if reduction <= 0:
+                continue
+            item["credits"] = current_credits - reduction
+            module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
+            if module:
+                module.credits = item["credits"]
+            excess -= reduction
+    return result
