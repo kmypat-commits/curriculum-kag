@@ -183,7 +183,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             allow_new_courses=bool(constraints.get("allow_new_courses", True)),
             target=target,
             maximum=maximum,
-            max_new_courses=int(constraints.get("max_new_courses", 5) or 5),
+            # Preserve an explicit zero: standard/GOSO profiles may forbid
+            # synthetic bridge courses entirely.  Using ``or 5`` silently
+            # converted that policy into a five-course bridge budget.
+            max_new_courses=max(0, int(constraints.get("max_new_courses", 5) or 0)),
             variant_type=variant_type,
             version=version,
             db=db,
