@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import logging
 import time
 
@@ -8,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.database import finish_sql_query_measurement, get_db, start_sql_query_measurement
 from app.models.audit import AuditEvent
 from app.models.bridge_module import BridgeModule
 from app.models.course import Course
@@ -31,6 +32,53 @@ from app.api.planner_state import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _record_build_telemetry(
+    db: Session,
+    *,
+    current_user: User,
+    project_version_id: int,
+    state: str,
+    elapsed_seconds: float,
+    timings: dict,
+    sql_query_count: int,
+    response_payload: dict | None = None,
+) -> None:
+    """Persist a compact, non-sensitive build measurement in the audit trail."""
+    cache_flags = [bool(timings.get("epvo_repository_cached")), bool(timings.get("scoring_cached"))]
+    details = {
+        "state": state,
+        "duration_ms": round(max(0.0, elapsed_seconds) * 1000),
+        "stage_timings_seconds": dict(timings),
+        "sql_query_count": max(0, int(sql_query_count)),
+        "cache_hit_rate": round(sum(cache_flags) / len(cache_flags), 2),
+        "response_bytes": len(json.dumps(response_payload or {}, ensure_ascii=False, default=str).encode("utf-8")),
+    }
+    try:
+        db.add(AuditEvent(
+            user_id=current_user.id,
+            action="planner_build_telemetry",
+            entity_type="project_version",
+            entity_id=project_version_id,
+            details_json=details,
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("Could not persist planner telemetry for version %s", project_version_id, exc_info=True)
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    if lower == upper:
+        return round(ordered[lower], 2)
+    return round(ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower), 2)
 
 
 def must_reject_variant(verification: dict | None) -> bool:
@@ -225,6 +273,8 @@ def build_plan(
 ):
     """Build all three curriculum plan variants"""
     build_started = time.perf_counter()
+    sql_measurement = start_sql_query_measurement()
+    sql_query_count: int | None = None
     stage_started = build_started
     timings = {}
     claimed = _claim_build_status(
@@ -468,7 +518,7 @@ def build_plan(
             "timings": timings,
         })
 
-        return {
+        response_payload = {
             "variants": variants,
             "active_variant": best_variant,
             "epvo_repository": epvo_sync,
@@ -479,7 +529,21 @@ def build_plan(
                 "C": "Минимум конфликтов"
             }
         }
+        sql_query_count = finish_sql_query_measurement(sql_measurement)
+        _record_build_telemetry(
+            db,
+            current_user=current_user,
+            project_version_id=project_version_id,
+            state="complete",
+            elapsed_seconds=time.perf_counter() - build_started,
+            timings=timings,
+            sql_query_count=sql_query_count,
+            response_payload=response_payload,
+        )
+        return response_payload
     except HTTPException:
+        if sql_query_count is None:
+            sql_query_count = finish_sql_query_measurement(sql_measurement)
         db.rollback()
         _replace_build_status(project_version_id, **{
             "state": "failed", "stage": "failed", "progress": 0,
@@ -487,14 +551,34 @@ def build_plan(
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         })
+        _record_build_telemetry(
+            db,
+            current_user=current_user,
+            project_version_id=project_version_id,
+            state="rejected",
+            elapsed_seconds=time.perf_counter() - build_started,
+            timings=timings,
+            sql_query_count=sql_query_count,
+        )
         raise
     except Exception as e:
+        if sql_query_count is None:
+            sql_query_count = finish_sql_query_measurement(sql_measurement)
         db.rollback()
         _replace_build_status(project_version_id, **{
             "state": "failed", "stage": "failed", "progress": 0, "error": str(e),
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         })
+        _record_build_telemetry(
+            db,
+            current_user=current_user,
+            project_version_id=project_version_id,
+            state="failed",
+            elapsed_seconds=time.perf_counter() - build_started,
+            timings=timings,
+            sql_query_count=sql_query_count,
+        )
         logger.exception("Plan build failed for project version %s", project_version_id)
         raise HTTPException(status_code=500, detail=f"Не удалось сформировать учебный план: {str(e)}")
 
@@ -514,6 +598,39 @@ async def get_build_status(
         except (TypeError, ValueError):
             pass
     return status
+
+
+@router.get("/{project_version_id}/performance")
+def get_build_performance(
+    project_version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return compact build latency statistics for the project version."""
+    rows = (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.action == "planner_build_telemetry",
+            AuditEvent.entity_type == "project_version",
+            AuditEvent.entity_id == project_version_id,
+        )
+        .order_by(AuditEvent.timestamp.desc())
+        .limit(50)
+        .all()
+    )
+    entries = [row.details_json for row in rows if isinstance(row.details_json, dict)]
+    durations = [float(row.get("duration_ms") or 0) for row in entries]
+    query_counts = [float(row.get("sql_query_count") or 0) for row in entries]
+    response_sizes = [float(row.get("response_bytes") or 0) for row in entries]
+    cache_rates = [float(row.get("cache_hit_rate") or 0) for row in entries]
+    return {
+        "sample_size": len(entries),
+        "duration_ms": {"p50": _percentile(durations, 0.5), "p95": _percentile(durations, 0.95)},
+        "sql_query_count": {"p50": _percentile(query_counts, 0.5), "p95": _percentile(query_counts, 0.95)},
+        "response_bytes": {"p50": _percentile(response_sizes, 0.5), "p95": _percentile(response_sizes, 0.95)},
+        "cache_hit_rate": round(sum(cache_rates) / len(cache_rates), 3) if cache_rates else None,
+        "recent": entries[:10],
+    }
 
 
 @router.post("/{project_version_id}/recompute-matches")
