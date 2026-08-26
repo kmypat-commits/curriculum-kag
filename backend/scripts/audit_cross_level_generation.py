@@ -505,6 +505,9 @@ def main() -> None:
     except Exception as error:
         report.update({
             "status": "failed",
+            "level": args.level,
+            "profile": args.profile,
+            "jurisdiction": args.jurisdiction,
             "elapsed_seconds": round(time.perf_counter() - started, 2),
             "error": f"{type(error).__name__}: {error}",
         })
