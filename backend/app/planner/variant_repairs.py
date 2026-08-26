@@ -40,10 +40,9 @@ def top_up_with_credit_bridges(
         1 for item in normalized if item.get("bridge_module_id") is not None
     )
     remaining_slots = max(0, max_new_courses - current_bridge_count)
-    # A late duplicate/prerequisite cleanup can reopen a small exact-credit gap
-    # after all configured bridge slots are occupied.
-    if remaining_slots <= 0 and 0 < target - total_now <= 3:
-        remaining_slots = 1
+    # Never bypass an explicit zero bridge budget, even for a small credit gap.
+    # A zero budget is a hard policy (standard/GOSO plans); report the gap for
+    # real-course retrieval instead of silently adding a synthetic module.
     if remaining_slots <= 0:
         return normalized
 
