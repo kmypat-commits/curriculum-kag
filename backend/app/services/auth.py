@@ -13,7 +13,7 @@ try:
 except (ImportError, AttributeError):
     pass
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.config import settings
@@ -23,7 +23,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# A CLI may continue to use Authorization: Bearer, while the browser uses the
+# HttpOnly cookie issued by /auth/login.  ``auto_error=False`` lets us safely
+# evaluate both transports before returning a uniform 401.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash using direct bcrypt"""
@@ -71,7 +74,8 @@ def decode_access_token(token: str) -> dict:
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: Optional[str] = Depends(oauth2_scheme),
+    access_token: Optional[str] = Cookie(default=None),
     db: Session = Depends(get_db)
 ) -> User:
     """Get the current authenticated user"""
@@ -81,7 +85,7 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    payload = decode_access_token(token)
+    payload = decode_access_token(token or access_token or "")
     email: str = payload.get("sub")
     if email is None:
         raise credentials_exception

@@ -4,25 +4,19 @@ import { useLanguage } from './LanguageContext'
 
 const AuthContext = createContext(null)
 
+axios.defaults.withCredentials = true
+
 export const AuthProvider = ({ children }) => {
     const { t } = useLanguage()
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        // Check if user is logged in
-        // Keep the access token for the current browser session only.  Migrate
-        // an older localStorage token once, then remove the persistent copy.
-        const legacyToken = localStorage.getItem('token')
-        const token = sessionStorage.getItem('token') || legacyToken
-        if (legacyToken && !sessionStorage.getItem('token')) sessionStorage.setItem('token', legacyToken)
-        if (legacyToken) localStorage.removeItem('token')
-        if (token) {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-            fetchCurrentUser()
-        } else {
-            setLoading(false)
-        }
+        // Browser authentication is kept in an HttpOnly cookie. Clear legacy
+        // JavaScript-readable tokens once without copying them to a new store.
+        localStorage.removeItem('token')
+        sessionStorage.removeItem('token')
+        fetchCurrentUser()
     }, [])
 
     useEffect(() => {
@@ -32,8 +26,6 @@ export const AuthProvider = ({ children }) => {
                 const status = error.response?.status
                 const url = String(error.config?.url || '')
                 if (status === 401 && !url.includes('/auth/login')) {
-                    sessionStorage.removeItem('token')
-                    delete axios.defaults.headers.common['Authorization']
                     setUser(null)
                     error.authExpired = true
                     if (window.location.pathname !== '/login') {
@@ -52,8 +44,7 @@ export const AuthProvider = ({ children }) => {
             const response = await axios.get('/api/auth/me')
             setUser(response.data)
         } catch (error) {
-            sessionStorage.removeItem('token')
-            delete axios.defaults.headers.common['Authorization']
+            setUser(null)
         } finally {
             setLoading(false)
         }
@@ -65,17 +56,15 @@ export const AuthProvider = ({ children }) => {
         params.append('password', password)
 
         const response = await axios.post('/api/auth/login', params)
-        const { access_token } = response.data
-
-        sessionStorage.setItem('token', access_token)
-        axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-
         await fetchCurrentUser()
     }
 
-    const logout = () => {
-        sessionStorage.removeItem('token')
-        delete axios.defaults.headers.common['Authorization']
+    const logout = async () => {
+        try {
+            await axios.post('/api/auth/logout')
+        } catch (_) {
+            // Local state must still be cleared if the server is unavailable.
+        }
         setUser(null)
     }
 

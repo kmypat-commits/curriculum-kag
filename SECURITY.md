@@ -29,4 +29,9 @@ The in-app Git version routes are restricted to the `admin` role. Deployments
 must still ensure that the repository directory is readable only by the service
 account and that branch creation is not exposed to untrusted users.
 
+Browser sessions use an HttpOnly `access_token` cookie with `SameSite=Lax`.
+Set `AUTH_COOKIE_SECURE=true` in every HTTPS deployment; it remains false only
+for the local `http://localhost` launcher. CLI automation may still use the
+short-lived Bearer token returned by the login endpoint.
+
 Curriculum data may contain institutional or unpublished programme information. Administrators are responsible for retention rules and access control appropriate to their institution.

@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     # Plan generation and expert review sessions can legitimately last hours.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    # Local HTTP needs a non-Secure cookie; every HTTPS deployment must set
+    # this to true in its environment instead of changing application code.
+    AUTH_COOKIE_SECURE: bool = False
     
     # Embedding Model
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
