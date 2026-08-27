@@ -115,12 +115,33 @@ function Find-DockerCli {
     return $null
 }
 
-function Start-DockerDesktopIfNeeded([string]$DockerCli) {
+function Test-DockerEngine([string]$DockerCli, [int]$TimeoutMilliseconds = 5000) {
+    # docker.exe may block while the Desktop daemon is wedged; invoking it
+    # directly made the launcher appear frozen despite client timeouts.
+    $process = $null
     try {
-        & $DockerCli version --format "{{.Server.Version}}" 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { return $true }
+        $info = [System.Diagnostics.ProcessStartInfo]::new()
+        $info.FileName = $DockerCli
+        $info.Arguments = 'version --format "{{.Server.Version}}"'
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardOutput = $true
+        $info.RedirectStandardError = $true
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $info
+        [void]$process.Start()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $process.Kill($true)
+            return $false
+        }
+        return $process.ExitCode -eq 0
     }
-    catch { }
+    catch { return $false }
+    finally { if ($process) { $process.Dispose() } }
+}
+
+function Start-DockerDesktopIfNeeded([string]$DockerCli) {
+    if (Test-DockerEngine $DockerCli) { return $true }
 
     $desktopCandidates = @(
         (Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\Docker Desktop.exe"),
@@ -147,11 +168,7 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     }
     $deadline = (Get-Date).AddSeconds(45)
     while ((Get-Date) -lt $deadline) {
-        try {
-            & $DockerCli version --format "{{.Server.Version}}" 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) { return $true }
-        }
-        catch { }
+        if (Test-DockerEngine $DockerCli) { return $true }
         Start-Sleep -Seconds 2
     }
     return $false
