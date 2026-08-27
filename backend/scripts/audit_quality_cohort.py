@@ -40,6 +40,16 @@ def main() -> int:
     for index in range(args.count):
         level, profile = profiles[index % len(profiles)]
         child_output = output.with_name(f"{output.stem}-{index + 1:02d}.json")
+        # Persist progress before the expensive child audit starts.  This makes
+        # a stuck generation visible and leaves a resumable diagnostic record.
+        output.write_text(json.dumps({
+            "status": "running",
+            "completed": len(reports),
+            "requested": args.count,
+            "current": {"cohort_index": index + 1, "level": level, "profile": profile,
+                        "started_at": time.time(), "timeout_seconds": args.timeout},
+            "reports": reports,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
         command = [
             sys.executable,
             str(ROOT / "backend/scripts/audit_cross_level_generation.py"),
