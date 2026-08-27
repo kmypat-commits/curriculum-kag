@@ -7,6 +7,8 @@ export default defineConfig({
         environment: 'jsdom',
         globals: true,
         setupFiles: './src/test/setup.js',
+        // Playwright specs are executed by `npm run test:e2e`, not Vitest.
+        exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**'],
     },
     server: {
         host: '0.0.0.0',
