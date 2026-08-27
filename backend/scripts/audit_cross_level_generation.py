@@ -11,6 +11,7 @@ import json
 import time
 import sys
 from pathlib import Path
+from sqlalchemy import text
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -147,6 +148,10 @@ def main() -> None:
         "doctorate_track": "scientific_pedagogical",
     }
     db = SessionLocal()
+    # Keep disposable cohort audits bounded even when a planner query becomes
+    # pathological; this is local to the audit session and never changes the
+    # production database setting.
+    db.execute(text("SET statement_timeout = '240000'"))
     project_id = None
     started = time.perf_counter()
     report = {"level": args.level, "status": "running"}
