@@ -14,6 +14,12 @@ $backendDir = Join-Path $root "backend"
 $frontendDir = Join-Path $root "frontend"
 $runtimeDist = Join-Path $runtime "dist"
 $pidFile = Join-Path $runtime "pids.json"
+
+# Prevent concurrent launchers (duplicate services and Docker calls).
+$launcherMutex = [Threading.Mutex]::new($false, "Global\CurriculumKAGLauncher")
+try { if (-not $launcherMutex.WaitOne(0)) { throw "Другой запуск Curriculum-KAG уже выполняется." } }
+catch [Threading.AbandonedMutexException] { }
+Register-EngineEvent PowerShell.Exiting -Action { try { $launcherMutex.ReleaseMutex() } catch {} } | Out-Null
 $cpuThreads = if ($env:CURRICULUM_CPU_THREADS) { $env:CURRICULUM_CPU_THREADS } else { "4" }
 # Prevent an unavailable Docker engine from leaving the launcher waiting
 # indefinitely. Users can override these values in the environment when a
@@ -197,13 +203,26 @@ function Start-PostgresShadowIfNeeded {
 
     Write-Host "Starting local PostgreSQL shadow database..." -ForegroundColor Cyan
     Push-Location $root
+    $proc = $null
     try {
-        & $docker compose -f $composeFile up -d
-        if ($LASTEXITCODE -ne 0) { return $false }
+        # Hard timeout avoids an apparently frozen launcher when Docker Desktop
+        # is recovering its moved WSL data directory.
+        $psi = [Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = $docker
+        $psi.Arguments = "compose -f `"$composeFile`" up -d"
+        $psi.WorkingDirectory = $root
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $proc = [Diagnostics.Process]::new(); $proc.StartInfo = $psi
+        [void]$proc.Start()
+        if (-not $proc.WaitForExit(45000)) {
+            try { $proc.Kill($true) } catch {}
+            Write-Warning "Docker Compose не ответил за 45 секунд; запуск остановлен без удаления данных."
+            return $false
+        }
+        if ($proc.ExitCode -ne 0) { return $false }
     }
-    finally {
-        Pop-Location
-    }
+    finally { if ($proc) { $proc.Dispose() }; Pop-Location }
     return (Wait-TcpPort "localhost" 5433 90)
 }
 
