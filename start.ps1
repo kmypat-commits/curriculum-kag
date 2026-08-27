@@ -129,15 +129,23 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     $desktop = $desktopCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $desktop) { return $false }
 
-    Write-Host "Starting Docker Desktop..." -ForegroundColor Cyan
-    try {
-        Start-Process -FilePath $desktop -WindowStyle Hidden -ErrorAction Stop | Out-Null
+    # Avoid launching a second Desktop instance when the daemon is still
+    # initializing (a common cause of duplicate backends and high CPU usage).
+    $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    if (-not $desktopRunning) {
+        Write-Host "Starting Docker Desktop..." -ForegroundColor Cyan
+        try {
+            Start-Process -FilePath $desktop -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        }
+        catch {
+            Write-Host "Docker Desktop could not be started automatically; continuing with the available local database." -ForegroundColor Yellow
+            return $false
+        }
     }
-    catch {
-        Write-Host "Docker Desktop could not be started automatically; continuing with the available local database." -ForegroundColor Yellow
-        return $false
+    else {
+        Write-Host "Docker Desktop is already running; waiting for its daemon..." -ForegroundColor DarkGray
     }
-    $deadline = (Get-Date).AddSeconds(90)
+    $deadline = (Get-Date).AddSeconds(45)
     while ((Get-Date) -lt $deadline) {
         try {
             & $DockerCli version --format "{{.Server.Version}}" 2>$null | Out-Null
