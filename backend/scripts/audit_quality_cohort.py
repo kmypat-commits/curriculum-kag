@@ -23,6 +23,10 @@ def main() -> int:
     parser.add_argument("--count", type=int, default=30)
     parser.add_argument("--output", default=".runtime/quality-cohort.json")
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument(
+        "--variants", nargs="+", choices=("A", "B", "C"), default=["A", "B", "C"],
+        help="Варианты для дочернего acceptance-аудита (по умолчанию A B C).",
+    )
     args = parser.parse_args()
     if not 1 <= args.count <= 50:
         parser.error("count must be between 1 and 50")
@@ -56,7 +60,7 @@ def main() -> int:
             "--level", level,
             "--profile", profile,
             "--jurisdiction", "KZ",
-            "--variants", "A", "B", "C",
+            "--variants", *args.variants,
             "--output", str(child_output),
         ]
         try:
