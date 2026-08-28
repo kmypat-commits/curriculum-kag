@@ -212,7 +212,9 @@ def main() -> None:
             } for match, course in top]
         variants = {}
         for code in args.variants:
+            print(f"plan build start variant={code}", flush=True)
             result = build_curriculum_plan(version.id, db, code, commit=False)
+            print(f"plan build finished variant={code}", flush=True)
             metrics = result.get("metrics") or {}
             verification = metrics.get("verification") or {}
             audit = verification.get("pedagogical_audit") or {}
