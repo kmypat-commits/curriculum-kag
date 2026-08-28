@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import partial
 from itertools import combinations
+import heapq
 import math
 from typing import Dict, List
 
@@ -709,12 +710,22 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             continue
         if total >= target: break
     if total < target:
-        if variant_type == "B":
-            fallback = sorted((c for c in courses.values() if is_project_domain(c) and course_depth(c.id) < num_semesters), key=lambda c: (-role_rank(c), -scope_rank(c), c.recommended_semester or 99, c.credits or 5, c.id))
-        elif variant_type == "C":
-            fallback = sorted((c for c in courses.values() if is_project_domain(c) and course_depth(c.id) < num_semesters), key=lambda c: (-role_rank(c), -scope_rank(c), (c.domain or "").lower(), c.recommended_semester or 99, -c.id))
+        fallback_candidates = (
+            c for c in courses.values()
+            if is_project_domain(c) and course_depth(c.id) < num_semesters
+        )
+        if variant_type == "C":
+            fallback = heapq.nsmallest(
+                500,
+                fallback_candidates,
+                key=lambda c: (-role_rank(c), -scope_rank(c), (c.domain or "").lower(), c.recommended_semester or 99, -c.id),
+            )
         else:
-            fallback = sorted((c for c in courses.values() if is_project_domain(c) and course_depth(c.id) < num_semesters), key=lambda c: (-role_rank(c), -scope_rank(c), c.recommended_semester or 99, c.credits or 5, c.id))
+            fallback = heapq.nsmallest(
+                500,
+                fallback_candidates,
+                key=lambda c: (-role_rank(c), -scope_rank(c), c.recommended_semester or 99, c.credits or 5, c.id),
+            )
         for course in fallback:
             additions = list({item["course_id"]: item for item in bundle(course.id) if item["course_id"] not in selected}.values())
             addition_credits = sum(item["credits"] for item in additions)
