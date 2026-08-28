@@ -102,7 +102,8 @@ if ($QualityCohortCount -gt 0) {
         & $python (Join-Path $backend "scripts\audit_quality_cohort.py") `
             --count $QualityCohortCount `
             --output (Join-Path $runtime "quality-cohort-acceptance.json") `
-            --timeout 900
+            --timeout 900 `
+            --resume
     } "Fresh quality cohort ($QualityCohortCount programmes)"
 }
 Invoke-Checked { & npm.cmd --prefix (Join-Path $root "frontend") run build } "Frontend production build"

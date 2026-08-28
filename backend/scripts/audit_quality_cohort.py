@@ -24,6 +24,11 @@ def main() -> int:
     parser.add_argument("--output", default=".runtime/quality-cohort.json")
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Продолжить незавершённый прогон из существующего progress-файла.",
+    )
+    parser.add_argument(
         "--variants", nargs="+", choices=("A", "B", "C"), default=["A", "B", "C"],
         help="Варианты для дочернего acceptance-аудита (по умолчанию A B C).",
     )
@@ -37,11 +42,20 @@ def main() -> int:
         ("bachelor", "ict-medicine"),
         ("bachelor", "ict-agro"),
     ]
-    reports: list[dict] = []
-    started = time.monotonic()
     output = (ROOT / args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    for index in range(args.count):
+    reports: list[dict] = []
+    if args.resume and output.exists():
+        try:
+            previous = json.loads(output.read_text(encoding="utf-8"))
+            if previous.get("status") == "running" and previous.get("requested") == args.count:
+                reports = [row for row in previous.get("reports", []) if isinstance(row, dict)]
+        except (OSError, json.JSONDecodeError):
+            reports = []
+    if reports:
+        print(json.dumps({"status": "resuming", "completed": len(reports), "requested": args.count}, ensure_ascii=False))
+    started = time.monotonic()
+    for index in range(len(reports), args.count):
         level, profile = profiles[index % len(profiles)]
         child_output = output.with_name(f"{output.stem}-{index + 1:02d}.json")
         # Persist progress before the expensive child audit starts.  This makes
