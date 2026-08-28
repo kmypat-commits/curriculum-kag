@@ -3,6 +3,7 @@ from __future__ import annotations
 from itertools import combinations
 import math
 import re
+import time
 from statistics import median
 from typing import Dict, List
 
@@ -106,6 +107,7 @@ def _diversify_variant_items(
     """
     if variant_type not in {"B", "C"}:
         return items
+    deadline = time.perf_counter() + 10.0
     project_domains = _project_domain_terms(project_version, db)
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
@@ -219,6 +221,8 @@ def _diversify_variant_items(
     # core competency while seeking diversity.  These candidates are still
     # subject to the same score, level, credit and LO checks below.
     for alternatives in competency_requirements.values():
+        if time.perf_counter() >= deadline:
+            return normalized
         for course in catalogue_courses:
             key = _title_key(course.title)
             if (
@@ -230,6 +234,8 @@ def _diversify_variant_items(
             ):
                 alternatives_by_credit.setdefault(int(course.credits or 5), []).append(course)
     for alternatives in alternatives_by_credit.values():
+        if time.perf_counter() >= deadline:
+            return normalized
         alternatives.sort(
             key=lambda course: (
                 course.recommended_semester or 99,
@@ -259,6 +265,8 @@ def _diversify_variant_items(
 
     swaps = 0
     for index, item in removable:
+        if time.perf_counter() >= deadline:
+            return normalized
         if swaps >= max_swaps:
             break
         credits = int(item.get("credits") or 5)
