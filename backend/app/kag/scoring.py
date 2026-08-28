@@ -329,15 +329,10 @@ def _lightweight_candidate_courses(
     lo_keywords = set(_extract_keywords(lo.lo_text, top_n=16))
 
     def rank(course: Course):
-        localization = (localizations or {}).get(course.id)
-        translated_description = " ".join(
-            (
-                (localization or {}).get("description_translations")
-                if localization is not None
-                else (course_translations(course.id, "description") if _legacy_fallback_enabled() else {})
-            or {}).values()
-        )
-        text = " ".join(filter(None, [course.title, course.description or "", translated_description, course.domain or ""])).lower()
+        # Retrieval is only a coarse frontier selection.  Avoid parsing large
+        # descriptions/topics for every row in the EPVO catalogue; the full
+        # text is still used by calculate_match_score for the selected top-K.
+        text = " ".join(filter(None, [course.title, course.domain or ""])).lower()
         hits = sum(1 for keyword in lo_keywords if keyword in text)
         exact_title = any(keyword in (course.title or "").lower() for keyword in lo_keywords)
         return (
