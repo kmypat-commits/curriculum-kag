@@ -26,9 +26,17 @@ from app.services.ai_contracts import validate_achievability
 from app.services.pydantic_ai_adapter import run_achievability as run_pydantic_ai_achievability
 from app.services.llm_errors import LLM_ERRORS
 import json
+import logging
 from typing import Optional
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _internal_error(message: str, error: Exception) -> HTTPException:
+    """Log diagnostics server-side without exposing database/model details."""
+    logger.exception(message, exc_info=error)
+    return HTTPException(status_code=500, detail=message)
 
 
 @router.post("/match-feedback")
@@ -98,7 +106,7 @@ async def compute_matches(
         result = compute_all_matches(project_version_id, db)
         return result
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось вычислить связи дисциплин и LO", e) from e
 
 
 @router.get("/{project_version_id}/coverage")
@@ -148,7 +156,7 @@ async def get_coverage(
             "plan_coverage": plan_coverage,
         }
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось вычислить покрытие LO", e) from e
 
 
 @router.post("/{project_version_id}/propose-merge")
@@ -165,7 +173,7 @@ async def propose_merges(
             "count": len(duplicates)
         }
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось сформировать предложения по объединению", e) from e
 
 
 @router.post("/{project_version_id}/generate-bridge")
@@ -185,7 +193,7 @@ async def generate_bridge(
             "mode": "optional_enrichment" if force_enrichment else "gap_closure",
         }
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось сформировать bridge-модули", e) from e
 
 
 @router.get("/system/status")
@@ -224,7 +232,7 @@ async def graph_stats(
     try:
         return get_graph_stats(db)
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось получить статистику графа", e) from e
 
 
 @router.post("/graph/build")
@@ -249,7 +257,7 @@ async def build_graph(
         )
         return {"status": "built", **stats}
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось построить граф знаний", e) from e
 
 
 @router.post("/bridge/{bridge_module_id}/promote")
@@ -282,9 +290,10 @@ async def promote_bridge(
         })
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.info("Bridge promotion rejected: %s", e)
+        raise HTTPException(status_code=404, detail="Bridge-модуль не найден или недоступен") from e
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось добавить bridge-модуль в репозиторий", e) from e
 
 
 @router.post("/{project_version_id}/plan-feedback")
@@ -307,7 +316,7 @@ async def submit_plan_feedback(
         )
         return {"status": "recorded", "feedback": feedback}
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _internal_error("Не удалось сохранить обратную связь по плану", e) from e
 
 
 @router.post("/{project_version_id}/lo-achievability")

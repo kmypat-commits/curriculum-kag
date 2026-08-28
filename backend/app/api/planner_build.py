@@ -566,7 +566,8 @@ def build_plan(
             sql_query_count = finish_sql_query_measurement(sql_measurement)
         db.rollback()
         _replace_build_status(project_version_id, **{
-            "state": "failed", "stage": "failed", "progress": 0, "error": str(e),
+            "state": "failed", "stage": "failed", "progress": 0,
+            "error": "Не удалось сформировать учебный план",
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         })
@@ -580,7 +581,7 @@ def build_plan(
             sql_query_count=sql_query_count,
         )
         logger.exception("Plan build failed for project version %s", project_version_id)
-        raise HTTPException(status_code=500, detail=f"Не удалось сформировать учебный план: {str(e)}")
+        raise HTTPException(status_code=500, detail="Не удалось сформировать учебный план") from e
 
 
 @router.get("/{project_version_id}/build-status")
@@ -686,9 +687,11 @@ def recompute_matches(
     except Exception as e:
         db.rollback()
         _replace_build_status(project_version_id, **{
-            "state": "failed", "stage": "failed", "progress": 0, "error": str(e)
+            "state": "failed", "stage": "failed", "progress": 0,
+            "error": "Не удалось пересчитать связи дисциплина–LO",
         })
-        raise HTTPException(status_code=500, detail=f"Не удалось пересчитать связи дисциплина–LO: {str(e)}")
+        logger.exception("Match recomputation failed for project version %s", project_version_id)
+        raise HTTPException(status_code=500, detail="Не удалось пересчитать связи дисциплина–LO") from e
 
 
 
