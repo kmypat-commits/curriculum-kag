@@ -30,7 +30,7 @@ LARGE_CATALOG_THRESHOLD = 3000
 # bounded so generation remains finite while preserving both domains.
 INTERDISCIPLINARY_SCOPE_LIMIT = 80
 EPVO_EXPERT_LINK_LIMIT = 32
-LARGE_CATALOG_RETRIEVAL_LIMIT = 5000
+LARGE_CATALOG_RETRIEVAL_LIMIT = 1000
 
 
 def _expert_level_score(level: str | None, strength: float | None) -> float:
