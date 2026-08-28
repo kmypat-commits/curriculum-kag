@@ -796,7 +796,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 total += credits
                 if total >= target:
                     break
-    if variant_type == "B":
+    if variant_type == "B" and not interdisciplinary:
         # Some legacy projects have many equal 5-credit candidates.  In that
         # case the "reuse-first" B heuristic can converge to the same final
         # set as A even when the ordering differs.  Swap a few safe electives
