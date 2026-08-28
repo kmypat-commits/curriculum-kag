@@ -18,6 +18,7 @@ from app.services.content_localization import (
 )
 import numpy as np
 import math
+import time
 
 
 LARGE_CATALOG_THRESHOLD = 3000
@@ -520,11 +521,22 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
 
         lo_scores: List[float] = []
         pending_matches = []
-        candidate_embeddings = embedding_service.encode_batch([
+        candidate_texts = [
             _course_match_text(course, localizations.get(course.id))
             for course_data in top_courses
             if (course := course_by_id.get(int(course_data["course_id"]))) is not None
-        ])
+        ]
+        embedding_started = time.perf_counter()
+        candidate_embeddings = embedding_service.encode_batch(candidate_texts)
+        if progress_callback:
+            progress_callback({
+                "stage": "embedding",
+                "lo_index": index,
+                "lo_total": total_los,
+                "lo_code": lo.lo_code,
+                "candidate_count": len(candidate_texts),
+                "elapsed_seconds": round(time.perf_counter() - embedding_started, 3),
+            })
         candidate_index = 0
         for course_data in top_courses:
             course = course_by_id.get(int(course_data["course_id"]))

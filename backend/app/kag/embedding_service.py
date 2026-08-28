@@ -78,7 +78,20 @@ class EmbeddingService:
     def encode_batch(self, texts: list[str]) -> np.ndarray:
         self._ensure_model_loaded()
         if self.model is not None:
-            try: return self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False).astype(np.float32)
+            try:
+                # Keep inference responsive on CPU and avoid one long opaque
+                # call for large EPVO frontiers.
+                batch_size = 32
+                vectors = [
+                    self.model.encode(
+                        texts[start:start + batch_size],
+                        convert_to_numpy=True,
+                        normalize_embeddings=True,
+                        show_progress_bar=False,
+                    )
+                    for start in range(0, len(texts), batch_size)
+                ]
+                return np.vstack(vectors).astype(np.float32) if vectors else np.empty((0, settings.EMBEDDING_DIMENSION))
             except (RuntimeError, ValueError, TypeError, OSError) as exc: self.load_error = str(exc)
         return np.vstack([self.encode(text) for text in texts]) if texts else np.empty((0, settings.EMBEDDING_DIMENSION))
     def get_model_version(self) -> str:
