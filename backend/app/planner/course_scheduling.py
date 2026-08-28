@@ -154,7 +154,9 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
         schedule[target].append(item); loads[target] += item.get("credits") or 0
         if item.get("course_id") is not None: placed[item["course_id"]] = target
     changed = True
-    while changed:
+    rebalance_iterations = 0
+    while changed and rebalance_iterations < 100:
+        rebalance_iterations += 1
         changed = False
         semester_by_course = {item["course_id"]: semester for semester, items in schedule.items() for item in items if item.get("course_id") is not None}
         for target_semester in [s for s in schedule if loads[s] < lower]:
