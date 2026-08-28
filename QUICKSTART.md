@@ -84,6 +84,20 @@
 
 ## Разработка
 
+## Финальный acceptance
+
+После запуска PostgreSQL и проверки backup можно выполнить полный gate со
+свежей генерацией и cohort из 30 программ:
+
+```powershell
+.\acceptance-test.ps1 -RequireVerifiedBackup -IncludeFreshGeneration `
+  -IncludeInterdisciplinaryGeneration -QualityCohortCount 30
+```
+
+Для расширенной проверки используйте `-QualityCohortCount 50`. Cohort создаёт
+временные проекты, проверяет уровни bachelor/master/doctorate и
+междисциплинарные профили, затем удаляет их.
+
 ### Локальный запуск backend
 
 ```bash

@@ -1,7 +1,9 @@
 param(
     [switch]$RequireVerifiedBackup,
     [switch]$IncludeFreshGeneration,
-    [switch]$IncludeInterdisciplinaryGeneration
+    [switch]$IncludeInterdisciplinaryGeneration,
+    [ValidateRange(30, 50)]
+    [int]$QualityCohortCount = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,6 +96,14 @@ if ($IncludeInterdisciplinaryGeneration) {
             --output (Join-Path $runtime "fresh-ict-medicine-acceptance.json") `
             --variants A B C
     } "Fresh interdisciplinary ICT + medicine A/B/C generation"
+}
+if ($QualityCohortCount -gt 0) {
+    Invoke-Checked {
+        & $python (Join-Path $backend "scripts\audit_quality_cohort.py") `
+            --count $QualityCohortCount `
+            --output (Join-Path $runtime "quality-cohort-acceptance.json") `
+            --timeout 900
+    } "Fresh quality cohort ($QualityCohortCount programmes)"
 }
 Invoke-Checked { & npm.cmd --prefix (Join-Path $root "frontend") run build } "Frontend production build"
 
