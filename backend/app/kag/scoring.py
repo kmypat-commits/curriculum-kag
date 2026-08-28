@@ -28,6 +28,7 @@ LARGE_CATALOG_THRESHOLD = 3000
 # agricultural courses behind the much larger ICT catalogue.  Keep this
 # bounded so generation remains finite while preserving both domains.
 INTERDISCIPLINARY_SCOPE_LIMIT = 80
+EPVO_EXPERT_LINK_LIMIT = 32
 
 
 def _expert_level_score(level: str | None, strength: float | None) -> float:
@@ -96,7 +97,7 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
         db.info["epvo_raw_lo_text_cache_loaded"] = True
     links = db.query(EpvoDisciplineLoLink).filter(
         EpvoDisciplineLoLink.discipline_id == discipline_id,
-    ).limit(200).all()
+    ).limit(EPVO_EXPERT_LINK_LIMIT).all()
     for link in links:
         raw_key = (link.program_source_id, link.lo_source_key)
         if raw_key not in raw_cache:
