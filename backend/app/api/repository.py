@@ -19,9 +19,11 @@ from app.services.epvo_repository import _assign_epvo_prerequisites
 from app.services.llm_errors import LLM_ERRORS
 import pandas as pd
 import json
+import logging
 import time
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 PREREQUISITE_EXEMPT_MARKER = "__prerequisite_exempt__"
 _STATS_CACHE = {"expires_at": 0.0, "payload": None}
 _STATS_CACHE_TTL_SECONDS = 60
@@ -584,9 +586,11 @@ Return ONLY valid JSON, no markdown."""
 
             raw = json.dumps({"courses": all_courses_raw})
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=500, detail=f"Языковая модель вернула некорректные данные: {str(e)}")
+            logger.exception("Repository model returned invalid JSON", exc_info=e)
+            raise HTTPException(status_code=502, detail="Языковая модель вернула некорректные данные") from e
         except LLM_ERRORS as e:
-            raise HTTPException(status_code=500, detail=f"Не удалось обратиться к языковой модели: {str(e)}")
+            logger.exception("Repository model request failed", exc_info=e)
+            raise HTTPException(status_code=502, detail="Не удалось обратиться к языковой модели") from e
 
     else:
         # Mock response when no real API key is configured
@@ -741,7 +745,8 @@ Return ONLY valid JSON."""
             )
             raw = resp.choices[0].message.content
         except LLM_ERRORS as e:
-            raise HTTPException(status_code=500, detail=f"Не удалось обратиться к языковой модели: {str(e)}")
+            logger.exception("Repository model request failed", exc_info=e)
+            raise HTTPException(status_code=502, detail="Не удалось обратиться к языковой модели") from e
     else:
         sorted_c = sorted(all_courses, key=lambda c: (c.recommended_semester or 9, c.course_id))
         mock_assigns = []

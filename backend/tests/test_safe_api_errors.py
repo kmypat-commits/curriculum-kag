@@ -17,3 +17,10 @@ def test_planner_build_api_does_not_interpolate_exception_details():
 
     assert "detail=f\"Не удалось сформировать учебный план: {str(e)}\"" not in source
     assert "detail=f\"Не удалось пересчитать связи дисциплина–LO: {str(e)}\"" not in source
+
+
+def test_repository_model_errors_are_safe_for_clients():
+    source = (API_DIR / "repository.py").read_text(encoding="utf-8")
+
+    assert "detail=f\"Языковая модель вернула некорректные данные: {str(e)}\"" not in source
+    assert "detail=f\"Не удалось обратиться к языковой модели: {str(e)}\"" not in source
