@@ -500,6 +500,8 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 "progress": 12 + int((index - 1) / max(total_los, 1) * 8),
             })
         lo_embedding = embedding_service.encode(lo.lo_text)
+        if progress_callback:
+            progress_callback({"stage": "lo_embedding", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code})
         if large_catalog_mode:
             top_courses = _lightweight_candidate_courses(
                 lo,
@@ -560,6 +562,9 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             )
             candidate_index += 1
             pending_matches.append((course, match_result))
+
+        if progress_callback:
+            progress_callback({"stage": "lo_candidates_scored", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(pending_matches)})
 
         reranked = epvo_two_stage_ranker.rerank(lo.lo_text, [
             {

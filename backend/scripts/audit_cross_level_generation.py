@@ -7,6 +7,7 @@ into the shared normalized repository are intentionally retained.
 from __future__ import annotations
 
 import argparse
+import cProfile
 import faulthandler
 import json
 import time
@@ -188,7 +189,7 @@ def main() -> None:
             version.id,
             db,
             progress_callback=lambda event: print(
-                "scoring progress "
+                f"scoring {event.get('stage', 'progress')} "
                 f"{event.get('lo_index')}/{event.get('lo_total')} "
                 f"{event.get('lo_code')} matches={event.get('matches', 0)}",
                 flush=True,
@@ -215,9 +216,13 @@ def main() -> None:
         for code in args.variants:
             print(f"plan build start variant={code}", flush=True)
             faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
+            profiler = cProfile.Profile()
             try:
+                profiler.enable()
                 result = build_curriculum_plan(version.id, db, code, commit=False)
             finally:
+                profiler.disable()
+                profiler.dump_stats(str(ROOT / ".runtime" / f"plan-build-{version.id}-{code}.prof"))
                 faulthandler.cancel_dump_traceback_later()
             print(f"plan build finished variant={code}", flush=True)
             metrics = result.get("metrics") or {}
