@@ -114,10 +114,15 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
     return best
 
 
-def calculate_semantic_similarity(course_text: str, lo_text: str) -> float:
+def calculate_semantic_similarity(
+    course_text: str,
+    lo_text: str,
+    *,
+    lo_embedding: np.ndarray | None = None,
+) -> float:
     """Cosine similarity between two text strings via the embedding model."""
     course_emb = embedding_service.encode(course_text)
-    lo_emb = embedding_service.encode(lo_text)
+    lo_emb = lo_embedding if lo_embedding is not None else embedding_service.encode(lo_text)
     denom = np.linalg.norm(course_emb) * np.linalg.norm(lo_emb)
     if denom < 1e-9:
         return 0.0
@@ -172,6 +177,7 @@ def calculate_match_score(
     lo: LearningOutcome,
     db: Session,
     localization: Dict | None = None,
+    lo_embedding: np.ndarray | None = None,
 ) -> Dict:
     """
     Compute M(course, LO) — the KAG match score with evidence trail.
@@ -189,7 +195,11 @@ def calculate_match_score(
     course_text = _course_match_text(course, localization)
 
     # 1. Semantic similarity
-    semantic_score = calculate_semantic_similarity(course_text, lo.lo_text)
+    semantic_score = calculate_semantic_similarity(
+        course_text,
+        lo.lo_text,
+        lo_embedding=lo_embedding,
+    )
 
     # 2. Dynamic keyword boost
     lo_keywords = _extract_keywords(lo.lo_text, top_n=16)
@@ -479,6 +489,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 "lo_code": lo.lo_code,
                 "progress": 12 + int((index - 1) / max(total_los, 1) * 8),
             })
+        lo_embedding = embedding_service.encode(lo.lo_text)
         if large_catalog_mode:
             top_courses = _lightweight_candidate_courses(
                 lo,
@@ -513,7 +524,11 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             if not course:
                 continue
             match_result = calculate_match_score(
-                course, lo, db, localizations.get(course.id)
+                course,
+                lo,
+                db,
+                localizations.get(course.id),
+                lo_embedding=lo_embedding,
             )
             pending_matches.append((course, match_result))
 

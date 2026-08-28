@@ -183,7 +183,16 @@ def main() -> None:
         repository = approve_epvo_candidates(version, db, limit=500)
         db.commit()
         print(f"repository created={repository.get('created')} linked={repository.get('linked')}", flush=True)
-        scoring = compute_all_matches(version.id, db)
+        scoring = compute_all_matches(
+            version.id,
+            db,
+            progress_callback=lambda event: print(
+                "scoring progress "
+                f"{event.get('lo_index')}/{event.get('lo_total')} "
+                f"{event.get('lo_code')} matches={event.get('matches', 0)}",
+                flush=True,
+            ),
+        )
         print(f"scoring matches={scoring.get('total_matches')} los={scoring.get('total_los')}", flush=True)
         match_diagnostics = {}
         for lo in db.query(LearningOutcome).filter(
