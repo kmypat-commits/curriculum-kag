@@ -866,7 +866,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             max_general_percent,
         )
     result = rebalance_domain_quotas(result)
-    result = _diversify_variant_items(result, version, db, variant_type)
+    if not (interdisciplinary and variant_type == "B"):
+        result = _diversify_variant_items(result, version, db, variant_type)
     result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(top_up_with_real_epvo_courses(remove_weak_general_items(result)))), target, db)
     if not interdisciplinary:
         result = _limit_general_course_items(
