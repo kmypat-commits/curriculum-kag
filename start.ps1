@@ -17,7 +17,7 @@ $pidFile = Join-Path $runtime "pids.json"
 
 # Prevent concurrent launchers (duplicate services and Docker calls).
 $launcherMutex = [Threading.Mutex]::new($false, "Global\CurriculumKAGLauncher")
-try { if (-not $launcherMutex.WaitOne(0)) { throw "Другой запуск Curriculum-KAG уже выполняется." } }
+try { if (-not $launcherMutex.WaitOne(0)) { throw "Another Curriculum-KAG launcher is already running." } }
 catch [Threading.AbandonedMutexException] { }
 Register-EngineEvent PowerShell.Exiting -Action { try { $launcherMutex.ReleaseMutex() } catch {} } | Out-Null
 $cpuThreads = if ($env:CURRICULUM_CPU_THREADS) { $env:CURRICULUM_CPU_THREADS } else { "4" }
@@ -217,7 +217,7 @@ function Start-PostgresShadowIfNeeded {
         [void]$proc.Start()
         if (-not $proc.WaitForExit(45000)) {
             try { $proc.Kill($true) } catch {}
-            Write-Warning "Docker Compose не ответил за 45 секунд; запуск остановлен без удаления данных."
+            Write-Warning "Docker Compose did not respond within 45 seconds; startup was stopped without deleting data."
             return $false
         }
         if ($proc.ExitCode -ne 0) { return $false }
