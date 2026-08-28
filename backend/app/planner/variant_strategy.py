@@ -136,6 +136,11 @@ from app.planner.variant_policy import (
 )
 
 def select_courses_for_variant(project_version_id: int, db: Session, variant_type: str) -> List[Dict]:
+    def trace(stage: str) -> None:
+        if db.info.get("planner_trace"):
+            print(f"planner stage={stage}", flush=True)
+
+    trace("select_start")
     version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
     constraints = version.project.constraints_json or {}
     target = int(constraints.get("total_credits", 240)); maximum = target + max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE)))
@@ -288,6 +293,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         courses=courses,
         title_key=_title_key,
     )
+    trace("scope_index_ready")
     epvo_scope = scope_index.scope_by_title
     epvo_priority = scope_index.priority_by_title
     epvo_scope_by_id = scope_index.scope_by_course

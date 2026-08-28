@@ -216,6 +216,7 @@ def main() -> None:
         variants = {}
         for code in args.variants:
             print(f"plan build start variant={code}", flush=True)
+            db.info["planner_trace"] = True
             faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
             profiler = cProfile.Profile() if args.profile_stats else None
             try:
