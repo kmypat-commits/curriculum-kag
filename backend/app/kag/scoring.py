@@ -30,6 +30,7 @@ LARGE_CATALOG_THRESHOLD = 3000
 # bounded so generation remains finite while preserving both domains.
 INTERDISCIPLINARY_SCOPE_LIMIT = 80
 EPVO_EXPERT_LINK_LIMIT = 32
+LARGE_CATALOG_RETRIEVAL_LIMIT = 5000
 
 
 def _expert_level_score(level: str | None, strength: float | None) -> float:
@@ -328,6 +329,11 @@ def _lightweight_candidate_courses(
     the strongest candidates with the normal KAG formula.
     """
     lo_keywords = set(_extract_keywords(lo.lo_text, top_n=16))
+    # Keep the lexical frontier bounded even when a broad EPVO scope maps to
+    # tens of thousands of canonical rows.  Interdisciplinary callers invoke
+    # this function separately for each scoped set, so domain representation is
+    # preserved without an unbounded Python scan.
+    courses = courses[:LARGE_CATALOG_RETRIEVAL_LIMIT]
 
     def rank(course: Course):
         # Retrieval is only a coarse frontier selection.  Avoid parsing large
