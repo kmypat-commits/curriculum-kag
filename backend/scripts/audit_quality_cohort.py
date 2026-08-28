@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -78,7 +79,26 @@ def main() -> int:
             "--output", str(child_output),
         ]
         try:
-            completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=args.timeout)
+            child_env = os.environ.copy()
+            # Keep native BLAS/tokenizer runtimes bounded across the long
+            # sequence of disposable ML audits.  This prevents thread-pool
+            # exhaustion and Windows access violations without changing model
+            # weights or scoring semantics.
+            child_env.update({
+                "OMP_NUM_THREADS": "1",
+                "MKL_NUM_THREADS": "1",
+                "OPENBLAS_NUM_THREADS": "1",
+                "TORCH_NUM_THREADS": "1",
+                "TOKENIZERS_PARALLELISM": "false",
+            })
+            completed = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=child_env,
+                text=True,
+                capture_output=True,
+                timeout=args.timeout,
+            )
             report = json.loads(child_output.read_text(encoding="utf-8")) if child_output.exists() else {}
             report["cohort_index"] = index + 1
             report["process_returncode"] = completed.returncode
