@@ -82,18 +82,25 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
 
     project_tokens = set(_extract_keywords(lo.lo_text, top_n=16))
     best = {"score": 0.0}
+    raw_cache = db.info.setdefault("epvo_raw_lo_text_cache", {})
+    if not raw_cache and db.info.get("epvo_raw_lo_text_cache_loaded") is not True:
+        raw_rows = db.query(
+            RawEpvoLearningOutcome.program_source_id,
+            RawEpvoLearningOutcome.source_key,
+            RawEpvoLearningOutcome.payload_json,
+        ).all()
+        raw_cache.update({
+            (int(program_source_id), str(source_key)): _raw_lo_text(payload_json or {})
+            for program_source_id, source_key, payload_json in raw_rows
+        })
+        db.info["epvo_raw_lo_text_cache_loaded"] = True
     links = db.query(EpvoDisciplineLoLink).filter(
         EpvoDisciplineLoLink.discipline_id == discipline_id,
     ).limit(200).all()
     for link in links:
         raw_key = (link.program_source_id, link.lo_source_key)
-        raw_cache = db.info.setdefault("epvo_raw_lo_text_cache", {})
         if raw_key not in raw_cache:
-            raw = db.query(RawEpvoLearningOutcome).filter(
-                RawEpvoLearningOutcome.program_source_id == link.program_source_id,
-                RawEpvoLearningOutcome.source_key == link.lo_source_key,
-            ).first()
-            raw_cache[raw_key] = _raw_lo_text(raw.payload_json if raw else {})
+            raw_cache[raw_key] = ""
         source_text = raw_cache[raw_key]
         source_tokens = set(_extract_keywords(source_text, top_n=16))
         overlap = len(project_tokens & source_tokens) / max(1, min(len(project_tokens), len(source_tokens)))
