@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from itertools import combinations
+import time
 from typing import Any, Dict, List
 
 from app.models.bridge_module import BridgeModule
@@ -130,6 +131,12 @@ def rebalance_domain_quotas(
         curriculum_role=_course_curriculum_role,
     )
 
+    # Quota repair is a best-effort optimization.  Its quality predicate is
+    # deliberately strict, but repeated failed exchanges must not monopolize
+    # generation for an entire programme.
+    repair_started = time.perf_counter()
+    repair_budget_seconds = 20.0
+
     for domain_index in (0, 1):
         guard = 0
         # A 40% quota may require more than twenty 3-credit swaps. Stop
@@ -137,6 +144,8 @@ def rebalance_domain_quotas(
         # available, not at an arbitrary fixed count.
         guard_limit = max(20, len(normalized) * 2)
         while credits_by_domain(normalized)[domain_index] < required[domain_index] and guard < guard_limit:
+            if time.perf_counter() - repair_started >= repair_budget_seconds:
+                return normalized
             guard += 1
             current = credits_by_domain(normalized)
             ids = selected_ids()
