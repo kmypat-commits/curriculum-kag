@@ -77,6 +77,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--variants", nargs="+", choices=("A", "B", "C"), default=("A", "B", "C"))
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument("--profile-stats", action="store_true", help="collect cProfile stats for plan building")
     args = parser.parse_args()
     if args.profile in {"ict-medicine", "ict-agro"}:
         if args.level != "bachelor":
@@ -216,13 +217,15 @@ def main() -> None:
         for code in args.variants:
             print(f"plan build start variant={code}", flush=True)
             faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
-            profiler = cProfile.Profile()
+            profiler = cProfile.Profile() if args.profile_stats else None
             try:
-                profiler.enable()
+                if profiler:
+                    profiler.enable()
                 result = build_curriculum_plan(version.id, db, code, commit=False)
             finally:
-                profiler.disable()
-                profiler.dump_stats(str(ROOT / ".runtime" / f"plan-build-{version.id}-{code}.prof"))
+                if profiler:
+                    profiler.disable()
+                    profiler.dump_stats(str(ROOT / ".runtime" / f"plan-build-{version.id}-{code}.prof"))
                 faulthandler.cancel_dump_traceback_later()
             print(f"plan build finished variant={code}", flush=True)
             metrics = result.get("metrics") or {}
