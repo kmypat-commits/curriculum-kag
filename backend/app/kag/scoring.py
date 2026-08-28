@@ -178,6 +178,7 @@ def calculate_match_score(
     db: Session,
     localization: Dict | None = None,
     lo_embedding: np.ndarray | None = None,
+    course_embedding: np.ndarray | None = None,
 ) -> Dict:
     """
     Compute M(course, LO) — the KAG match score with evidence trail.
@@ -195,11 +196,11 @@ def calculate_match_score(
     course_text = _course_match_text(course, localization)
 
     # 1. Semantic similarity
-    semantic_score = calculate_semantic_similarity(
-        course_text,
-        lo.lo_text,
-        lo_embedding=lo_embedding,
-    )
+    if course_embedding is not None:
+        denom = np.linalg.norm(course_embedding) * np.linalg.norm(lo_embedding)
+        semantic_score = float(np.dot(course_embedding, lo_embedding) / denom) if denom >= 1e-9 else 0.0
+    else:
+        semantic_score = calculate_semantic_similarity(course_text, lo.lo_text, lo_embedding=lo_embedding)
 
     # 2. Dynamic keyword boost
     lo_keywords = _extract_keywords(lo.lo_text, top_n=16)
@@ -519,6 +520,12 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
 
         lo_scores: List[float] = []
         pending_matches = []
+        candidate_embeddings = embedding_service.encode_batch([
+            _course_match_text(course, localizations.get(course.id))
+            for course_data in top_courses
+            if (course := course_by_id.get(int(course_data["course_id"]))) is not None
+        ])
+        candidate_index = 0
         for course_data in top_courses:
             course = course_by_id.get(int(course_data["course_id"]))
             if not course:
@@ -529,7 +536,9 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 db,
                 localizations.get(course.id),
                 lo_embedding=lo_embedding,
+                course_embedding=candidate_embeddings[candidate_index],
             )
+            candidate_index += 1
             pending_matches.append((course, match_result))
 
         reranked = epvo_two_stage_ranker.rerank(lo.lo_text, [
