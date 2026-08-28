@@ -195,7 +195,15 @@ def _diversify_variant_items(
             all(stem.casefold() in text for stem in stems)
             for stems in alternatives
         )
-    for course in db.query(Course).all():
+    # The match/admission maps already define the only courses that can be
+    # valid diversification candidates.  Loading the entire catalogue here
+    # (twice for interdisciplinary competency checks) made variant B spend
+    # minutes materializing thousands of unrelated ORM rows.
+    candidate_course_ids = set(admission_by_course).intersection(match_max_by_course)
+    catalogue_courses = db.query(Course).filter(
+        Course.id.in_(candidate_course_ids or {-1})
+    ).all()
+    for course in catalogue_courses:
         key = _title_key(course.title)
         if (
             course.id not in selected_ids
@@ -211,7 +219,7 @@ def _diversify_variant_items(
     # core competency while seeking diversity.  These candidates are still
     # subject to the same score, level, credit and LO checks below.
     for alternatives in competency_requirements.values():
-        for course in db.query(Course).all():
+        for course in catalogue_courses:
             key = _title_key(course.title)
             if (
                 course.id not in selected_ids
