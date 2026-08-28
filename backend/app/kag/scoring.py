@@ -19,6 +19,7 @@ from app.services.content_localization import (
 import numpy as np
 import math
 import time
+import heapq
 
 
 LARGE_CATALOG_THRESHOLD = 3000
@@ -342,7 +343,8 @@ def _lightweight_candidate_courses(
             -(course.credits or 0),
         )
 
-    ranked = sorted(courses, key=rank, reverse=True)
+    # nlargest avoids materializing and sorting the entire EPVO catalogue.
+    ranked = heapq.nlargest(limit, courses, key=rank)
     return [{"course_id": course.id, "retrieval_score": float(rank(course)[0])} for course in ranked[:limit]]
 
 
