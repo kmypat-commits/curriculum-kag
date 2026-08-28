@@ -7,6 +7,7 @@ into the shared normalized repository are intentionally retained.
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
 import time
 import sys
@@ -213,7 +214,11 @@ def main() -> None:
         variants = {}
         for code in args.variants:
             print(f"plan build start variant={code}", flush=True)
-            result = build_curriculum_plan(version.id, db, code, commit=False)
+            faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
+            try:
+                result = build_curriculum_plan(version.id, db, code, commit=False)
+            finally:
+                faulthandler.cancel_dump_traceback_later()
             print(f"plan build finished variant={code}", flush=True)
             metrics = result.get("metrics") or {}
             verification = metrics.get("verification") or {}
