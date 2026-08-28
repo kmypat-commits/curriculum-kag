@@ -190,6 +190,7 @@ def calculate_match_score(
     localization: Dict | None = None,
     lo_embedding: np.ndarray | None = None,
     course_embedding: np.ndarray | None = None,
+    include_expert_signal: bool = True,
 ) -> Dict:
     """
     Compute M(course, LO) — the KAG match score with evidence trail.
@@ -269,7 +270,7 @@ def calculate_match_score(
             semantic_score + keyword_boost + domain_boost + overlap_score + title_alignment_boost
         ))
     heuristic_score = final_score
-    expert_signal = _epvo_expert_signal(course, lo, db)
+    expert_signal = _epvo_expert_signal(course, lo, db) if include_expert_signal else {"score": 0.0}
     expert_score = float(expert_signal.get("score") or 0.0)
     if expert_score > 0:
         # Expert labels from EPVO are supervised evidence.  Keep the heuristic
@@ -570,6 +571,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 localizations.get(course.id),
                 lo_embedding=lo_embedding,
                 course_embedding=candidate_embeddings[candidate_index],
+                include_expert_signal=candidate_index < 12,
             )
             candidate_index += 1
             pending_matches.append((course, match_result))
