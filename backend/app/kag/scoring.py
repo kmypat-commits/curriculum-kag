@@ -498,6 +498,8 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
         if progress_callback:
             progress_callback({"stage": "lo_embedding", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code})
         if large_catalog_mode:
+            if progress_callback:
+                progress_callback({"stage": "retrieval_start", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "catalogue_count": len(project_courses)})
             top_courses = _lightweight_candidate_courses(
                 lo,
                 project_courses,
@@ -518,6 +520,8 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 ):
                     by_course_id.setdefault(int(row["course_id"]), row)
             top_courses = list(by_course_id.values())
+            if progress_callback:
+                progress_callback({"stage": "retrieval_ready", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(top_courses)})
         else:
             # Hybrid KAG retrieval (vector + graph)
             top_courses = retrieve_top_k_courses_hybrid(
