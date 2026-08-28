@@ -105,6 +105,7 @@ function Find-DockerCli {
     if ($command) { return $command.Source }
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\resources\bin\docker.exe"),
+        (Join-Path $env:LOCALAPPDATA "Docker\resources\bin\docker.exe"),
         "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
     )
     foreach ($candidate in $candidates) {
