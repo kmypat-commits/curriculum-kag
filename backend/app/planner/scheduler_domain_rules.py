@@ -84,6 +84,16 @@ def has_foreign_professional_title(course, project_domains: list[str]) -> bool:
         marker in domains for marker in ("it", "информ", "computer", "6b", "7m", "8d")
     ):
         return False
+    # Cross-domain foundation subjects (for example, Health Economics) are
+    # valid when the title explicitly names the selected secondary field.
+    if any(
+        marker in title
+        for marker in ("здрав", "медицин", "medicine", "medical", "health", "клинич")
+    ) and any(
+        marker in domains
+        for marker in ("здрав", "медицин", "medicine", "medical", "health")
+    ):
+        return False
     context_groups = (
         (("маркетинг", "marketing", "бизнес коммуникац", "business communication", "цифровая экономика", "digital economy", "экономик", "предприяти", "enterprise management", "комплексная логистика", "логистика", "logistics", "бухгалтер", "accounting", "финанс", "finance"), ("бизнес", "управлен", "эконом", "менедж", "маркет", "логист", "финанс", "account", "business", "management", "econom", "marketing", "logistics", "finance")),
         (("промышленная безопасность", "industrial safety"), ("промышлен", "производ", "инженер", "безопасность труда", "industrial", "manufactur", "engineering", "occupational safety")),
