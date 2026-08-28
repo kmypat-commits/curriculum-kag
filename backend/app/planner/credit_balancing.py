@@ -429,7 +429,11 @@ def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_cre
         if excess <= 0:
             break
         current = int(item.get("credits") or 0)
-        reduction = min(excess, max(0, current - 3))
+        # Flexible bridge modules may absorb a one-credit residual. Real
+        # courses remain immutable, while keeping a positive bridge workload
+        # avoids leaving an otherwise valid programme at 241 credits.
+        minimum_bridge_credits = 2
+        reduction = min(excess, max(0, current - minimum_bridge_credits))
         if reduction <= 0:
             continue
         item["credits"] = current - reduction
