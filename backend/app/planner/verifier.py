@@ -10,7 +10,7 @@ from app.models.epvo import EpvoDisciplineNormalized
 from app.kag.embedding_service import embedding_service
 from app.planner.goso import GOSO_COURSE_LO_CODES, evaluate_goso_compliance
 from app.planner.bridge_policy import bridge_module_limit
-from app.planner.domain_evidence import domain_credit_shares
+from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
 LOAD_TOLERANCE = 3
 TOTAL_CREDIT_TOLERANCE = 5
 MATCH_THRESHOLD = 0.4
@@ -282,6 +282,18 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         for item in items:
             scoped_shares = scoped_domain_by_course.get(item.get("course_id"))
             if scoped_shares is not None:
+                # A course may have a broad EPVO link to the primary scope while
+                # its explicit catalogue domain is the secondary discipline.
+                # Do not let that broad link erase auditable domain evidence.
+                item_domain = str(item.get("domain") or "")
+                explicit_matches = [
+                    domain_label_matches(item_domain, [project_domains[index]])
+                    for index in range(2)
+                ]
+                if explicit_matches[1] and not explicit_matches[0]:
+                    scoped_shares = (0.0, 1.0)
+                elif explicit_matches[0] and not explicit_matches[1]:
+                    scoped_shares = (1.0, 0.0)
                 credits = float(item.get("credits") or 0)
                 domain_credits[0] += credits * scoped_shares[0]
                 domain_credits[1] += credits * scoped_shares[1]

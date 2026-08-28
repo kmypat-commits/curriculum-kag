@@ -16,7 +16,7 @@ from app.planner.admission import (
 from app.planner.course_policy import (
     education_level_course_allowed as _education_level_course_allowed,
 )
-from app.planner.domain_evidence import domain_credit_shares
+from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
 from app.planner.scheduler_catalogue import unique_items_by_title as _unique_items_by_title
 from app.planner.scheduler_domain_rules import (
     has_foreign_professional_title as _has_foreign_professional_title,
@@ -107,6 +107,14 @@ def _repair_final_domain_quotas(
         course_id = item.get("course_id")
         if course_id is not None and int(course_id) in scope_weights:
             primary, secondary = scope_weights[int(course_id)]
+            explicit_matches = [
+                domain_label_matches(item.get("domain"), [project_domains[index]])
+                for index in range(2)
+            ]
+            if explicit_matches[1] and not explicit_matches[0]:
+                return (0.0, 1.0)
+            if explicit_matches[0] and not explicit_matches[1]:
+                return (1.0, 0.0)
             return domain_credit_shares(primary, secondary)
         item_domain = str(item.get("domain") or "").casefold().strip()
         matches = [
