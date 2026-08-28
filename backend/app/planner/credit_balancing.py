@@ -415,6 +415,11 @@ def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_cre
     def total() -> int:
         return sum(int(item.get("credits") or 0) for items in schedule.values() for item in items)
 
+    # Keep the same bounded semester envelope used by verification.  A late
+    # whole-course removal must not fix the grand total by creating an
+    # underloaded semester.
+    minimum_semester_load = max(0, int(round(target_credits / 8)) - 3)
+
     for item in sorted(
         (item for items in schedule.values() for item in items if item.get("bridge_module_id") is not None),
         key=lambda row: int(row.get("credits") or 0),
@@ -456,6 +461,8 @@ def _trim_schedule_to_target_credits(schedule: Dict[int, List[Dict]], target_cre
             and not item.get("competency_required")
             and item.get("course_id") not in protected
             and int(item.get("credits") or 0) <= excess
+            and sum(int(row.get("credits") or 0) for row in schedule[semester])
+                - int(item.get("credits") or 0) >= minimum_semester_load
         ]
         if not removable:
             break
