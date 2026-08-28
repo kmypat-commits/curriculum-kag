@@ -571,7 +571,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 localizations.get(course.id),
                 lo_embedding=lo_embedding,
                 course_embedding=candidate_embeddings[candidate_index],
-                include_expert_signal=candidate_index < 12,
+                include_expert_signal=(not large_catalog_mode) and candidate_index < 12,
             )
             candidate_index += 1
             pending_matches.append((course, match_result))
