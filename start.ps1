@@ -157,9 +157,24 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     $desktop = $desktopCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $desktop) { return $false }
 
+    # Remove only a stale inference socket after Desktop has fully exited.
+    # Docker Desktop recreates it; deleting the data-root or WSL disk here
+    # would be unsafe and is deliberately never attempted.
+    $inferenceSocket = Join-Path $env:LOCALAPPDATA "Docker\run\dockerInference"
+    $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    if (-not $desktopRunning -and (Test-Path -LiteralPath $inferenceSocket)) {
+        try {
+            Remove-Item -LiteralPath $inferenceSocket -Force -ErrorAction Stop
+            Write-Host "Removed stale Docker inference socket; Desktop will recreate it." -ForegroundColor DarkGray
+        }
+        catch {
+            Write-Warning "Docker Desktop has a stale inference socket at '$inferenceSocket'. Close Docker Desktop completely, then run start.bat again. No Docker data was changed."
+            return $false
+        }
+    }
+
     # Avoid launching a second Desktop instance when the daemon is still
     # initializing (a common cause of duplicate backends and high CPU usage).
-    $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
     if (-not $desktopRunning) {
         Write-Host "Starting Docker Desktop..." -ForegroundColor Cyan
         try {
@@ -178,6 +193,7 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
         if (Test-DockerEngine $DockerCli) { return $true }
         Start-Sleep -Seconds 2
     }
+    Write-Warning "Docker Desktop did not expose a working engine within 45 seconds. If it shows an 'unexpected error' about dockerInference, choose Quit (not Reset to factory defaults), then run start.bat again."
     return $false
 }
 
