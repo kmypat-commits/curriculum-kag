@@ -10,9 +10,21 @@ import argparse
 import cProfile
 import faulthandler
 import json
+import os
 import time
 import sys
 from pathlib import Path
+
+
+if os.name == "nt":
+    # Disposable cohort workers must report native failures to the parent
+    # process instead of opening a modal Windows error dialog.  The parent
+    # already retries the isolated audit and records its return code.
+    import ctypes
+
+    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0020 | 0x8000)
+
+
 from sqlalchemy import text as sqlalchemy_text
 
 
