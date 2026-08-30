@@ -1052,4 +1052,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if module:
                 module.credits = item["credits"]
             excess -= reduction
+    # No mutation is allowed after the final professional-LO repair.  The
+    # last trim/diversification passes above can remove the sole real course
+    # supporting a programme LO, so close gaps at the actual return boundary
+    # and let the verifier judge the resulting plan.
+    result = close_professional_lo_gaps(result)
     return result
