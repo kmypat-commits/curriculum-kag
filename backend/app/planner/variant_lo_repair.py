@@ -102,9 +102,14 @@ def close_professional_lo_gaps(
                 not course
                 or course.id in selected_ids
                 or not str(course.course_id or "").startswith("EPVO-")
-                or scope_rank(course) <= 0
                 or not is_project_domain(course)
             ):
+                continue
+            # A strong programme-specific match is sufficient evidence for a
+            # real LO repair even when the imported EPVO scope stamp is absent
+            # on that catalogue row.  Domain admission remains mandatory, so
+            # this cannot admit a foreign professional discipline.
+            if scope_rank(course) <= 0 and float(match.score or 0.0) < 0.55:
                 continue
             lo = lo_by_id.get(match.lo_id)
             if not lo:
