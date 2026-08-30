@@ -91,17 +91,29 @@ def main() -> int:
                 "TORCH_NUM_THREADS": "1",
                 "TOKENIZERS_PARALLELISM": "false",
             })
-            completed = subprocess.run(
-                command,
-                cwd=ROOT,
-                env=child_env,
-                text=True,
-                capture_output=True,
-                timeout=args.timeout,
-            )
+            run_kwargs = {
+                "cwd": ROOT,
+                "env": child_env,
+                "text": True,
+                "capture_output": True,
+                "timeout": args.timeout,
+            }
+            # A native Windows crash in the disposable child must not open a
+            # modal "python.exe" dialog that blocks the whole cohort.  Retry
+            # once because the audit is isolated and idempotent; a persistent
+            # failure is still recorded in the cohort report.
+            if os.name == "nt":
+                run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            attempts = 2
+            completed = None
+            for attempt in range(attempts):
+                completed = subprocess.run(command, **run_kwargs)
+                if completed.returncode == 0 or attempt == attempts - 1:
+                    break
             report = json.loads(child_output.read_text(encoding="utf-8")) if child_output.exists() else {}
             report["cohort_index"] = index + 1
             report["process_returncode"] = completed.returncode
+            report["process_attempts"] = attempt + 1
             if completed.returncode != 0:
                 report["stderr_tail"] = completed.stderr[-2000:]
         except Exception as exc:  # keep the cohort moving and record the failure
