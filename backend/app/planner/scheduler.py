@@ -859,8 +859,7 @@ def build_curriculum_plan(
             # project-specific direction. Trust that evidence here; canonical
             # Course.domain may come from the first programme that used the
             # deduplicated discipline (for example, "Medicine").
-            scoped_admission = item.get("admission_reason") == "epvo_scope_and_lo"
-            if course and not (is_project_domain(course) or item_has_project_domain or scoped_admission):
+            if course and not (is_project_domain(course) or item_has_project_domain):
                 invalid_domain_courses.append({
                     "course_id": course.id,
                     "title": course.title,
