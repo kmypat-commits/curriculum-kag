@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Curriculum-KAG Generator"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "testserver"]
     
     class Config:
         env_file = ".env"

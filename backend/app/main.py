@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 import os
 import logging
@@ -50,6 +51,18 @@ class SlowRequestMiddleware(BaseHTTPMiddleware):
         response.headers["Server-Timing"] = f"app;dur={elapsed * 1000:.1f}"
         return response
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Set baseline browser protections at the API boundary."""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        return response
+
 # SQLite remains a local rollback/development mode. PostgreSQL schema changes
 # are applied only through Alembic revisions, never implicitly at API startup.
 if str(settings.DATABASE_URL).startswith("sqlite"):
@@ -78,10 +91,12 @@ app.add_middleware(
         "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 app.add_middleware(SlowRequestMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 # Plan/graph responses can be hundreds of KB of JSON.  Compress only larger
 # payloads; small health and metadata responses remain untouched.
 app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
