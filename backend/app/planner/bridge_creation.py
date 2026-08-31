@@ -455,6 +455,17 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 "Проверка интеграционного решения на предметном кейсе",
             ],
         },
+        {
+            "suffix": "SECONDARY_COVERAGE",
+            "title": "Практикум предметного домена: клинические данные и процессы" if is_medical else f"Практикум предметного домена: {secondary}",
+            "semester": max(3, min(total_semesters - 1, 4)),
+            "credits": 3,
+            "topics": [
+                "Предметные данные и типовые рабочие процессы",
+                "Качество и интерпретация отраслевых данных",
+                "Прикладной кейс цифрового решения",
+            ],
+        },
     ]
     target_los = [
         lo.lo_code for lo in project_version.learning_outcomes
