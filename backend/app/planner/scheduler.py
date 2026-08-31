@@ -518,7 +518,7 @@ def build_curriculum_plan(
             course for course in db.query(Course).all()
             if course.id not in selected_ids
             and _title_key(course.title) not in selected_titles
-            and int(course.credits or 0) == 3
+            and 3 <= int(course.credits or 0) <= 7
             and domain_label_matches(course.domain, [project_version.project.domain2])
             and not course.prerequisites
         ]
@@ -528,17 +528,24 @@ def build_curriculum_plan(
                  if item.get("course_id") is not None
                  and not item.get("regulatory_required")
                  and not item.get("competency_required")
-                 and int(item.get("credits") or 0) == 3
+                 and 3 <= int(item.get("credits") or 0) <= 7
                  and not item.get("prerequisites")),
                 None,
             )
             if replacement is not None:
-                course = secondary_courses[0]
-                replacement.update({
+                course = next(
+                    (candidate for candidate in secondary_courses
+                     if int(candidate.credits or 0) == int(replacement.get("credits") or 0)),
+                    secondary_courses[0],
+                )
+                if int(course.credits or 0) != int(replacement.get("credits") or 0):
+                    course = None
+                if course is not None:
+                    replacement.update({
                     "course_id": course.id,
                     "title": course.title,
                     "domain": course.domain,
-                    "credits": 3,
+                    "credits": int(course.credits or 0),
                     "recommended_semester": course.recommended_semester,
                     "prerequisites": [],
                     "admission_los": [
@@ -547,7 +554,7 @@ def build_curriculum_plan(
                             MatchScore.course_id == course.id,
                         ).order_by(MatchScore.score.desc()).limit(3).all()
                     ],
-                })
+                    })
     total_before_gap_fill = sum(int(item.get("credits") or 0) for item in selected_courses)
     if total_before_gap_fill < target_credits and constraints.get("allow_new_courses", True):
         existing_bridge_ids = {
