@@ -473,6 +473,22 @@ def build_curriculum_plan(
     selected_courses = _cap_bridge_items_to_budget(
         selected_courses, project_version, confirmed_bridge_ids
     )
+    if interdisciplinary_professional:
+        integration = next(
+            (bridge for bridge in ensure_secondary_domain_bridge_modules(project_version, db)
+             if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_")),
+            None,
+        )
+        if integration is not None and not any(
+            int(item.get("bridge_module_id") or 0) == integration.id for item in selected_courses
+        ):
+            selected_courses = [
+                item for item in selected_courses
+                if not str(item.get("title") or "").startswith("Модуль закрытия пробелов")
+            ]
+            selected_courses = _force_bridge_item(
+                selected_courses, integration, variant_type, target_credits
+            )
     total_before_gap_fill = sum(int(item.get("credits") or 0) for item in selected_courses)
     if total_before_gap_fill < target_credits and constraints.get("allow_new_courses", True):
         existing_bridge_ids = {
