@@ -21,5 +21,5 @@ def bridge_module_limit(project_version) -> int:
     # reserve the five-module envelope for interdisciplinary plans.
     program_type = str(constraints.get("program_type") or "").lower()
     if requested > 0 and program_type in {"interdisciplinary", "joint"}:
-        requested = max(requested, 5)
+        requested = max(requested, 6)
     return max(0, min(requested, int(settings.MAX_BRIDGE_MODULES)))
