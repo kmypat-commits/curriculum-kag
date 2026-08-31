@@ -263,7 +263,10 @@ def build_curriculum_plan(
         # courses already cover every LO; generic credit-gap bridges are not.
         meaningful_bridges = [
             ensure_core_interdisciplinary_bridge(project_version, db),
-            *ensure_secondary_domain_bridge_modules(project_version, db),
+            *sorted(
+                ensure_secondary_domain_bridge_modules(project_version, db),
+                key=lambda bridge: 0 if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_") else 1,
+            ),
         ]
         target = int(constraints.get("total_credits", 240))
         for index, bridge in enumerate(meaningful_bridges):
