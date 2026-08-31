@@ -1120,8 +1120,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if course is not None and project_domain_index(course) == 1:
                 item["domain_quota_reserve"] = 2
         for bridge in secondary_bridges:
-            if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_"):
-                result = _force_bridge_item(result, bridge, variant_type, target)
+            result = _force_bridge_item(result, bridge, variant_type, target)
         # Final diversification may replace a secondary-domain course after
         # the earlier quota pass. Re-assert the quota at the true return
         # boundary so every variant remains compliant.

@@ -242,8 +242,20 @@ def _trim_to_target_credits(items: List[Dict], target_credits: int, db: Session)
     def total() -> int:
         return sum(int(item.get("credits") or 0) for item in normalized)
 
+    bridge_rows = []
+    for item in normalized:
+        bridge_id = item.get("bridge_module_id")
+        if bridge_id is None:
+            continue
+        module = db.query(BridgeModule).filter(BridgeModule.id == bridge_id).first()
+        # Secondary-domain modules are quota evidence, not a credit buffer.
+        # Preserve their explicit credits and let whole primary courses absorb
+        # any remaining overage instead.
+        if module and str(module.course_id or "").startswith("SECONDARY_"):
+            continue
+        bridge_rows.append(item)
     for item in sorted(
-        (item for item in normalized if item.get("bridge_module_id") is not None),
+        bridge_rows,
         key=lambda row: int(row.get("credits") or 0),
         reverse=True,
     ):
