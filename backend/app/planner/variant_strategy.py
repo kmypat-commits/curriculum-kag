@@ -1046,7 +1046,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # variant identity. The helper preserves same-credit courses, professional
     # LO coverage, core competencies and prerequisite safety; the verifier
     # remains the final authority for hard constraints.
-    if variant_type in {"B", "C"}:
+    if variant_type in {"B", "C"} and not (interdisciplinary and variant_type == "C"):
         result = _diversify_variant_items(result, version, db, variant_type)
     if (
         variant_type == "C"
