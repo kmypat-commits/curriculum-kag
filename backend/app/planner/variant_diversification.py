@@ -321,7 +321,13 @@ def _diversify_variant_items(
     # every selected course can be the sole strong source for one LO. Two
     # coordinated replacements can still form a genuinely different variant
     # while preserving total credits and all probabilistic LO constraints.
-    if swaps == 0 and variant_type == "C":
+    # C must remain a genuinely different alternative even when the first
+    # conservative one-course swap succeeded.  Previously the pair fallback
+    # ran only for ``swaps == 0``; when B and C selected the same first
+    # alternative, C had no second opportunity and the acceptance audit saw
+    # duplicate schedules.  A pair replacement is still subject to the same
+    # coverage, competency, level and equal-credit safeguards below.
+    if swaps < 2 and variant_type == "C":
         removable_pairs = list(combinations(removable[:12], 2))
         candidate_pairs = list(combinations(pair_candidates, 2))
         candidate_pairs.sort(
