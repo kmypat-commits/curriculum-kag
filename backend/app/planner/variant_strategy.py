@@ -159,7 +159,12 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # the core bridge already supplies integration evidence, so omit the
     # lowest-priority secondary specialization when necessary.
     bridge_budget = bridge_module_limit(version)
-    if core_bridge and len(secondary_bridges) + 1 > bridge_budget:
+    secondary_domain_key = str(project_domains[1] or "").casefold() if len(project_domains) > 1 else ""
+    medical_secondary = any(
+        marker in secondary_domain_key
+        for marker in ("медицин", "медицина", "здрав", "health", "medical", "clinical")
+    )
+    if core_bridge and not medical_secondary and len(secondary_bridges) + 1 > bridge_budget:
         secondary_bridges = secondary_bridges[: max(0, bridge_budget - 1)]
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
