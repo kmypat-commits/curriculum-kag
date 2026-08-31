@@ -309,6 +309,17 @@ def build_curriculum_plan(
             return False
         if not _education_level_course_allowed(course, constraints.get("education_level")):
             return False
+        # Canonical EPVO rows can retain the domain of their first source
+        # programme after title deduplication.  Never let a medical row enter
+        # an ICT+agriculture plan merely because a broad alias/scope match
+        # succeeded elsewhere in the pipeline.
+        course_domain_key = str(course.domain or "").casefold()
+        project_domain_text = " ".join(project_domains).casefold()
+        medical_domain = any(token in course_domain_key for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
+        medical_project = any(token in project_domain_text for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
+        agriculture_project = any(token in project_domain_text for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл"))
+        if medical_domain and agriculture_project and not medical_project:
+            return False
         if not (
             _course_domain_matches(course, project_domains)
             or domain_label_matches(course.domain, project_domains)
