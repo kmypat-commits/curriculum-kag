@@ -303,27 +303,6 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_domain_index = scope_index.domain_index_by_course
     epvo_domain_shares = scope_index.domain_shares_by_course
 
-    if interdisciplinary:
-        # Domain quota candidates must not depend exclusively on LO MatchScore:
-        # a valid secondary-domain course may be relevant to the field while
-        # not matching the programme's ICT learning-outcome wording.  Add only
-        # rows accepted by the same domain policy; admission and quality gates
-        # still run later, and zero-score rows cannot improve LO ranking.
-        for course in db.query(Course).all():
-            if course.id in courses or not _course_domain_matches(course, project_domains):
-                continue
-            courses[course.id] = course
-            aggregates[course.id] = {
-                "sum": 0.0,
-                "los": set(),
-                "lo_codes": set(),
-                "credible_lo_codes": set(),
-                "professional_lo_codes": set(),
-                "lo_scores": {},
-                "max": 0.0,
-                "expert": 0.0,
-            }
-
     # In professional EPVO projects an unscored catalogue row cannot pass the
     # evidence guard. Keeping all ~20k repository courses in every repair and
     # quota loop only increases latency. Retain scored candidates, their
