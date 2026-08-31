@@ -466,6 +466,17 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 "Прикладной кейс цифрового решения",
             ],
         },
+        {
+            "suffix": "SECONDARY_APPLICATION",
+            "title": "Практическое применение цифровых решений в здравоохранении" if is_medical else f"Практическое применение решений в области {secondary}",
+            "semester": max(4, min(total_semesters - 1, 5)),
+            "credits": 5,
+            "topics": [
+                "Отраслевой сценарий и постановка задачи",
+                "Валидация цифрового решения на предметных данных",
+                "Риски, качество и защита результата",
+            ],
+        },
     ]
     target_los = [
         lo.lo_code for lo in project_version.learning_outcomes
