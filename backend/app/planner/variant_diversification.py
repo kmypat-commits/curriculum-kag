@@ -259,7 +259,13 @@ def _diversify_variant_items(
     removable = [
         (index, item)
         for index, item in enumerate(normalized)
-        if item.get("course_id") is not None and item.get("course_id") not in protected_ids
+        if item.get("course_id") is not None
+        and item.get("course_id") not in protected_ids
+        and not item.get("domain_quota_reserve")
+        and not (
+            len(project_domains) > 1
+            and domain_label_matches(item.get("domain"), [project_domains[1]])
+        )
     ]
     removable.sort(key=lambda pair: int(pair[1].get("course_id") or 0), reverse=(variant_type == "C"))
 
