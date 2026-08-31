@@ -56,6 +56,20 @@ def project_domain_terms(project_version: ProjectVersion, db: Session) -> List[s
         if key and key not in seen and not invalid_project_domain_label(value):
             seen.add(key)
             result.append(value)
+            # EPVO uses canonical English domain labels while projects are
+            # commonly entered in Russian.  Keep the original label, but add
+            # bounded aliases so domain-relevant courses enter the evidence
+            # pool without weakening the admissibility rules.
+            aliases = ()
+            if any(marker in value for marker in ("здрав", "медицин", "медиц")):
+                aliases = ("medicine", "medical", "health", "clinical")
+            elif any(marker in value for marker in ("информацион", "информ", "цифров")):
+                aliases = ("it", "information technology", "computer")
+            for alias in aliases:
+                alias_key = title_key(alias)
+                if alias_key not in seen:
+                    seen.add(alias_key)
+                    result.append(alias)
     return result
 
 
