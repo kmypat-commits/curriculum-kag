@@ -6,6 +6,18 @@ from app.planner.scheduler_text import has_domain_term as _has_domain_term
 
 
 def course_domain_matches(course, project_domains: list[str]) -> bool:
+    # GOSO-required research-methods courses are domain-neutral.  Some EPVO
+    # imports inherit the source programme's domain (including ``forensics``)
+    # even though the course is a general academic requirement; rejecting it
+    # creates a false cross-domain failure for otherwise valid programmes.
+    title = _title_key(getattr(course, "title", ""))
+    if any(marker in title for marker in (
+        "методы научных исследований",
+        "методология научного исследования",
+        "methods of scientific research",
+        "research methodology",
+    )):
+        return True
     domain = (course.domain or "").lower().strip()
     return bool(domain) and any(d and (d in domain or domain in d) for d in project_domains)
 
