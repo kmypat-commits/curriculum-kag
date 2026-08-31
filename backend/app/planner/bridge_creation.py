@@ -443,6 +443,18 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 "Защита прикладного проекта",
             ],
         },
+        {
+            "suffix": "SECONDARY_INTEGRATION",
+            "title": "Медицинская интероперабельность, клинические данные и цифровая безопасность" if is_medical else f"Интеграция цифровых решений в области {secondary}",
+            "semester": max(5, min(total_semesters - 1, 6)),
+            "credits": 6,
+            "topics": [
+                "Стандарты и жизненный цикл предметных данных",
+                "Интероперабельность цифровых систем и качество данных",
+                "Защита чувствительных данных и управляемые риски",
+                "Проверка интеграционного решения на предметном кейсе",
+            ],
+        },
     ]
     target_los = [
         lo.lo_code for lo in project_version.learning_outcomes
@@ -462,7 +474,7 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 f"Предметный модуль вторичного домена {secondary}: терминология, процессы, данные, "
                 "ограничения и кейсы, необходимые для междисциплинарной образовательной программы."
             ),
-            "credits": 3 if template["suffix"] == "SECONDARY_ADVANCED" else 5,
+            "credits": int(template.get("credits") or (3 if template["suffix"] == "SECONDARY_ADVANCED" else 5)),
             "recommended_semester": max(1, min(total_semesters - 1, int(template["semester"]))),
             "learning_outcomes": [
                 f"Объяснять ключевые процессы и понятия области {secondary}.",
