@@ -154,7 +154,13 @@ def _diversify_variant_items(
             continue
         expert_score = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
         score = max(float(match.score or 0.0), expert_score)
-        if score < 0.4:
+        # C needs a wider candidate pool to find a genuinely different
+        # doctoral alternative.  The lower admission floor is safe here:
+        # every proposed replacement still has to preserve per-LO coverage
+        # and core competencies in ``preserves_professional_coverage`` and
+        # ``preserves_core_competencies`` below.
+        candidate_floor = 0.3 if variant_type == "C" else 0.4
+        if score < candidate_floor:
             continue
         scores_by_course.setdefault(int(match.course_id), {})[lo_code] = max(
             scores_by_course.get(int(match.course_id), {}).get(lo_code, 0.0),
@@ -213,7 +219,7 @@ def _diversify_variant_items(
             and course.id in admission_by_course
             and key not in selected_titles
             and is_project_domain(course)
-            and match_max_by_course.get(course.id, 0.0) >= 0.4
+            and match_max_by_course.get(course.id, 0.0) >= (0.3 if variant_type == "C" else 0.4)
             and not course.prerequisites
         ):
             alternatives_by_credit.setdefault(int(course.credits or 5), []).append(course)
@@ -229,7 +235,7 @@ def _diversify_variant_items(
                 course.id not in selected_ids
                 and key not in selected_titles
                 and course.id in admission_by_course
-                and match_max_by_course.get(course.id, 0.0) >= 0.4
+                and match_max_by_course.get(course.id, 0.0) >= (0.3 if variant_type == "C" else 0.4)
                 and course_matches_competency(course, alternatives)
             ):
                 alternatives_by_credit.setdefault(int(course.credits or 5), []).append(course)
