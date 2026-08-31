@@ -470,6 +470,16 @@ def main() -> None:
             if args.profile == "standard":
                 return row["bridges"] <= max_allowed_bridges
             details = row.get("bridge_details") or []
+            # CORE_BRIDGE is a protected structural foundation and is already
+            # excluded from ``row["bridges"]`` and the planner quota.  Do not
+            # count it against the secondary-domain allowance here either.
+            quota_details = [
+                item for item in details
+                if not (
+                    str(item.get("code") or "").startswith("CORE_BRIDGE_")
+                    and item.get("mode") == "core_interdisciplinary_bridge"
+                )
+            ]
             real_titles = " ".join(
                 str(title or "").casefold()
                 for title in (row.get("real_courses") or [])
@@ -507,7 +517,7 @@ def main() -> None:
                 if item.get("mode") == "final_credit_and_load_repair"
             ]
             return (
-                len(details) <= max_allowed_bridges
+                len(quota_details) <= max_allowed_bridges
                 and len(meaningful) + len(allowed_credit_repair) == len(details)
                 and (
                     has_real_integration
