@@ -342,6 +342,13 @@ def rebalance_domain_quotas(
                         and project_domain_index(courses.get(item.get("course_id"))) == 0
                         and int(item.get("credits") or 0) <= quota_gap
                     ]
+                    primary_removals.sort(
+                        key=lambda row: (
+                            course_role_rank(row[2]),
+                            priority_rank(row[2]),
+                            -int(row[1].get("semester") or 0),
+                        )
+                    )
                     for bridge_index, bridge_item in secondary_bridge_items:
                         increase = min(
                             quota_gap,
