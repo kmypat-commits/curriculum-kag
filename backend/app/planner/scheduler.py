@@ -514,6 +514,13 @@ def build_curriculum_plan(
             if item.get("course_id") is not None
         }
         selected_titles = {_title_key(item.get("title")) for item in selected_courses}
+        credible_secondary_ids = set(
+            _credible_professional_lo_by_course(
+                project_version,
+                set(match_max_by_course),
+                db,
+            )
+        )
         secondary_courses = [
             course for course in db.query(Course).all()
             if course.id not in selected_ids
@@ -523,6 +530,7 @@ def build_curriculum_plan(
             and not course.prerequisites
             and course.id in match_max_by_course
             and match_max_by_course.get(course.id, 0.0) >= 0.4
+            and course.id in credible_secondary_ids
         ]
         if secondary_courses:
             replacement = next(
