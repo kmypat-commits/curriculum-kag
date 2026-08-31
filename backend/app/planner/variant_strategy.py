@@ -154,6 +154,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     allow_bridges = bool(constraints.get("allow_new_courses", True))
     core_bridge = ensure_core_interdisciplinary_bridge(version, db) if allow_bridges and interdisciplinary else None
     secondary_bridges = ensure_secondary_domain_bridge_modules(version, db) if allow_bridges and interdisciplinary else []
+    # The quality gate counts the structural core bridge together with
+    # secondary modules. Keep the total within the configured bridge budget;
+    # the core bridge already supplies integration evidence, so omit the
+    # lowest-priority secondary specialization when necessary.
+    bridge_budget = bridge_module_limit(version)
+    if core_bridge and len(secondary_bridges) + 1 > bridge_budget:
+        secondary_bridges = secondary_bridges[: max(0, bridge_budget - 1)]
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
         and any("forensic" in d or "криминал" in d or "расслед" in d for d in project_domains)
