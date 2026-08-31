@@ -457,6 +457,31 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         title_for=lambda cid: _title_key(courses[cid].title),
         limit=candidate_limit,
     )
+    secondary_quota_candidate_ids = candidate_ids
+    if interdisciplinary:
+        # The generic frontier is LO-score first and may consist entirely of
+        # the primary ICT domain. Reserve a separate, bounded secondary-domain
+        # tail so its statutory quota is assembled before generic filling.
+        selected_ids = set(candidate_ids)
+        secondary_tail = [
+            course for course in courses.values()
+            if course.id not in selected_ids
+            and is_project_domain(course)
+            and project_domain_share(course, 1) > 0.0
+            and course_depth(course.id) < num_semesters
+        ]
+        secondary_tail.sort(key=lambda course: (
+            -project_domain_share(course, 1),
+            -role_rank(course),
+            -scope_rank(course),
+            -priority_rank(course),
+            int(course.recommended_semester or 99),
+            int(course.id),
+        ))
+        secondary_quota_candidate_ids = [
+            *candidate_ids,
+            *(course.id for course in secondary_tail[:120]),
+        ]
     root_credits = sum(
         int(course.credits or 5)
         for course in courses.values()
@@ -710,7 +735,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             maximum=maximum,
             quota_total_credits=quota_total_credits,
             minimum_percentages=min_domain_percent,
-            candidate_ids=candidate_ids,
+            candidate_ids=secondary_quota_candidate_ids,
             courses=courses,
             project_domain_share=project_domain_share,
             bundle_for_course=bundle,
