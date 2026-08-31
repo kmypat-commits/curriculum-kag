@@ -62,6 +62,18 @@ def rebalance_domain_quotas(
     if not any(required):
         return items
     normalized = [dict(item) for item in items]
+    role_cache: dict[int, int] = {}
+
+    def course_role_rank(course: Any) -> int:
+        if course is None:
+            return 0
+        course_id = getattr(course, "id", None)
+        if course_id is not None and course_id in role_cache:
+            return role_cache[course_id]
+        value = _course_role_rank(course, list(project_domains))
+        if course_id is not None:
+            role_cache[course_id] = value
+        return value
 
     secondary_bridge_ids = {bridge.id for bridge in secondary_bridges}
     core_bridge_id = core_bridge.id if core_bridge is not None else None
@@ -181,7 +193,7 @@ def rebalance_domain_quotas(
                     continue
                 replaceable.sort(
                     key=lambda row: (
-                        _course_role_rank(row[2], project_domains),
+                        course_role_rank(row[2]),
                         priority_rank(row[2]),
                         int(row[1].get("recommended_semester") or 99),
                     )
@@ -257,7 +269,7 @@ def rebalance_domain_quotas(
                     replacement_group = min(
                         replacements,
                         key=lambda group: sum(
-                            _course_role_rank(row[2], project_domains) * 1000
+                            course_role_rank(row[2]) * 1000
                             + priority_rank(row[2])
                             for row in group
                         ),
@@ -345,7 +357,7 @@ def rebalance_domain_quotas(
                     ):
                         replaceable_all.append((index, item, course))
                 replaceable_all.sort(key=lambda row: (
-                    _course_role_rank(row[2], project_domains),
+                    course_role_rank(row[2]),
                     priority_rank(row[2]),
                     int(row[1].get("recommended_semester") or 99),
                 ))
