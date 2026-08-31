@@ -521,6 +521,8 @@ def build_curriculum_plan(
             and 3 <= int(course.credits or 0) <= 7
             and domain_label_matches(course.domain, [project_version.project.domain2])
             and not course.prerequisites
+            and course.id in match_max_by_course
+            and match_max_by_course.get(course.id, 0.0) >= 0.4
         ]
         if secondary_courses:
             replacement = next(
