@@ -13,4 +13,13 @@ def bridge_module_limit(project_version) -> int:
         requested = int(constraints.get("max_new_courses", settings.MAX_BRIDGE_MODULES))
     except (TypeError, ValueError):
         requested = settings.MAX_BRIDGE_MODULES
+    # Interdisciplinary curricula need one structural core bridge plus the
+    # secondary-domain foundation/data/project/integration sequence.  A
+    # legacy per-project value of 4 silently capped that sequence and the
+    # final assembly dropped SECONDARY_INTEGRATION, leaving the second-domain
+    # quota short (notably ict-medicine).  Keep explicit zero disabled, but
+    # reserve the five-module envelope for interdisciplinary plans.
+    program_type = str(constraints.get("program_type") or "").lower()
+    if requested > 0 and program_type in {"interdisciplinary", "joint"}:
+        requested = max(requested, 5)
     return max(0, min(requested, int(settings.MAX_BRIDGE_MODULES)))
