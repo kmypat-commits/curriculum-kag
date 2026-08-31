@@ -113,7 +113,7 @@ def main() -> None:
         # contract therefore limits the number but does not reject a valid
         # interdisciplinary plan merely because it needs these explicit
         # bridges.
-        max_allowed_bridges = 6
+        max_allowed_bridges = 7
         min_prerequisite_edges = 6
     elif args.level == "bachelor":
         total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"

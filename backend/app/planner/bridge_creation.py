@@ -477,6 +477,17 @@ def ensure_secondary_domain_bridge_modules(project_version: ProjectVersion, db: 
                 "Риски, качество и защита результата",
             ],
         },
+        {
+            "suffix": "SECONDARY_SPECIALIZATION",
+            "title": "Специализация предметного домена: цифровое здравоохранение" if is_medical else f"Специализация предметного домена: {secondary}",
+            "semester": max(5, min(total_semesters - 1, 6)),
+            "credits": 6,
+            "topics": [
+                "Продвинутые предметные процессы и данные",
+                "Проектирование решения с отраслевыми ограничениями",
+                "Оценка качества, безопасности и применимости",
+            ],
+        },
     ]
     target_los = [
         lo.lo_code for lo in project_version.learning_outcomes

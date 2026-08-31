@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # KAG Configuration
     SIMILARITY_THRESHOLD: float = 0.82
     COVERAGE_THRESHOLD: float = 0.60
-    MAX_BRIDGE_MODULES: int = 6
+    MAX_BRIDGE_MODULES: int = 7
     TOP_K_RETRIEVAL: int = 20
     # Profiled production defaults. NSGA-II ranking is O(G * P^2); the old
     # 200x100 settings spent minutes ranking near-identical curricula. 36x50
