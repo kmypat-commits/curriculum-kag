@@ -339,7 +339,7 @@ def rebalance_domain_quotas(
                         if item.get("course_id") is not None
                         and not item.get("regulatory_required")
                         and item.get("course_id") not in protected
-                        and project_domain_index(courses.get(item.get("course_id"))) == 0
+                        and project_domain_index(courses.get(item.get("course_id"))) != domain_index
                         and int(item.get("credits") or 0) <= quota_gap
                     ]
                     primary_removals.sort(
