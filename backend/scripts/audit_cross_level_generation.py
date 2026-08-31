@@ -91,6 +91,10 @@ def main() -> None:
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--profile-stats", action="store_true", help="collect cProfile stats for plan building")
     args = parser.parse_args()
+    # A cohort worker can spend minutes inside a native/ML call.  Emit a
+    # periodic Python traceback to stderr so the parent can identify the
+    # blocked phase instead of recording an opaque timeout only.
+    faulthandler.dump_traceback_later(60, repeat=True, file=sys.stderr)
     if args.profile in {"ict-medicine", "ict-agro"}:
         if args.level != "bachelor":
             parser.error("interdisciplinary control profiles currently require --level bachelor")
@@ -562,6 +566,7 @@ def main() -> None:
         })
         raise
     finally:
+        faulthandler.cancel_dump_traceback_later()
         # ``--keep`` is an explicit debugging option: retain the generated
         # temporary project so its schedule can be inspected after a failed
         # control run.  The default remains rollback + cleanup.
