@@ -1068,7 +1068,14 @@ def _cap_bridge_items_to_budget(
     confirmed = confirmed_bridge_ids or set()
     protected = [item for item in bridges if int(item.get("bridge_module_id") or 0) in confirmed]
     if len(protected) >= limit:
-        keep = protected
+        protected.sort(
+            key=lambda item: (
+                0 if str(item.get("course_id") or "").startswith("SECONDARY_INTEGRATION_") else
+                1 if str(item.get("course_id") or "").startswith("SECONDARY_") else 2,
+                -int(item.get("credits") or 0),
+            )
+        )
+        keep = protected[:limit]
     else:
         remaining = [item for item in bridges if item not in protected]
         remaining.sort(
