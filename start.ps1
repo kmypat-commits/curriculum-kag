@@ -160,15 +160,35 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     # Remove only a stale inference socket after Desktop has fully exited.
     # Docker Desktop recreates it; deleting the data-root or WSL disk here
     # would be unsafe and is deliberately never attempted.
-    $inferenceSocket = Join-Path $env:LOCALAPPDATA "Docker\run\dockerInference"
+    $runtimeSocketNames = @(
+        "dockerEthernetVfkit",
+        "dockerInference",
+        "sailor-ingest.sock",
+        "userAnalyticsOtlpHttp.sock"
+    )
+    $runtimeSockets = $runtimeSocketNames |
+        ForEach-Object { Join-Path $env:LOCALAPPDATA "Docker\run\$_" } |
+        Where-Object { Test-Path -LiteralPath $_ }
     $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
-    if (-not $desktopRunning -and (Test-Path -LiteralPath $inferenceSocket)) {
+    if ($runtimeSockets) {
+        # A stale socket can survive a crashed Desktop process and prevents
+        # the Linux engine from starting. Recover the runtime state in-place;
+        # never touch the WSL disk or Docker data root.
+        if ($desktopRunning) {
+            Write-Host "Recovering Docker Desktop runtime sockets..." -ForegroundColor Yellow
+            Get-Process -Name "Docker Desktop", "com.docker.backend" -ErrorAction SilentlyContinue |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
+            $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+        }
         try {
-            Remove-Item -LiteralPath $inferenceSocket -Force -ErrorAction Stop
-            Write-Host "Removed stale Docker inference socket; Desktop will recreate it." -ForegroundColor DarkGray
+            foreach ($socket in $runtimeSockets) {
+                Remove-Item -LiteralPath $socket -Force -ErrorAction Stop
+            }
+            Write-Host "Removed stale Docker runtime sockets; Desktop will recreate them." -ForegroundColor DarkGray
         }
         catch {
-            Write-Warning "Docker Desktop has a stale inference socket at '$inferenceSocket'. Close Docker Desktop completely, then run start.bat again. No Docker data was changed."
+            Write-Warning "Docker Desktop has stale runtime sockets under '$($env:LOCALAPPDATA)\Docker\run'. Reboot Windows once, then run start.bat again. No Docker data was changed."
             return $false
         }
     }
