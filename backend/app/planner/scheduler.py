@@ -549,10 +549,12 @@ def build_curriculum_plan(
                     "recommended_semester": course.recommended_semester,
                     "prerequisites": [],
                     "admission_los": [
-                        row.lo_id for row in db.query(MatchScore).filter(
+                        lo.lo_code for lo in db.query(LearningOutcome).filter(
+                            LearningOutcome.id.in_([row.lo_id for row in db.query(MatchScore).filter(
                             MatchScore.project_version_id == project_version.id,
                             MatchScore.course_id == course.id,
-                        ).order_by(MatchScore.score.desc()).limit(3).all()
+                            ).order_by(MatchScore.score.desc()).limit(3).all()])
+                        ).all()
                     ],
                     })
     total_before_gap_fill = sum(int(item.get("credits") or 0) for item in selected_courses)
