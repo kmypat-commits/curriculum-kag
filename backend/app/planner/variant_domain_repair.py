@@ -315,6 +315,63 @@ def rebalance_domain_quotas(
                     swapped = True
                     break
             if not swapped:
+                # A full 240-credit plan can still miss the secondary quota
+                # after all equal-credit exchanges are exhausted.  Generated
+                # secondary bridges have an explicit 3--7 credit envelope;
+                # flex one of them and remove an equal-credit, non-regulatory
+                # primary course.  This preserves the total and avoids
+                # inventing an eighth bridge or rewriting a catalogue course.
+                quota_gap = max(
+                    0,
+                    int(required[domain_index] - current[domain_index]
+                        - domain_quota_tolerance),
+                )
+                if quota_gap and domain_index == 1:
+                    secondary_bridge_items = [
+                        (index, item)
+                        for index, item in enumerate(normalized)
+                        if item.get("bridge_module_id") in secondary_bridge_ids
+                        and int(item.get("credits") or 0) < 7
+                    ]
+                    primary_removals = [
+                        (index, item, courses.get(item.get("course_id")))
+                        for index, item in enumerate(normalized)
+                        if item.get("course_id") is not None
+                        and not item.get("regulatory_required")
+                        and item.get("course_id") not in protected
+                        and project_domain_index(courses.get(item.get("course_id"))) == 0
+                        and int(item.get("credits") or 0) <= quota_gap
+                    ]
+                    for bridge_index, bridge_item in secondary_bridge_items:
+                        increase = min(
+                            quota_gap,
+                            7 - int(bridge_item.get("credits") or 0),
+                        )
+                        donor = next(
+                            (
+                                row for row in primary_removals
+                                if int(row[1].get("credits") or 0) == increase
+                            ),
+                            None,
+                        )
+                        if donor is None:
+                            continue
+                        trial = [dict(item) for item in normalized]
+                        trial[bridge_index]["credits"] = int(bridge_item.get("credits") or 0) + increase
+                        del trial[donor[0]]
+                        if not quality_preserved(trial):
+                            continue
+                        new_bridge_credits = int(bridge_item.get("credits") or 0) + increase
+                        normalized = trial
+                        module = db.query(BridgeModule).filter(
+                            BridgeModule.id == bridge_item["bridge_module_id"]
+                        ).first()
+                        if module:
+                            module.credits = new_bridge_credits
+                        swapped = True
+                        break
+                if swapped:
+                    continue
                 def missing_domain_bundle(course_id: int, visiting: set | None = None):
                     return _build_missing_domain_bundle(
                         course_id,
