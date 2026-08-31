@@ -24,7 +24,14 @@ def project_domain_index(
         if domain_label_matches(course.domain, [project_domain]):
             return index
     mapped = epvo_domain_index.get(course.id)
-    return mapped if mapped in (0, 1) else None
+    # EPVO imports use 1-based domain labels (1=primary, 2=secondary),
+    # while planner quota arrays are zero-based. Normalize at this boundary
+    # so secondary-domain candidates remain eligible for quota repair.
+    if mapped in (0, 1):
+        return mapped
+    if mapped == 2:
+        return 1
+    return None
 
 
 def project_domain_share(
