@@ -105,7 +105,7 @@ def _diversify_variant_items(
     The replacement is conservative: same credits, same project domains, no
     prerequisites, no duplicate title, and no removal of a selected prerequisite.
     """
-    if variant_type not in {"B", "C"}:
+    if variant_type not in {"A", "B", "C"}:
         return items
     deadline = time.perf_counter() + 10.0
     project_domains = _project_domain_terms(project_version, db)
