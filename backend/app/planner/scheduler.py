@@ -410,6 +410,23 @@ def build_curriculum_plan(
         selected_courses = _repair_missing_ict_competencies(
             selected_courses, project_version, db
         )
+        if interdisciplinary_professional:
+            integration = next(
+                (bridge for bridge in ensure_secondary_domain_bridge_modules(project_version, db)
+                 if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_")),
+                None,
+            )
+            if integration is not None and not any(
+                int(item.get("bridge_module_id") or 0) == integration.id
+                for item in selected_courses
+            ):
+                selected_courses = [
+                    item for item in selected_courses
+                    if not str(item.get("title") or "").startswith("Модуль закрытия пробелов")
+                ]
+                selected_courses = _force_bridge_item(
+                    selected_courses, integration, variant_type, target_credits
+                )
         schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
         schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
         verification = verify_curriculum_plan(schedule, project_version, db)
