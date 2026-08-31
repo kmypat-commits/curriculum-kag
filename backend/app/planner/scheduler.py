@@ -643,6 +643,7 @@ def build_curriculum_plan(
                 bridge is not meaningful_bridges[0]
                 and sum(int(item.get("credits") or 0) for item in selected_courses)
                 >= target_credits
+                and not str(bridge.course_id or "").startswith("SECONDARY_")
             ):
                 break
             selected_courses = _force_bridge_item(
