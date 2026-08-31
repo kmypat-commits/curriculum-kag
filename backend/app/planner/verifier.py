@@ -290,11 +290,20 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 # its explicit catalogue domain is the secondary discipline.
                 # Do not let that broad link erase auditable domain evidence.
                 item_domain = " ".join((str(item.get("domain") or ""), canonical_domains.get(int(item.get("course_id") or 0), "")))
+                canonical_label = canonical_domains.get(int(item.get("course_id") or 0), "")
                 explicit_matches = [
                     domain_label_matches(item_domain, [project_domains[index]])
                     for index in range(2)
                 ]
-                if explicit_matches[1] and not explicit_matches[0]:
+                canonical_matches = [
+                    domain_label_matches(canonical_label, [project_domains[index]])
+                    for index in range(2)
+                ]
+                if canonical_matches[1] and not canonical_matches[0]:
+                    scoped_shares = (0.0, 1.0)
+                elif canonical_matches[0] and not canonical_matches[1]:
+                    scoped_shares = (1.0, 0.0)
+                elif explicit_matches[1] and not explicit_matches[0]:
                     scoped_shares = (0.0, 1.0)
                 elif explicit_matches[0] and not explicit_matches[1]:
                     scoped_shares = (1.0, 0.0)
@@ -302,7 +311,18 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 domain_credits[0] += credits * scoped_shares[0]
                 domain_credits[1] += credits * scoped_shares[1]
                 continue
-            item_domain = " ".join((str(item.get("domain") or ""), canonical_domains.get(int(item.get("course_id") or 0), ""))).casefold().strip()
+            canonical_label = canonical_domains.get(int(item.get("course_id") or 0), "")
+            item_domain = " ".join((str(item.get("domain") or ""), canonical_label)).casefold().strip()
+            canonical_matches = [
+                domain_label_matches(canonical_label, [project_domains[index]])
+                for index in range(2)
+            ]
+            if canonical_matches[1] and not canonical_matches[0]:
+                domain_credits[1] += int(item.get("credits") or 0)
+                continue
+            if canonical_matches[0] and not canonical_matches[1]:
+                domain_credits[0] += int(item.get("credits") or 0)
+                continue
             for index, domain in enumerate(project_domains):
                 if domain_label_matches(item_domain, [domain]):
                     domain_credits[index] += int(item.get("credits") or 0)
