@@ -300,8 +300,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 continue
             item_domain = str(item.get("domain") or "").casefold().strip()
             for index, domain in enumerate(project_domains):
-                domain_key = str(domain).casefold().strip()
-                if domain_key and (domain_key in item_domain or item_domain in domain_key):
+                if domain_label_matches(item_domain, [domain]):
                     domain_credits[index] += int(item.get("credits") or 0)
                     break
     # Explicit interdisciplinary modules are part of the domain envelope:
