@@ -1025,6 +1025,12 @@ def _cap_bridge_items_to_budget(
         remaining = [item for item in bridges if item not in protected]
         remaining.sort(
             key=lambda item: (
+                # Preserve explicit interdisciplinary structure before
+                # generic LO-gap/load-repair bridges.  Without this priority
+                # the cap kept SECONDARY_FOUNDATION/DATA/ADVANCED but dropped
+                # SECONDARY_INTEGRATION, making the second-domain quota fail.
+                0 if str(item.get("course_id") or "").startswith("SECONDARY_INTEGRATION_") else
+                1 if str(item.get("course_id") or "").startswith("SECONDARY_") else 2,
                 -len(item.get("target_los") or item.get("learning_outcomes") or []),
                 -float(item.get("admission_score") or item.get("score") or 0.0),
                 int(item.get("credits") or 0),
