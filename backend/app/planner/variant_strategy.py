@@ -1121,6 +1121,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 item["domain_quota_reserve"] = 2
         for bridge in secondary_bridges:
             result = _force_bridge_item(result, bridge, variant_type, target)
+        # Re-assert the structural integration bridge after the final quota
+        # repair.  The quota exchange can replace it while preserving course
+        # credits, leaving medical variants short of the secondary-domain
+        # minimum even though their bridge budget is otherwise valid.
+        result = _force_bridge_item(result, core_bridge, variant_type, target)
         # Final diversification may replace a secondary-domain course after
         # the earlier quota pass. Re-assert the quota at the true return
         # boundary so every variant remains compliant.
