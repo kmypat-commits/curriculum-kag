@@ -479,8 +479,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             int(course.id),
         ))
         secondary_quota_candidate_ids = [
-            *candidate_ids,
             *(course.id for course in secondary_tail[:120]),
+            *candidate_ids,
         ]
     root_credits = sum(
         int(course.credits or 5)
