@@ -1103,6 +1103,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # and let the verifier judge the resulting plan.
     result = close_professional_lo_gaps(result)
     if interdisciplinary:
+        for item in result:
+            course = courses.get(item.get("course_id"))
+            if course is not None and project_domain_index(course) == 1:
+                item["domain_quota_reserve"] = 2
         for bridge in secondary_bridges:
             if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_"):
                 result = _force_bridge_item(result, bridge, variant_type, target)
