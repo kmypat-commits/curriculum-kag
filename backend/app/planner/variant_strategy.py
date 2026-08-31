@@ -6,6 +6,7 @@ import heapq
 import math
 from typing import Dict, List
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -302,6 +303,25 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_level_scope_allowed_ids = scope_index.level_scope_allowed_ids
     epvo_domain_index = scope_index.domain_index_by_course
     epvo_domain_shares = scope_index.domain_shares_by_course
+
+    if interdisciplinary:
+        # Keep a bounded secondary-domain safety pool for courses whose
+        # semantic LO score is absent. A full catalogue scan is too costly.
+        domain_filters = [Course.domain.ilike(f"%{alias}%") for alias in project_domains if alias]
+        if domain_filters:
+            for course in (
+                db.query(Course).filter(or_(*domain_filters))
+                .order_by(Course.recommended_semester.asc(), Course.id.asc())
+                .limit(250).all()
+            ):
+                if course.id in courses:
+                    continue
+                courses[course.id] = course
+                aggregates[course.id] = {
+                    "sum": 0.0, "los": set(), "lo_codes": set(),
+                    "credible_lo_codes": set(), "professional_lo_codes": set(),
+                    "lo_scores": {}, "max": 0.0, "expert": 0.0,
+                }
 
     # In professional EPVO projects an unscored catalogue row cannot pass the
     # evidence guard. Keeping all ~20k repository courses in every repair and
