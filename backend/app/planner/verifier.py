@@ -586,6 +586,10 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         for items in schedule.values()
         for item in items
         if item.get("bridge_module_id") is not None
+        and not (
+            str(getattr(bridge_by_id.get(item.get("bridge_module_id")), "course_id", "") or "")
+            .startswith("CORE_BRIDGE_")
+        )
     )
     bridge_limit = bridge_module_limit(project_version)
     bridge_overflow = max(0, bridge_count - bridge_limit)
