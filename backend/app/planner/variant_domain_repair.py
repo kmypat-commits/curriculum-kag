@@ -147,7 +147,11 @@ def rebalance_domain_quotas(
     # deliberately strict, but repeated failed exchanges must not monopolize
     # generation for an entire programme.
     repair_started = time.perf_counter()
-    repair_budget_seconds = 20.0
+    # Interdisciplinary catalogues may need several exact-credit exchanges to
+    # satisfy both domain quotas.  The previous 20-second cap returned a
+    # valid-looking but underfilled secondary domain before the search had
+    # examined its bounded candidate frontier.
+    repair_budget_seconds = 45.0
 
     for domain_index in (0, 1):
         guard = 0
