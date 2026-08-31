@@ -280,6 +280,30 @@ def build_curriculum_plan(
                 variant_type,
                 target,
             )
+        integration = next(
+            (bridge for bridge in meaningful_bridges
+             if bridge is not None and str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_")),
+            None,
+        )
+        if integration is not None and not any(
+            int(item.get("bridge_module_id") or 0) == integration.id
+            for item in selected_courses
+        ):
+            # A confirmed generic gap bridge can consume the hard bridge
+            # budget before the structural integration module is admitted.
+            # Release that slot explicitly; the integration module is the
+            # auditable evidence for the second-domain quota.
+            generic_index = next(
+                (index for index, item in enumerate(selected_courses)
+                 if str(bridge_codes.get(item.get("bridge_module_id"), "")).startswith(
+                     ("LO_GAP_BRIDGE_", "AUTO_BRIDGE_", "QUALITY_BRIDGE_", "AUTO_BALANCE_", "AUTO_LOAD_SHIFT_"))),
+                None,
+            )
+            if generic_index is not None:
+                selected_courses.pop(generic_index)
+            selected_courses = _force_bridge_item(
+                selected_courses, integration, variant_type, target
+            )
         selected_courses = _cap_bridge_items_to_budget(
             selected_courses, project_version, confirmed_bridge_ids
         )

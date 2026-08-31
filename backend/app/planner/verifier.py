@@ -260,6 +260,10 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     primary_direction = str(constraints.get("direction_code") or "").strip()
     secondary_direction = str(constraints.get("secondary_direction_code") or "").strip()
     scoped_domain_by_course: Dict[int, tuple[float, float]] = {}
+    canonical_domains = {
+        int(course.id): str(course.domain or "")
+        for course in db.query(Course).filter(Course.id.in_(selected_course_ids)).all()
+    }
     if selected_course_ids and (primary_group or secondary_group or primary_direction or secondary_direction):
         normalized_rows = db.query(EpvoDisciplineNormalized).filter(
             EpvoDisciplineNormalized.approved_course_id.in_(selected_course_ids)
@@ -285,7 +289,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 # A course may have a broad EPVO link to the primary scope while
                 # its explicit catalogue domain is the secondary discipline.
                 # Do not let that broad link erase auditable domain evidence.
-                item_domain = str(item.get("domain") or "")
+                item_domain = " ".join((str(item.get("domain") or ""), canonical_domains.get(int(item.get("course_id") or 0), "")))
                 explicit_matches = [
                     domain_label_matches(item_domain, [project_domains[index]])
                     for index in range(2)
@@ -298,7 +302,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 domain_credits[0] += credits * scoped_shares[0]
                 domain_credits[1] += credits * scoped_shares[1]
                 continue
-            item_domain = str(item.get("domain") or "").casefold().strip()
+            item_domain = " ".join((str(item.get("domain") or ""), canonical_domains.get(int(item.get("course_id") or 0), ""))).casefold().strip()
             for index, domain in enumerate(project_domains):
                 if domain_label_matches(item_domain, [domain]):
                     domain_credits[index] += int(item.get("credits") or 0)
