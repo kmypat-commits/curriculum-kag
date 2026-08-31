@@ -291,6 +291,7 @@ def build_curriculum_plan(
     maximum_credits = target_credits + max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE)))
     selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
     project_domains = _project_domain_terms(project_version, db)
+    declared_secondary_domain = str(project_version.project.domain2 or "").casefold().strip()
     interdisciplinary_professional = str(constraints.get("program_type") or "standard").lower() in {"interdisciplinary", "joint"}
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
@@ -317,8 +318,9 @@ def build_curriculum_plan(
         project_domain_text = " ".join(project_domains).casefold()
         medical_domain = any(token in course_domain_key for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
         medical_project = any(token in project_domain_text for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
-        agriculture_project = any(token in project_domain_text for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл"))
-        if medical_domain and agriculture_project and not medical_project:
+        agriculture_project = any(token in f"{declared_secondary_domain} {project_domain_text}" for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл"))
+        declared_medical_project = any(token in declared_secondary_domain for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
+        if medical_domain and agriculture_project and not declared_medical_project:
             return False
         if not (
             _course_domain_matches(course, project_domains)
@@ -862,6 +864,11 @@ def build_curriculum_plan(
                 continue
             course = db.get(Course, course_id)
             item_domain = str(item.get("domain") or "").lower().strip()
+            declared_agriculture = any(token in declared_secondary_domain for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл"))
+            item_medical = any(token in item_domain for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
+            if declared_agriculture and item_medical:
+                invalid_domain_courses.append({"course_id": course.id, "title": course.title, "domain": course.domain})
+                continue
             item_has_project_domain = any(
                 domain and (domain in item_domain or item_domain in domain)
                 for domain in project_domains
