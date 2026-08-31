@@ -69,10 +69,22 @@ def is_project_domain_course(
 
     course_code = str(course.course_id or "")
     project_confirmed_prefix = f"AI-CONFIRMED-{project_version_id}-"
+    non_it_domains = [
+        str(domain) for domain in project_domains
+        if not any(marker in str(domain).casefold() for marker in ("it", "информ", "computer", "цифров"))
+    ]
+    secondary_domain_match = bool(
+        interdisciplinary_professional and non_it_domains
+        and course_domain_matches(course, non_it_domains)
+    )
     if course_code.startswith("AI-CONFIRMED-") and not course_code.startswith(project_confirmed_prefix):
         # Synthetic expert-confirmed replacements are project-local.
         return False
-    if course_code.startswith("EPVO-") and course.id not in epvo_level_scope_allowed_ids:
+    if (
+        course_code.startswith("EPVO-")
+        and course.id not in epvo_level_scope_allowed_ids
+        and not secondary_domain_match
+    ):
         return False
     if course.id not in epvo_domain_index and not (
         course_domain_matches(course, project_domains)
@@ -82,14 +94,6 @@ def is_project_domain_course(
 
     evidence = aggregates.get(course.id, {})
     if professional_scope and not course_code.startswith("GOSO-KZ-"):
-        non_it_domains = [
-            str(domain) for domain in project_domains
-            if not any(marker in str(domain).casefold() for marker in ("it", "информ", "computer", "цифров"))
-        ]
-        secondary_domain_match = bool(
-            interdisciplinary_professional and non_it_domains
-            and course_domain_matches(course, non_it_domains)
-        )
         if (
             epvo_professional_scope
             and course_code.startswith("EPVO-")
