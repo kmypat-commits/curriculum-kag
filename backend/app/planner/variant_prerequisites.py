@@ -38,15 +38,25 @@ def filter_supported_prerequisites(
 ) -> dict[int, list[int]]:
     """Keep only earlier, evidenced or semantically related prerequisite edges."""
     filtered: dict[int, list[int]] = {}
+    # The same course participates in many prerequisite edges.  Rebuilding
+    # normalized title tokens for every edge made large interdisciplinary
+    # audits spend minutes in ``re.findall`` with identical input.
+    stems_cache: dict[int, set[str]] = {}
+
+    def cached_stems(course_id: int, course: Any) -> set[str]:
+        if course_id not in stems_cache:
+            stems_cache[course_id] = title_stems(
+                getattr(course, "title", ""),
+                normalize_title=normalize_title,
+                excluded_prefixes=excluded_prefixes,
+            )
+        return stems_cache[course_id]
+
     for course_id, prerequisite_ids in raw_prerequisites.items():
         course = courses.get(course_id)
         if course is None:
             continue
-        course_stems = title_stems(
-            getattr(course, "title", ""),
-            normalize_title=normalize_title,
-            excluded_prefixes=excluded_prefixes,
-        )
+        course_stems = cached_stems(course_id, course)
         for prerequisite_id in prerequisite_ids:
             prerequisite = courses.get(prerequisite_id)
             if prerequisite is None:
@@ -56,11 +66,7 @@ def filter_supported_prerequisites(
             ):
                 continue
             evidence_score = float(aggregates.get(prerequisite_id, {}).get("max") or 0.0)
-            prerequisite_stems = title_stems(
-                getattr(prerequisite, "title", ""),
-                normalize_title=normalize_title,
-                excluded_prefixes=excluded_prefixes,
-            )
+            prerequisite_stems = cached_stems(prerequisite_id, prerequisite)
             if evidence_score < 0.25 and len(course_stems & prerequisite_stems) < 2:
                 continue
             filtered.setdefault(course_id, []).append(prerequisite_id)
