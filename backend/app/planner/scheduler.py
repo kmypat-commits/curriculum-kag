@@ -509,6 +509,45 @@ def build_curriculum_plan(
             selected_courses = _force_bridge_item(
                 selected_courses, integration, variant_type, target_credits
             )
+        selected_ids = {
+            int(item["course_id"]) for item in selected_courses
+            if item.get("course_id") is not None
+        }
+        selected_titles = {_title_key(item.get("title")) for item in selected_courses}
+        secondary_courses = [
+            course for course in db.query(Course).all()
+            if course.id not in selected_ids
+            and _title_key(course.title) not in selected_titles
+            and int(course.credits or 0) == 3
+            and domain_label_matches(course.domain, [project_version.project.domain2])
+            and not course.prerequisites
+        ]
+        if secondary_courses:
+            replacement = next(
+                (item for item in selected_courses
+                 if item.get("course_id") is not None
+                 and not item.get("regulatory_required")
+                 and not item.get("competency_required")
+                 and int(item.get("credits") or 0) == 3
+                 and not item.get("prerequisites")),
+                None,
+            )
+            if replacement is not None:
+                course = secondary_courses[0]
+                replacement.update({
+                    "course_id": course.id,
+                    "title": course.title,
+                    "domain": course.domain,
+                    "credits": 3,
+                    "recommended_semester": course.recommended_semester,
+                    "prerequisites": [],
+                    "admission_los": [
+                        row.lo_id for row in db.query(MatchScore).filter(
+                            MatchScore.project_version_id == project_version.id,
+                            MatchScore.course_id == course.id,
+                        ).order_by(MatchScore.score.desc()).limit(3).all()
+                    ],
+                })
     total_before_gap_fill = sum(int(item.get("credits") or 0) for item in selected_courses)
     if total_before_gap_fill < target_credits and constraints.get("allow_new_courses", True):
         existing_bridge_ids = {
