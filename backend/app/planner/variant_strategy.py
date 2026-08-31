@@ -794,12 +794,6 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = top_up_with_real_epvo_courses(remove_weak_general_items(result))
     for bridge in [core_bridge]:
         result = _force_bridge_item(result, bridge, variant_type, target)
-    # A bounded fifth bridge gives a two-domain programme an auditable
-    # integration module for data interoperability and safety.  It replaces a
-    # same-credit elective when needed, so total credits remain unchanged.
-    for bridge in secondary_bridges:
-        if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_"):
-            result = _force_bridge_item(result, bridge, variant_type, target)
     result = _trim_to_target_credits(
         close_professional_lo_gaps(top_up_with_credit_bridges(result)),
         target,
@@ -1108,4 +1102,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # supporting a programme LO, so close gaps at the actual return boundary
     # and let the verifier judge the resulting plan.
     result = close_professional_lo_gaps(result)
+    if interdisciplinary:
+        for bridge in secondary_bridges:
+            if str(bridge.course_id or "").startswith("SECONDARY_INTEGRATION_"):
+                result = _force_bridge_item(result, bridge, variant_type, target)
     return result
