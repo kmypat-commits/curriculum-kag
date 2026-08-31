@@ -864,9 +864,24 @@ def build_curriculum_plan(
                 continue
             course = db.get(Course, course_id)
             item_domain = str(item.get("domain") or "").lower().strip()
-            declared_agriculture = any(token in declared_secondary_domain for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл"))
-            item_medical = any(token in item_domain for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
-            if declared_agriculture and item_medical:
+            raw_course_domain = str(course.domain or "").casefold() if course else ""
+            if course and raw_course_domain.startswith(("med", "health", "мед", "здрав")) and not any(
+                token in f"{declared_secondary_domain} {' '.join(project_domains)}"
+                for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical")
+            ):
+                continue
+            declared_agriculture = any(
+                token in f"{declared_secondary_domain} {' '.join(project_domains)}"
+                for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл")
+            )
+            canonical_domain = str(course.domain or "").casefold() if course else ""
+            item_medical = any(token in f"{item_domain} {canonical_domain}" for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
+            project_has_medical_domain = any(
+                token in f"{declared_secondary_domain} {' '.join(project_domains)}"
+                for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical")
+            )
+            canonical_medical = canonical_domain in {"medicine", "medical", "health sciences", "здравоохранение"}
+            if (declared_agriculture and (item_medical or canonical_medical)) or ((item_medical or canonical_medical) and not project_has_medical_domain):
                 invalid_domain_courses.append({"course_id": course.id, "title": course.title, "domain": course.domain})
                 continue
             item_has_project_domain = any(
@@ -878,6 +893,8 @@ def build_curriculum_plan(
             # Course.domain may come from the first programme that used the
             # deduplicated discipline (for example, "Medicine").
             if course and not (is_project_domain(course) or item_has_project_domain):
+                if (canonical_medical or canonical_domain.startswith(("med", "health", "мед", "здрав"))) and not project_has_medical_domain:
+                    continue
                 invalid_domain_courses.append({
                     "course_id": course.id,
                     "title": course.title,

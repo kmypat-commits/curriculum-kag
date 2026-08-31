@@ -512,7 +512,7 @@ def main() -> None:
                 and (
                     has_real_integration
                     or any(
-                        str(item.get("code") or "").startswith("CORE_BRIDGE_")
+                        str(item.get("code") or "").startswith(("CORE_BRIDGE_", "SECONDARY_INTEGRATION_"))
                         for item in meaningful
                     )
                 )
