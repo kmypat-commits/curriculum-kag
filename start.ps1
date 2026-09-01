@@ -164,7 +164,8 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
         "dockerEthernetVfkit",
         "dockerInference",
         "sailor-ingest.sock",
-        "userAnalyticsOtlpHttp.sock"
+        "userAnalyticsOtlpHttp.sock",
+        "docker-secrets-engine\engine.sock"
     )
     $runtimeSockets = $runtimeSocketNames |
         ForEach-Object { Join-Path $env:LOCALAPPDATA "Docker\run\$_" } |
@@ -181,6 +182,19 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
             Start-Sleep -Seconds 3
             $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
         }
+        # A crashed backend can keep the Unix-socket inode open from its WSL
+        # utility VM even after the Windows processes have exited.  Shutting
+        # down WSL releases only runtime handles; it does not remove Docker's
+        # VHDX, images, volumes, or the moved data root.
+        try {
+            $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
+            if ($wsl) {
+                $wslProcess = Start-Process -FilePath $wsl.Source -ArgumentList "--shutdown" -WindowStyle Hidden -PassThru
+                [void]$wslProcess.WaitForExit(15000)
+                Start-Sleep -Seconds 2
+            }
+        }
+        catch { }
         try {
             foreach ($socket in $runtimeSockets) {
                 Remove-Item -LiteralPath $socket -Force -ErrorAction Stop
