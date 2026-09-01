@@ -6,6 +6,11 @@ const AuthContext = createContext(null)
 
 axios.defaults.withCredentials = true
 
+const csrfToken = () => {
+    const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)
+    return match ? decodeURIComponent(match[1]) : null
+}
+
 export const AuthProvider = ({ children }) => {
     const { t } = useLanguage()
     const [user, setUser] = useState(null)
@@ -20,6 +25,13 @@ export const AuthProvider = ({ children }) => {
     }, [])
 
     useEffect(() => {
+        const requestInterceptor = axios.interceptors.request.use(config => {
+            if (['post', 'put', 'patch', 'delete'].includes(String(config.method || 'get').toLowerCase())) {
+                const token = csrfToken()
+                if (token) config.headers['X-CSRF-Token'] = token
+            }
+            return config
+        })
         const interceptor = axios.interceptors.response.use(
             response => response,
             error => {
@@ -36,7 +48,10 @@ export const AuthProvider = ({ children }) => {
                 return Promise.reject(error)
             }
         )
-        return () => axios.interceptors.response.eject(interceptor)
+        return () => {
+            axios.interceptors.request.eject(requestInterceptor)
+            axios.interceptors.response.eject(interceptor)
+        }
     }, [])
 
     const fetchCurrentUser = async () => {

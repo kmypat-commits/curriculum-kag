@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+import secrets
 from app.database import get_db
 from app.config import settings
 from app.models.user import User
@@ -26,6 +27,9 @@ class UserResponse(BaseModel):
     full_name: str
     roles: list
     permissions: list
+
+
+CSRF_COOKIE = "csrf_token"
 
 
 @router.post("/login", response_model=Token)
@@ -69,6 +73,17 @@ async def login(
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
+    # Double-submit token: readable by the SPA, while the auth JWT remains
+    # HttpOnly.  State-changing cookie requests are checked at the API edge.
+    response.set_cookie(
+        key=CSRF_COOKIE,
+        value=secrets.token_urlsafe(32),
+        httponly=False,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
     
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -82,6 +97,7 @@ async def logout(response: Response):
         samesite="lax",
         path="/",
     )
+    response.delete_cookie(key=CSRF_COOKIE, secure=settings.AUTH_COOKIE_SECURE, samesite="lax", path="/")
 
 
 @router.get("/me", response_model=UserResponse)

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 import os
 import logging
 import time
+import secrets
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -63,6 +64,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         return response
 
+
+class CSRFMiddleware(BaseHTTPMiddleware):
+    """Require the readable double-submit token for cookie-authenticated writes."""
+
+    async def dispatch(self, request, call_next):
+        if (
+            request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and request.url.path not in {"/auth/login", "/auth/logout"}
+            and request.cookies.get("access_token")
+        ):
+            cookie_token = request.cookies.get("csrf_token")
+            header_token = request.headers.get("X-CSRF-Token")
+            if not cookie_token or not header_token or not secrets.compare_digest(cookie_token, header_token):
+                return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+        return await call_next(request)
+
 # SQLite remains a local rollback/development mode. PostgreSQL schema changes
 # are applied only through Alembic revisions, never implicitly at API startup.
 if str(settings.DATABASE_URL).startswith("sqlite"):
@@ -95,6 +112,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(SlowRequestMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 # Plan/graph responses can be hundreds of KB of JSON.  Compress only larger
