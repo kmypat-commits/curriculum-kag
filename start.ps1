@@ -170,8 +170,10 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     $runtimeSockets = $runtimeSocketNames |
         ForEach-Object { Join-Path $env:LOCALAPPDATA "Docker\run\$_" } |
         Where-Object { Test-Path -LiteralPath $_ }
+    $secretEngineSocket = Join-Path $env:LOCALAPPDATA "docker-secrets-engine\engine.sock"
+    $secretEngineRoot = Join-Path $env:LOCALAPPDATA "docker-secrets-engine"
     $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
-    if ($runtimeSockets) {
+    if ($runtimeSockets -or (Test-Path -LiteralPath $secretEngineSocket)) {
         # A stale socket can survive a crashed Desktop process and prevents
         # the Linux engine from starting. Recover the runtime state in-place;
         # never touch the WSL disk or Docker data root.
@@ -209,6 +211,15 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
                     }
                 }
             }
+            if (Test-Path -LiteralPath $secretEngineSocket) {
+                Remove-Item -LiteralPath $secretEngineSocket -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -LiteralPath $secretEngineSocket) {
+                $del = Start-Process -FilePath "$env:ComSpec" -ArgumentList '/c', 'del', '/f', '/q', "$secretEngineSocket" -WindowStyle Hidden -Wait -PassThru
+                if ($del.ExitCode -ne 0 -and (Test-Path -LiteralPath $secretEngineSocket)) {
+                    throw "Could not remove stale Docker secrets-engine socket: $secretEngineSocket"
+                }
+            }
             Write-Host "Removed stale Docker runtime sockets; Desktop will recreate them." -ForegroundColor DarkGray
         }
         catch {
@@ -220,6 +231,11 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
                 $quarantine = Join-Path $env:LOCALAPPDATA ("Docker\run.stale-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
                 Move-Item -LiteralPath $runtimeDir -Destination $quarantine -Force -ErrorAction Stop
                 New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+                if (Test-Path -LiteralPath $secretEngineRoot) {
+                    $secretQuarantine = Join-Path $env:LOCALAPPDATA ("docker-secrets-engine.stale-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+                    Move-Item -LiteralPath $secretEngineRoot -Destination $secretQuarantine -Force -ErrorAction Stop
+                    New-Item -ItemType Directory -Path $secretEngineRoot -Force | Out-Null
+                }
                 Write-Host "Quarantined stale Docker runtime directory; Docker will recreate it." -ForegroundColor DarkGray
             }
             catch {
