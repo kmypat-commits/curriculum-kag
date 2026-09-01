@@ -30,6 +30,14 @@ try {
     }
 
     $port = Get-NetTCPConnection -LocalPort 5433 -State Listen -ErrorAction SilentlyContinue
+    # On some Windows installations the non-elevated PowerShell networking
+    # cmdlet omits Docker's published listener.  Keep the gate reliable by
+    # falling back to the OS-owned netstat view, without changing the port.
+    if (-not $port) {
+        $port = @(netstat -ano 2>$null | Where-Object {
+            $_ -match 'LISTENING\s+\d+$' -and $_ -match '(^|\s)(0\.0\.0\.0|127\.0\.0\.1|\[::\]|\[::1\]):5433\s'
+        })
+    }
     if (-not $port) { throw "PostgreSQL is not listening on localhost:5433; run runtime gates before tagging." }
     $env:CURRICULUM_SKIP_PUBLIC_RELEASE = "1"
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui-smoke.ps1 -TimeoutSec 5 -CheckApi
