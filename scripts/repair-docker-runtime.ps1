@@ -18,7 +18,8 @@ $runtimeNames = @(
     'dockerEthernetVfkit',
     'dockerInference',
     'sailor-ingest.sock',
-    'userAnalyticsOtlpHttp.sock'
+    'userAnalyticsOtlpHttp.sock',
+    'docker-secrets-engine\engine.sock'
 )
 
 Get-Process -Name 'Docker Desktop','com.docker.backend','com.docker.service' -ErrorAction SilentlyContinue |
@@ -38,7 +39,13 @@ foreach ($name in $services) {
 foreach ($name in $runtimeNames) {
     $path = Join-Path $runtimeDir $name
     if (Test-Path -LiteralPath $path) {
-        Remove-Item -LiteralPath $path -Force
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $path) {
+            $del = Start-Process -FilePath "$env:ComSpec" -ArgumentList '/c', 'del', '/f', '/q', "$path" -WindowStyle Hidden -Wait -PassThru
+            if ($del.ExitCode -ne 0 -and (Test-Path -LiteralPath $path)) {
+                throw "Could not remove stale Docker runtime socket: $path"
+            }
+        }
     }
 }
 
