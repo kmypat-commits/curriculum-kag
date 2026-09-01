@@ -212,8 +212,20 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
             Write-Host "Removed stale Docker runtime sockets; Desktop will recreate them." -ForegroundColor DarkGray
         }
         catch {
-            Write-Warning "Docker Desktop has stale runtime sockets under '$($env:LOCALAPPDATA)\Docker\run'. Reboot Windows once, then run start.bat again. No Docker data was changed."
-            return $false
+            # If Windows still holds a reparse point, quarantine the runtime
+            # directory itself. It contains ephemeral listeners only; Docker
+            # recreates it on startup. Never move the WSL disk or data-root.
+            try {
+                $runtimeDir = Join-Path $env:LOCALAPPDATA "Docker\run"
+                $quarantine = Join-Path $env:LOCALAPPDATA ("Docker\run.stale-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+                Move-Item -LiteralPath $runtimeDir -Destination $quarantine -Force -ErrorAction Stop
+                New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+                Write-Host "Quarantined stale Docker runtime directory; Docker will recreate it." -ForegroundColor DarkGray
+            }
+            catch {
+                Write-Warning "Docker Desktop has stale runtime sockets under '$($env:LOCALAPPDATA)\Docker\run'. Reboot Windows once, then run start.bat again. No Docker data was changed."
+                return $false
+            }
         }
     }
 
