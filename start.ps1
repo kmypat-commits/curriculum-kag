@@ -197,7 +197,17 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
         catch { }
         try {
             foreach ($socket in $runtimeSockets) {
-                Remove-Item -LiteralPath $socket -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $socket -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $socket) {
+                    # Docker Desktop creates these as Windows reparse-point
+                    # sockets. PowerShell can report access denied for the
+                    # link even after the backend has stopped; `del` removes
+                    # only the link itself, never its target.
+                    $del = Start-Process -FilePath "$env:ComSpec" -ArgumentList "/c", "del", "/f", "/q", "$socket" -WindowStyle Hidden -Wait -PassThru
+                    if ($del.ExitCode -ne 0 -and (Test-Path -LiteralPath $socket)) {
+                        throw "Could not remove stale Docker runtime socket: $socket"
+                    }
+                }
             }
             Write-Host "Removed stale Docker runtime sockets; Desktop will recreate them." -ForegroundColor DarkGray
         }
