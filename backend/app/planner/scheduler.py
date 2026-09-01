@@ -972,6 +972,13 @@ def build_curriculum_plan(
     # bounded trimmer only flexes bridge credits or removes whole non-critical
     # real-course units and never rewrites repository course credits.
     schedule = _trim_schedule_to_target_credits(schedule, target_credits, db)
+    # The competency guard and the final credit trim may replace/remove a
+    # same-credit secondary-domain course.  Quota repair must therefore be
+    # the last schedule mutation before validation; otherwise a valid quota
+    # can regress between repair and verification (notably ict-medicine A).
+    schedule = _repair_final_domain_quotas(
+        schedule, domain_repair_candidates, project_version, db
+    )
 
     invalid_domain_courses = []
     for semester_items in schedule.values():
