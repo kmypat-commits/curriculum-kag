@@ -161,7 +161,6 @@ def _repair_final_domain_quotas(
     for course_id, course in candidate_courses.items():
         if (
             course_id in existing_pool_ids
-            or course_id not in scope_weights
             or str(course.course_id or "").startswith("GOSO-KZ-")
             or not _education_level_course_allowed(
                 course, constraints.get("education_level")
