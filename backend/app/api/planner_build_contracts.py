@@ -31,6 +31,26 @@ def normalize_requested_variants(variants: object) -> list[str]:
     return list(dict.fromkeys(item for item in requested if item in {"A", "B", "C"}))
 
 
+def partition_publishable_variants(
+    variants: dict[str, dict], rejected_variants: list[dict],
+) -> tuple[dict[str, dict], set[str]]:
+    """Keep verified variants when a comparison request has partial failure.
+
+    Publication remains strict: an item listed in ``rejected_variants`` is
+    never returned as publishable. The caller can safely commit a valid A
+    while retaining the diagnostic for a rejected B/C.
+    """
+    rejected_names = {
+        str(row.get("variant") or "").upper()
+        for row in rejected_variants
+        if isinstance(row, dict) and row.get("variant")
+    }
+    return (
+        {name: value for name, value in variants.items() if name not in rejected_names},
+        rejected_names,
+    )
+
+
 def must_reject_variant(verification: dict | None) -> bool:
     """Return whether a generated variant is unsafe to persist."""
     verification = verification or {}

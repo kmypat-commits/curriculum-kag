@@ -75,6 +75,15 @@ export default function PlanBuilder() {
             setBuildProgress(status.progress || 0)
             setBuilding(status.state === 'running' || status.state === 'queued')
             if (status.change_report) setChangeReport(status.change_report)
+            if (status.publication_status === 'partial') {
+                const rejected = (status.rejected_variants || []).map(item => item.variant).filter(Boolean)
+                if (rejected.length) {
+                    setBuildNotice({
+                        type: 'success',
+                        text: `Опубликованы прошедшие проверку варианты. Не опубликованы: ${rejected.join(', ')} — откройте отчёт ограничений перед повтором.`,
+                    })
+                }
+            }
         },
         onComplete: async (versionId) => {
             setBuilding(false)
@@ -168,10 +177,14 @@ export default function PlanBuilder() {
             await fetchVariants(versionId)
             setRequiresRegeneration(false)
             setBuildProgress(100)
-            setBuildStatus({ state: 'complete', stage: 'complete', progress: 100, change_report: buildResponse.data?.change_report })
+            setBuildStatus({ state: 'complete', stage: 'complete', progress: 100, change_report: buildResponse.data?.change_report, publication_status: buildResponse.data?.publication_status, rejected_variants: buildResponse.data?.rejected_variants })
             setChangeReport(buildResponse.data?.change_report || null)
             const message = epvoSyncMessage(buildResponse.data?.epvo_repository)
-            if (message) setBuildNotice({ type: 'success', text: message })
+            const rejected = (buildResponse.data?.rejected_variants || []).map(item => item.variant).filter(Boolean)
+            const partialText = buildResponse.data?.publication_status === 'partial' && rejected.length
+                ? `Опубликованы прошедшие проверку варианты. Не опубликованы: ${rejected.join(', ')} — откройте отчёт ограничений перед повтором.`
+                : null
+            if (partialText || message) setBuildNotice({ type: 'success', text: partialText || message })
         } catch (err) {
             if (err.authExpired || err.response?.status === 401) {
                 return

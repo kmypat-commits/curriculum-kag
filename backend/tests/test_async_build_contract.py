@@ -5,13 +5,36 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.api.planner_build_contracts import normalize_requested_variants
+from app.api.planner_build_contracts import (
+    normalize_requested_variants,
+    partition_publishable_variants,
+)
 
 
 def test_default_variant_request_builds_only_a_but_all_remains_explicit():
     assert normalize_requested_variants(None) == ["A"]
     assert normalize_requested_variants("") == ["A"]
     assert normalize_requested_variants("all") == ["A", "B", "C"]
+
+
+def test_valid_a_is_publishable_when_an_explicit_comparison_variant_fails():
+    published, rejected = partition_publishable_variants(
+        {"A": {"plan_id": 10}, "B": {"plan_id": 11}, "C": {"plan_id": 12}},
+        [{"variant": "B", "hard": 1}],
+    )
+
+    assert published == {"A": {"plan_id": 10}, "C": {"plan_id": 12}}
+    assert rejected == {"B"}
+
+
+def test_no_variant_is_publishable_when_each_failed_verification():
+    published, rejected = partition_publishable_variants(
+        {"A": {"plan_id": 10}},
+        [{"variant": "A", "hard": 2}],
+    )
+
+    assert published == {}
+    assert rejected == {"A"}
 
 
 def test_async_build_enqueues_worker_without_recursive_spawn():

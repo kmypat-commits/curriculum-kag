@@ -47,6 +47,7 @@ from app.api.planner_build_contracts import (
     build_request_hash,
     must_reject_variant,
     normalize_requested_variants,
+    partition_publishable_variants,
 )
 from app.api.planner_variant_runner import run_requested_variants
 from app.schemas.planner import (
@@ -728,7 +729,15 @@ def build_plan(
                     "hard_details": hard_details,
                     "quality_violations": quality_violations,
                 })
-        if rejected_variants:
+        publishable_variants, rejected_variant_names = partition_publishable_variants(
+            variants, rejected_variants,
+        )
+        # A methodist can ask for A/B/C as a comparison, but an invalid
+        # alternative must not discard a sound published A.  Keep the safety
+        # boundary strict: only variants with zero hard violations are saved.
+        # If every requested variant fails, preserve the existing plans and
+        # return the same infeasible result as before.
+        if rejected_variants and not publishable_variants:
             summary = "; ".join(
                 f"{row['variant']}: hard={row['hard']}, quality={len(row['quality_violations'])}"
                 + (f", details={row['hard_details']}" if row.get("hard_details") else "")
@@ -740,6 +749,17 @@ def build_plan(
                 details=rejected_variants,
             )
 
+        # build_curriculum_plan uses the surrounding transaction.  Remove
+        # invalid candidates before committing, otherwise a rejected B/C could
+        # become visible merely because A was valid in the same request.
+        for variant_name in rejected_variant_names:
+            plan_id = variants.get(variant_name, {}).get("plan_id")
+            if plan_id:
+                rejected_plan = db.query(Plan).filter(Plan.id == plan_id).first()
+                if rejected_plan:
+                    db.delete(rejected_plan)
+        variants = publishable_variants
+
         stage_started = time.perf_counter()
         _assert_build_is_live(project_version_id, deadline_at)
         _set_build_status(
@@ -747,10 +767,11 @@ def build_plan(
             elapsed_seconds=round(time.perf_counter() - build_started, 1), timings=dict(timings),
         )
         # A partial build (for example only A) must not destroy the variants
-        # that were intentionally kept (B/C). Replace only requested variants;
-        # this lets the user generate the remaining variants later in the UI.
+        # that were intentionally kept (B/C). Replace only variants that are
+        # both requested and verified, so a rejected B/C also preserves its
+        # last known version for comparison.
         for old_plan in old_plans:
-            if old_plan.variant_type in requested_variants:
+            if old_plan.variant_type in variants:
                 db.delete(old_plan)
 
         def _variant_quality_key(item):
@@ -789,6 +810,8 @@ def build_plan(
             "progress": 100,
             "change_report": change_report,
             "active_variant": best_variant,
+            "publication_status": "partial" if rejected_variants else "complete",
+            "rejected_variants": rejected_variants,
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         })
@@ -803,6 +826,8 @@ def build_plan(
             "job_id": (claimed or {}).get("job_id"),
             "epvo_repository": epvo_sync,
             "change_report": change_report,
+            "publication_status": "partial" if rejected_variants else "complete",
+            "rejected_variants": rejected_variants,
             "descriptions": {
                 "A": "Максимальное покрытие результатов обучения",
                 "B": "Минимум новых дисциплин",
