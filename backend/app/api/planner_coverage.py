@@ -323,7 +323,7 @@ async def get_variants(
                 else:
                     domain_breakdown["other"]["credits"] += int(item.credits or 0)
                 match_rows = matches_by_course.get(item.course_id, [])
-                max_score = max([float(row.score or 0) for row in match_rows], default=0.0)
+                max_score = max((float(row.score or 0) for row in match_rows), default=0.0)
                 top_match = max(
                     match_rows,
                     key=lambda row: max(
@@ -399,6 +399,11 @@ async def get_variants(
                         "reason_details": [reason_details.get(reason, reason) for reason in reasons],
                         "recommendation": "Подтвердите связь экспертом, перенесите дисциплину в более поздний семестр или замените её на дисциплину ЕПВО того же уровня и направления.",
                     })
+                # The regular plan page intentionally omits selection details.
+                # Do not sort and render every course-to-LO explanation unless
+                # a methodist explicitly asks for that evidence panel.
+                if not include_explanations:
+                    match_rows = []
                 top_matches = []
                 trustworthy_matches = []
                 for row in match_rows:
