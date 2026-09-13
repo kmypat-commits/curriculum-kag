@@ -6,7 +6,13 @@ const LoadingSpinner = ({ fullPage = true }) => {
     const { t } = useLanguage();
 
     return (
-        <div className={`loading-container ${fullPage ? 'full-page' : ''}`}>
+        <div
+            className={`loading-container ${fullPage ? 'full-page' : ''}`}
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            aria-label={t('loading')}
+        >
             <div className="spinner-wrapper">
                 <div className="loading-mark" aria-hidden="true">
                     <span>C</span><span>K</span>

@@ -32,7 +32,12 @@ from app.planner.course_policy import (
     education_level_course_allowed as _education_level_course_allowed,
     project_domain_terms as _project_domain_terms,
 )
+from app.planner.candidate_quality import (
+    limit_general_course_items as _limit_general_course_items,
+    remap_equivalent_prerequisites as _remap_equivalent_prerequisites,
+)
 from app.planner.goso import merge_goso_items
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.scheduler_catalogue import (
     foundation_equivalent_title_key as _foundation_equivalent_title_key,
     is_component_placeholder_title as _is_component_placeholder_title,
@@ -72,6 +77,7 @@ def _repair_missing_ict_competencies(
     items: List[Dict],
     project_version: ProjectVersion,
     db: Session,
+    variant_type: str = "A",
 ) -> List[Dict]:
     """Swap in credible local foundations when scoped EPVO cards omit an ICT block."""
     constraints = project_version.project.constraints_json or {}
@@ -121,11 +127,16 @@ def _repair_missing_ict_competencies(
             str(constraints.get("secondary_direction_code") or "").strip(),
         ))
     epvo_candidate_ids: set[int] = set()
+    epvo_code_by_course = epvo_code_index({course.id: course for course in candidates})
     epvo_candidates = db.query(EpvoDisciplineNormalized).filter(
-        EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or {-1})
+        or_(
+            EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or {-1}),
+            EpvoDisciplineNormalized.id.in_(set(epvo_code_by_course) or {-1}),
+        )
     ).all()
     for row in epvo_candidates:
-        if not row.approved_course_id or not epvo_row_matches_education_level(
+        course_id = linked_course_id(row, epvo_code_by_course)
+        if not course_id or not epvo_row_matches_education_level(
             row, constraints.get("education_level")
         ):
             continue
@@ -135,7 +146,7 @@ def _repair_missing_ict_competencies(
             (group and group in groups) or (direction and direction in directions)
             for group, direction in scope_pairs
         ):
-            epvo_candidate_ids.add(int(row.approved_course_id))
+            epvo_candidate_ids.add(int(course_id))
     candidates = [
         course for course in candidates
         if _education_level_course_allowed(course, constraints.get("education_level"))
@@ -241,76 +252,132 @@ def _repair_missing_ict_competencies(
                 break
             if repaired:
                 break
-    return normalized
-
-def _limit_general_course_items(
-    items: List[Dict],
-    courses: Dict[int, Course],
-    project_domains: List[str],
-    target_credits: int,
-    max_percent: int = 20,
-) -> List[Dict]:
-    """Keep generic/domain-adjacent courses as support, not as programme core."""
-    if not items:
-        return items
-    max_general_credits = max(0, math.floor(target_credits * max_percent / 100))
-    normalized = [dict(item) for item in items]
-    selected_ids = {item.get("course_id") for item in normalized if item.get("course_id") is not None}
-    protected_ids = {
-        prerequisite_id
-        for item in normalized
-        for prerequisite_id in (item.get("prerequisites") or [])
-        if prerequisite_id in selected_ids
-    }
-    general_indexes = []
-    general_credits = 0
-    for index, item in enumerate(normalized):
-        course_id = item.get("course_id")
-        course = courses.get(course_id)
-        if (
-            course
-            and not item.get("epvo_exact_scope")
-            and _course_curriculum_role(course, project_domains) == "general"
-        ):
-            credits = int(item.get("credits") or course.credits or 0)
-            general_credits += credits
-            if course_id not in protected_ids:
-                general_indexes.append((index, credits, _course_role_rank(course, project_domains), int(course_id or 0)))
-    if general_credits <= max_general_credits:
-        return normalized
-    remove_indexes = set()
-    for index, credits, _rank, _cid in sorted(general_indexes, key=lambda row: (row[2], row[3])):
-        if general_credits <= max_general_credits:
-            break
-        remove_indexes.add(index)
-        general_credits -= credits
-    return [item for index, item in enumerate(normalized) if index not in remove_indexes]
-
-def _remap_equivalent_prerequisites(items: List[Dict], db: Session) -> List[Dict]:
-    """Point prerequisite clones at the retained same-title course row."""
-    normalized = [dict(item) for item in items]
-    retained_by_title = {
-        _title_key(item.get("title")): item.get("course_id")
-        for item in normalized
-        if item.get("course_id") is not None
-    }
-    prerequisite_ids = {
-        prerequisite_id
-        for item in normalized
-        for prerequisite_id in (item.get("prerequisites") or [])
-    }
-    prerequisite_titles = {
-        course.id: _title_key(course.title)
-        for course in db.query(Course).filter(Course.id.in_(prerequisite_ids or [-1])).all()
-    }
-    selected_ids = {value for value in retained_by_title.values() if value is not None}
-    for item in normalized:
-        remapped = []
-        for prerequisite_id in item.get("prerequisites") or []:
-            replacement = retained_by_title.get(prerequisite_titles.get(prerequisite_id, ""), prerequisite_id)
-            if replacement in selected_ids and replacement != item.get("course_id") and replacement not in remapped:
-                remapped.append(replacement)
-        item["prerequisites"] = remapped
+        # Some doctoral catalogues contain the only valid competency course
+        # with a non-standard credit value (for example 4 ECTS), while the
+        # selected professional block consists of 5-credit courses.  A
+        # single-course equal-credit swap cannot represent that real option.
+        # Try a conservative pair exchange (e.g. 5+5 -> 4+6) instead of
+        # inventing credits or adding a bridge module.  Every guard used by a
+        # single repair is retained: no regulatory/prerequisite item may be
+        # removed, both replacements must be scoped/level-valid, and the
+        # resulting plan must preserve the old pair's strong LO evidence and
+        # reduce the competency deficit.
+        if not repaired:
+            pair_candidates = [
+                course for course in candidates
+                if course.id not in selected_ids
+                and not course.prerequisites
+                and course.id not in {candidate.id for candidate in block_candidates}
+            ]
+            pair_candidates.sort(key=lambda course: (
+                -max(effective_by_course.get(course.id, {}).values(), default=0.0),
+                course.recommended_semester or 99,
+                course.id,
+            ))
+            if variant_type == "B" and len(pair_candidates) > 1:
+                pair_candidates = pair_candidates[1:] + pair_candidates[:1]
+            elif variant_type == "C":
+                pair_candidates.reverse()
+            removable = [
+                (index, item) for index, item in enumerate(normalized)
+                if item.get("course_id") is not None
+                and not item.get("regulatory_required")
+                and int(item.get("course_id")) not in protected_ids
+            ]
+            for competency_course in block_candidates:
+                if repaired:
+                    break
+                for companion in pair_candidates:
+                    if companion.id == competency_course.id:
+                        continue
+                    if not _education_level_course_allowed(
+                        companion, constraints.get("education_level")
+                    ):
+                        continue
+                    new_credits = int(competency_course.credits or 5) + int(companion.credits or 5)
+                    for left_pos, left_item in enumerate(removable):
+                        for right_pos in range(left_pos + 1, len(removable)):
+                            first_index, first_item = left_item
+                            second_index, second_item = removable[right_pos]
+                            old_ids = {
+                                int(first_item["course_id"]),
+                                int(second_item["course_id"]),
+                            }
+                            if int(first_item.get("credits") or 0) + int(second_item.get("credits") or 0) != new_credits:
+                                continue
+                            if _title_key(competency_course.title) == _title_key(companion.title):
+                                continue
+                            trial = [dict(item) for item in normalized]
+                            replacements = ((first_index, competency_course), (second_index, companion))
+                            for item_index, replacement in replacements:
+                                scores = effective_by_course.get(replacement.id, {})
+                                trial[item_index] = {
+                                    "course_id": replacement.id,
+                                    "title": replacement.title,
+                                    "domain": replacement.domain,
+                                    "credits": int(replacement.credits or 5),
+                                    "recommended_semester": replacement.recommended_semester,
+                                    "prerequisites": [],
+                                    "type": replacement.cycle_component or "mandatory",
+                                    "selection_method": "ict_competency_pair_repair",
+                                    "competency_required": replacement.id == competency_course.id,
+                                    "admission_reason": "epvo_scope_and_lo",
+                                    "repair_reason": "missing_ict_competency_and_credit_balance",
+                                    "admission_los": sorted(
+                                        str(lo.lo_code)
+                                        for lo in project_version.learning_outcomes
+                                        if lo.id in scores
+                                    ),
+                                    "admission_score": round(max(scores.values(), default=0.0), 4),
+                                }
+                            trial_ids = {
+                                int(item["course_id"])
+                                for item in trial
+                                if item.get("course_id") is not None
+                            }
+                            old_strong = {
+                                lo_id for old_id in old_ids
+                                for lo_id, score in effective_by_course.get(old_id, {}).items()
+                                if score >= 0.5
+                            }
+                            replacement_strong = {
+                                lo_id for new_id in (competency_course.id, companion.id)
+                                for lo_id, score in effective_by_course.get(new_id, {}).items()
+                                if score >= 0.5
+                            }
+                            other_strong = {
+                                lo_id for course_id, scores in effective_by_course.items()
+                                if course_id in selected_ids and course_id not in old_ids
+                                for lo_id, score in scores.items()
+                                if score >= 0.5
+                            }
+                            if not old_strong.issubset(other_strong | replacement_strong):
+                                continue
+                            trial_courses = [
+                                course if course.id in {competency_course.id, companion.id}
+                                else selected_courses.get(int(item["course_id"]))
+                                for item in trial
+                                if item.get("course_id") is not None
+                                for course in ([competency_course] if int(item["course_id"]) == competency_course.id else [companion] if int(item["course_id"]) == companion.id else [selected_courses.get(int(item["course_id"]))])
+                            ]
+                            trial_courses = [course for course in trial_courses if course is not None]
+                            trial_audit = _ict_competency_audit(trial_courses, constraints)
+                            if len(trial_audit["missing"]) >= len(audit["missing"]):
+                                continue
+                            normalized = trial
+                            for old_id in old_ids:
+                                selected_ids.discard(old_id)
+                                selected_courses.pop(old_id, None)
+                            selected_ids.update({competency_course.id, companion.id})
+                            selected_courses[competency_course.id] = competency_course
+                            selected_courses[companion.id] = companion
+                            audit = trial_audit
+                            repaired = True
+                            break
+                        if repaired:
+                            break
+                    if repaired:
+                        break
     return normalized
 
 def _normalize_selected_courses_for_quality(
@@ -687,8 +754,15 @@ def _fit_real_professional_block_after_goso(
     primary_direction = str(constraints.get("direction_code") or "").strip()
     secondary_direction = str(constraints.get("secondary_direction_code") or "").strip()
     scope_evidence: Dict[int, List[int]] = {}
+    candidate_epvo_ids = epvo_code_index({
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_(candidate_ids or [-1])).all()
+    })
     for row in db.query(EpvoDisciplineNormalized).filter(
-        EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or [-1])
+        or_(
+            EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or [-1]),
+            EpvoDisciplineNormalized.id.in_(set(candidate_epvo_ids) or {-1}),
+        )
     ).all():
         row_groups = set(row.group_codes or [])
         row_directions = set(row.direction_codes or [])
@@ -702,8 +776,9 @@ def _fit_real_professional_block_after_goso(
             else 2 if secondary_direction and secondary_direction in row_directions
             else 0
         )
-        if row.approved_course_id and (primary_scope or secondary_scope):
-            values = scope_evidence.setdefault(int(row.approved_course_id), [0, 0])
+        course_id = linked_course_id(row, candidate_epvo_ids)
+        if course_id and (primary_scope or secondary_scope):
+            values = scope_evidence.setdefault(int(course_id), [0, 0])
             values[0] = max(values[0], primary_scope)
             values[1] = max(values[1], secondary_scope)
     domain_index_by_course = {

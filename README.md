@@ -76,6 +76,7 @@ The source repository does not contain the full database or model weights. Until
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\smoke-test.ps1
+python -m pytest backend/tests -q
 python backend/scripts/smoke_core_api.py --base-url http://127.0.0.1:8000
 ```
 

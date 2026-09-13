@@ -166,10 +166,11 @@ def close_professional_lo_gaps(
         best_trial = None
         best_objective = current_objective
         for index, item in enumerate(normalized):
-            if (
-                item.get("bridge_module_id") is not None
-                and int(item.get("credits") or 0) == candidate_credits
-            ):
+            if item.get("bridge_module_id") is not None:
+                # A bridge is precisely the replaceable fallback for an
+                # evidence gap. Its credit value need not match the real
+                # course; the total-credit guard below is the authoritative
+                # constraint.
                 pass
             else:
                 old_course = courses.get(item.get("course_id"))
@@ -177,11 +178,19 @@ def close_professional_lo_gaps(
                     not old_course
                     or old_course.id in protected_ids
                     or item.get("regulatory_required")
-                    or int(item.get("credits") or 0) != candidate_credits
                 ):
                     continue
             trial = [dict(value) for value in normalized]
             trial[index] = dict(candidate_item)
+            # Credit parity is not an educational invariant. Requiring it
+            # here prevented a real LO-supporting course from replacing a
+            # weak 5-credit item when the candidate was 3/6 credits. Keep the
+            # replacement bounded by the programme's explicit tolerance.
+            total_trial_credits = sum(int(value.get("credits") or 0) for value in trial)
+            target_credits = int(constraints.get("total_credits") or 0)
+            tolerance_credits = max(0, int(constraints.get("credit_tolerance") or 0))
+            if target_credits and total_trial_credits > target_credits + tolerance_credits:
+                continue
             trial_objective = objective(trial)
             if trial_objective > best_objective:
                 best_objective = trial_objective

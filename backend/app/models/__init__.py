@@ -12,6 +12,8 @@ from app.models.plan import Plan, PlanItem  # noqa: F401
 from app.models.bridge_module import BridgeModule  # noqa: F401
 from app.models.embedding import Embedding, MatchScore, MatchFeedback, GraphEdge  # noqa: F401
 from app.models.audit import AuditEvent  # noqa: F401
+from app.models.rate_limit import RateLimitBucket  # noqa: F401
+from app.models.planner_build_job import PlannerBuildAttempt, PlannerBuildJob  # noqa: F401
 from app.models.syllabus import SyllabusDraft  # noqa: F401
 from app.models.epvo import (  # noqa: F401
     RawEpvoProgram, RawEpvoDiscipline, RawEpvoLearningOutcome, RawEpvoExpertCheck,

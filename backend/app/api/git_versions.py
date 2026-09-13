@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.models.user import User
+from app.config import settings
 from app.services.auth import get_current_user
 from app.services.rbac import has_role
 
@@ -48,6 +49,8 @@ class CreateBranchRequest(BaseModel):
 
 def require_git_admin(current_user: User = Depends(get_current_user)) -> User:
     """Restrict local repository inspection and branch creation to administrators."""
+    if not settings.GIT_UI_ENABLED:
+        raise HTTPException(status_code=404, detail="Git UI is disabled")
     if not has_role(current_user, "admin"):
         raise HTTPException(status_code=403, detail="Действия с версиями проекта доступны только администратору")
     return current_user

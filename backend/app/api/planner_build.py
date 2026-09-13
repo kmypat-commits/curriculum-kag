@@ -3,9 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import logging
+import os
+import subprocess
+import sys
+import threading
 import time
+from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -16,22 +22,125 @@ from app.models.course import Course
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
+from app.models.plan_build_status import PlanBuildStatus
 from app.models.user import User
 from app.planner.scheduler import build_curriculum_plan, calculate_plan_metrics
+from app.planner.invariant_ledger import schedule_fingerprint
 from app.planner.evidence_preflight import assess_professional_evidence
 from app.services.auth import get_current_user
+from app.services.rbac import require_permission
+from app.services.access import require_plan_access, require_plan_object_access
 from app.services.plan_reporting import build_change_report as _build_change_report
 from app.services.plan_reporting import plan_snapshot as _plan_snapshot
+from app.services.program_spec_snapshot import build_program_spec_snapshot, program_spec_hash
 from app.api.planner_state import (
     claim_build_status as _claim_build_status,
     get_build_status as _get_build_status,
     replace_build_status as _replace_build_status,
     set_build_status as _set_build_status,
+    touch_build_lease as _touch_build_lease,
+    cancellation_requested as _cancellation_requested,
+    request_build_cancel as _request_build_cancel,
+)
+from app.api.planner_build_contracts import (
+    activate_only_plan,
+    build_request_hash,
+    must_reject_variant,
+    normalize_requested_variants,
+)
+from app.api.planner_variant_runner import run_requested_variants
+from app.schemas.planner import (
+    PlannerBuildCancelResponse,
+    PlannerBuildRequest,
+    PlannerBuildQueuedResponse,
+    PlannerBuildResponse,
+    PlannerBuildPerformanceResponse,
+    PlannerObservabilityResponse,
+    PlannerBuildStatusResponse,
 )
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Compatibility name kept for existing route-contract tests and integrations.
+_build_request_hash = build_request_hash
+
+
+class BuildCancelled(RuntimeError):
+    """Internal control flow for a user-requested cancellation."""
+
+
+class BuildInfeasible(ValueError):
+    """The requested plan cannot pass final curriculum constraints."""
+
+    def __init__(self, message: str, *, details: list[dict] | None = None):
+        super().__init__(message)
+        self.details = details or []
+
+
+class BuildTimedOut(TimeoutError):
+    """The logical job reached its absolute deadline before publication."""
+
+
+def _assert_build_is_live(project_version_id: int, deadline_at: str | None) -> None:
+    if _cancellation_requested(project_version_id):
+        raise BuildCancelled("build cancellation requested")
+    if not deadline_at:
+        return
+    try:
+        deadline = datetime.fromisoformat(deadline_at)
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        raise BuildTimedOut("invalid build deadline")
+    if datetime.now(timezone.utc) >= deadline:
+        raise BuildTimedOut("build deadline reached")
+
+
+def _infeasible_build_response() -> HTTPException:
+    """Expose a stable user action without leaking internal verification data."""
+    return HTTPException(
+        status_code=422,
+        detail="Запрошенные варианты не прошли финальные ограничения. Проверьте кредиты, доказательства LO и настройки программы.",
+    )
+
+
+def _load_program_spec_for_command(db: Session | None, project_version_id: int) -> tuple[dict, str]:
+    """Capture the mutable project state before a job is handed to a worker."""
+    if db is None:  # Lightweight router-contract tests do not own a database.
+        snapshot = {"schema_version": 1, "project_version_id": int(project_version_id), "test_stub": True}
+        return snapshot, program_spec_hash(snapshot)
+    version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Версия проекта не найдена")
+    snapshot = build_program_spec_snapshot(version)
+    return snapshot, program_spec_hash(snapshot)
+
+
+def _start_build_heartbeat(project_version_id: int, worker_id: str | None):
+    """Keep the durable lease alive while a long planner stage is running."""
+    stop_event = threading.Event()
+    interval = max(1.0, min(30.0, settings.BUILD_LEASE_SECONDS / 3))
+    heartbeat_file = Path(__file__).resolve().parents[3] / ".runtime" / "planner-worker.heartbeat"
+
+    def run():
+        heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
+        while not stop_event.wait(interval):
+            try:
+                heartbeat_file.touch()
+            except OSError:
+                logger.warning("planner heartbeat file update failed", exc_info=True)
+            if not _touch_build_lease(project_version_id, worker_id):
+                return
+
+    thread = threading.Thread(
+        target=run,
+        name=f"planner-heartbeat-{project_version_id}",
+        daemon=True,
+    )
+    thread.start()
+    return stop_event, thread
 
 
 def _record_build_telemetry(
@@ -55,6 +164,23 @@ def _record_build_telemetry(
         "cache_hit_rate": round(sum(cache_flags) / len(cache_flags), 2),
         "response_bytes": len(json.dumps(response_payload or {}, ensure_ascii=False, default=str).encode("utf-8")),
     }
+    if response_payload and response_payload.get("goso_ruleset_version"):
+        details["goso_ruleset_version"] = response_payload["goso_ruleset_version"]
+    if response_payload and response_payload.get("job_id"):
+        details["job_id"] = response_payload["job_id"]
+    # A latency number without the actual embedding runtime is not comparable:
+    # SBERT, CPU/GPU and deterministic fallback have materially different
+    # cost and semantic meaning. Keep this compact and secret-free.
+    try:
+        from app.kag.embedding_service import embedding_service
+
+        runtime = embedding_service.get_status()
+        details["embedding_runtime"] = {
+            key: runtime.get(key)
+            for key in ("mode", "runtime_profile", "configured_model", "dimension", "device", "model_loaded")
+        }
+    except Exception:
+        details["embedding_runtime"] = {"mode": "unavailable"}
     try:
         db.add(AuditEvent(
             user_id=current_user.id,
@@ -79,52 +205,6 @@ def _percentile(values: list[float], percentile: float) -> float | None:
     if lower == upper:
         return round(ordered[lower], 2)
     return round(ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower), 2)
-
-
-def must_reject_variant(verification: dict | None) -> bool:
-    """Return whether a generated variant is unsafe to persist.
-
-    This rule deliberately does not depend on the programme jurisdiction.
-    Regulatory components can explain an advisory warning, but they can never
-    make an infeasible plan, a hard violation, or an LO without a real-course
-    confirmation safe to replace the previously saved plan.
-    """
-    verification = verification or {}
-    quality_reasons = {
-        str(item.get("reason"))
-        for item in (verification.get("quality_violations") or [])
-        if isinstance(item, dict)
-    }
-    # Some quality findings are not optional presentation warnings: a plan
-    # with an impossible semester placement or a missing core competency is
-    # pedagogically unsafe even when its arithmetic is valid.  Keep softer
-    # review hints (for example domain advisory text) non-blocking.
-    blocking_quality_reasons = {
-        "semester_appropriateness",
-        "missing_core_competency_blocks",
-        "bridge_module_limit_exceeded",
-    }
-    return bool(
-        not verification.get("feasible")
-        or int(verification.get("hard_violation_count") or 0) > 0
-        or "lo_without_real_course" in quality_reasons
-        or quality_reasons.intersection(blocking_quality_reasons)
-    )
-
-
-def activate_only_plan(plan_rows: list, active_plan_id: int | None):
-    """Mark exactly one plan active and return it.
-
-    Partial rebuilds retain non-requested B/C variants.  Their former active
-    flag must still be cleared when a newly built variant becomes active.
-    """
-    active_plan = None
-    for plan in plan_rows:
-        is_active = bool(active_plan_id is not None and plan.id == active_plan_id)
-        plan.is_active = 1 if is_active else 0
-        if is_active:
-            active_plan = plan
-    return active_plan
 
 
 @router.post("/{project_version_id}/apply-quality-improvements")
@@ -264,30 +344,157 @@ async def apply_quality_improvements(
     }
 
 
-@router.post("/{project_version_id}/build")
+@router.post("/{project_version_id}/build", response_model=PlannerBuildResponse | PlannerBuildQueuedResponse, dependencies=[Depends(require_permission("planner", "write"))])
 def build_plan(
     project_version_id: int,
-    payload: dict = Body(default={}),
+    payload: PlannerBuildRequest = Body(default_factory=PlannerBuildRequest),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Build all three curriculum plan variants"""
+    request_hash = _build_request_hash(project_version_id, payload.variants)
+    program_spec_json, spec_hash = _load_program_spec_for_command(db, project_version_id)
+    if settings.ASYNC_BUILDS and os.environ.get("CURRICULUM_KAG_WORKER") != "1":
+        previous_status = _get_build_status(project_version_id)
+        if (
+            idempotency_key
+            and previous_status.get("idempotency_key") == idempotency_key
+            and previous_status.get("request_hash")
+            and previous_status.get("request_hash") != request_hash
+        ):
+            raise HTTPException(status_code=409, detail="Idempotency-Key уже использован для другого запроса")
+        if (
+            idempotency_key
+            and previous_status.get("idempotency_key") == idempotency_key
+            and previous_status.get("request_hash") == request_hash
+            and previous_status.get("state") not in {None, "idle"}
+        ):
+            replay_state = previous_status.get("state")
+            return JSONResponse(status_code=200 if replay_state in {"complete", "failed", "rejected", "cancelled", "timed_out"} else 202, content={
+                "state": replay_state,
+                "job_id": previous_status.get("job_id"),
+                "project_version_id": project_version_id,
+                "status_url": f"/api/planner/{project_version_id}/build-status",
+                "idempotent_replay": True,
+            })
+        queued = _claim_build_status(
+            project_version_id,
+            job_id=f"build-{os.urandom(16).hex()}",
+            request_hash=request_hash,
+            program_spec_json=program_spec_json,
+            program_spec_hash=spec_hash,
+            requested_by_user_id=current_user.id,
+            # Keep the command itself in the durable status snapshot.  A
+            # persistent worker must be able to recover a queued job after an
+            # API/worker restart without reconstructing the request from an
+            # OS process command line.
+            requested_variants=payload.variants,
+            state="queued",
+            stage="queued",
+            progress=0,
+            started_at=None,
+            elapsed_seconds=0,
+            idempotency_key=idempotency_key,
+        )
+        if queued is None:
+            raise HTTPException(status_code=409, detail="Построение вариантов уже выполняется")
+        worker_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "run_planner_build_worker.py"))
+        command = [
+            sys.executable,
+            worker_script,
+            "--version-id", str(project_version_id),
+            "--user-id", str(current_user.id),
+            "--variants", json.dumps(payload.variants, ensure_ascii=False),
+            "--job-id", queued["job_id"],
+        ]
+        if idempotency_key:
+            command.extend(["--idempotency-key", idempotency_key])
+        # In production a dedicated daemon owns the queue.  The legacy
+        # one-shot process remains available only when no daemon is deployed.
+        if settings.PERSISTENT_PLANNER_WORKER:
+            return JSONResponse(status_code=202, content={
+                "state": "queued",
+                "job_id": queued["job_id"],
+                "project_version_id": project_version_id,
+                "status_url": f"/api/planner/{project_version_id}/build-status",
+            })
+        try:
+            creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            worker_env = os.environ.copy()
+            worker_env["CURRICULUM_KAG_WORKER"] = "1"
+            process = subprocess.Popen(
+                command,
+                cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")),
+                env=worker_env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                creationflags=creation_flags,
+            )
+        except OSError as exc:
+            _replace_build_status(project_version_id, state="failed", stage="failed", progress=0, error="Не удалось запустить worker построения")
+            logger.exception("Could not start planner worker for version %s", project_version_id)
+            raise HTTPException(status_code=503, detail="Не удалось запустить worker построения") from exc
+        return JSONResponse(status_code=202, content={
+            "state": "queued",
+            "job_id": queued["job_id"],
+            "project_version_id": project_version_id,
+            "status_url": f"/api/planner/{project_version_id}/build-status",
+        })
     build_started = time.perf_counter()
     sql_measurement = start_sql_query_measurement()
     sql_query_count: int | None = None
     stage_started = build_started
     timings = {}
+    previous_status = _get_build_status(project_version_id)
+    expected_job_id = os.environ.get("CURRICULUM_KAG_EXPECTED_JOB_ID")
+    if expected_job_id and previous_status.get("job_id") != expected_job_id:
+        raise HTTPException(status_code=409, detail="Очередь этого построения уже была отменена или заменена")
+    if (
+        idempotency_key
+        and previous_status.get("idempotency_key") == idempotency_key
+        and previous_status.get("request_hash")
+        and previous_status.get("request_hash") != request_hash
+    ):
+        raise HTTPException(status_code=409, detail="Idempotency-Key уже использован для другого запроса")
+    if (
+        idempotency_key
+        and previous_status.get("state") == "complete"
+        and previous_status.get("idempotency_key") == idempotency_key
+    ):
+        return JSONResponse(status_code=200, content={
+            "state": "complete",
+            "job_id": previous_status.get("job_id"),
+            "project_version_id": project_version_id,
+            "status_url": f"/api/planner/{project_version_id}/build-status",
+            "idempotent_replay": True,
+        })
     claimed = _claim_build_status(
         project_version_id,
+        # The detached worker promotes the API-created queued job.  It must
+        # retain that public identity while receiving a new *worker* owner.
+        job_id=previous_status.get("job_id") or f"build-{os.urandom(16).hex()}",
+        request_hash=request_hash,
+        program_spec_json=previous_status.get("program_spec_json") or program_spec_json,
+        program_spec_hash=previous_status.get("program_spec_hash") or spec_hash,
+        requested_by_user_id=current_user.id,
+        _expected_job_id=expected_job_id,
         state="running",
         stage="matching",
         progress=5,
         started_at=datetime.now(timezone.utc).isoformat(),
         elapsed_seconds=0,
         timings=timings,
+        idempotency_key=idempotency_key,
     )
     if claimed is None:
         raise HTTPException(status_code=409, detail="Построение вариантов уже выполняется")
+    heartbeat_stop, heartbeat_thread = _start_build_heartbeat(
+        project_version_id, (claimed or {}).get("worker_id")
+    )
+    deadline_at = (claimed or {}).get("deadline_at")
     try:
         from app.models.plan import Plan, PlanItem
         from app.kag.scoring import compute_all_matches
@@ -300,6 +507,10 @@ def build_plan(
         version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
         if not version:
             raise ValueError("Версия проекта не найдена")
+        _assert_build_is_live(project_version_id, deadline_at)
+        expected_spec_hash = str((claimed or {}).get("program_spec_hash") or "")
+        if expected_spec_hash and program_spec_hash(build_program_spec_snapshot(version)) != expected_spec_hash:
+            raise BuildInfeasible("ProgramSpec changed after this build was queued")
         ensure_goso_learning_outcomes(version, db)
         _set_build_status(project_version_id, stage="epvo_repository", progress=8)
         epvo_signature = epvo_input_signature(version, db)
@@ -323,12 +534,15 @@ def build_plan(
         )
         # Compute matches once before building all variants
         def update_scoring_progress(payload: dict):
+            _assert_build_is_live(project_version_id, deadline_at)
             _set_build_status(project_version_id, **payload)
-        scoring_signature = scoring_input_signature(version, db)
+        scoring_signature = scoring_input_signature(version, db, epvo_signature=epvo_signature)
         scoring_cached = cache_hit(db, version, SCORING_CACHE_ACTION, scoring_signature)
         if not scoring_cached:
             scoring_result = compute_all_matches(project_version_id, db, progress_callback=update_scoring_progress)
-            scoring_signature = scoring_input_signature(version, db)
+            # Persist exactly the signature used for the cache lookup. A
+            # second recomputation without the EPVO fingerprint made every
+            # retry miss scoring cache even when inputs were unchanged.
             remember_cache(
                 db, version, SCORING_CACHE_ACTION, scoring_signature, current_user.id,
                 {"total_matches": scoring_result.get("total_matches", 0), "total_los": scoring_result.get("total_los", 0)},
@@ -369,79 +583,77 @@ def build_plan(
         old_active_plan = next((plan for plan in old_plans if plan.is_active == 1), None)
         old_active_snapshot = _plan_snapshot(old_active_plan, db)
 
-        requested = payload.get("variants") if isinstance(payload, dict) else None
-        if requested in (None, "", "all"):
-            requested_variants = ["A", "B", "C"]
-        elif isinstance(requested, str):
-            requested_variants = [item.strip().upper() for item in requested.split(",")]
-        else:
-            requested_variants = [str(item).strip().upper() for item in requested]
-        requested_variants = list(dict.fromkeys(
-            item for item in requested_variants if item in {"A", "B", "C"}
-        ))
+        requested_variants = normalize_requested_variants(payload.variants)
         if not requested_variants:
             raise HTTPException(status_code=422, detail="Выберите хотя бы один вариант плана: A, B или C")
 
-        variants = {}
-        for variant_type in requested_variants:
-            variant_started = time.perf_counter()
-            _set_build_status(
-                project_version_id,
-                stage=f"variant_{variant_type}_start", progress={"A": 25, "B": 50, "C": 75}[variant_type]
-            )
-            # Every requested variant must pass through the selector.  Cloning
-            # A into B/C made the labels cosmetic and allowed identical plans
-            # to pass acceptance.  The scheduler has deterministic
-            # variant-specific ranking, so separate runs remain reproducible
-            # while producing genuinely different candidates when alternatives
-            # exist.
-            result = build_curriculum_plan(
+        def build_variant(variant_type: str) -> dict:
+            # Every requested variant passes through the selector. Cloning A
+            # would make the labels cosmetic and hide duplicate alternatives.
+            return build_curriculum_plan(
                 project_version_id,
                 db,
                 variant_type,
                 commit=False,
+                selection_variant_type=(
+                    "A"
+                    if variant_type == "B"
+                    and str((version.project.constraints_json or {}).get("program_type") or "standard").lower()
+                    in {"interdisciplinary", "joint"}
+                    else None
+                ),
+                selected_courses_override=(
+                    [
+                        dict(item)
+                        for items in (variants.get("A", {}).get("schedule", {}) or {}).values()
+                        for item in items
+                    ]
+                    if variant_type == "B"
+                    and str((version.project.constraints_json or {}).get("program_type") or "standard").lower()
+                    in {"interdisciplinary", "joint"}
+                    and variants.get("A")
+                    else None
+                ),
             )
-            variants[variant_type] = result
-            timings[f"variant_{variant_type}"] = round(time.perf_counter() - variant_started, 2)
+
+        variants: dict[str, dict] = {}
+
+        def set_variant_stage(stage: str, progress: int) -> None:
             _set_build_status(
                 project_version_id,
-                stage=f"variant_{variant_type}",
-                progress={"A": 40, "B": 65, "C": 85}[variant_type],
+                stage=stage,
+                progress=progress,
                 elapsed_seconds=round(time.perf_counter() - build_started, 1),
                 timings=dict(timings),
             )
+
+        variants, variant_timings = run_requested_variants(
+            requested_variants,
+            build_variant=build_variant,
+            assert_live=lambda: _assert_build_is_live(project_version_id, deadline_at),
+            set_stage=set_variant_stage,
+            stage_progress={"A": 25, "B": 50, "C": 75},
+            completed_progress={"A": 40, "B": 65, "C": 85},
+            results=variants,
+        )
+        timings.update(variant_timings)
 
         rejected_variants = []
         # A/B/C are alternatives, not cosmetic labels.  Reject a build that
         # accidentally persisted the same course/bridge sequence twice; the
         # caller can then request fewer variants or adjust the constraints.
-        def _variant_signature(row):
-            schedule = row.get("schedule") or {}
-            signature = []
-            for semester, items in sorted(schedule.items(), key=lambda pair: int(pair[0])):
-                for item in items or []:
-                    if not isinstance(item, dict):
-                        continue
-                    signature.append((int(semester), item.get("course_id"), item.get("bridge_module_id")))
-            return tuple(signature)
-
         signatures = {}
         for name, row in variants.items():
-            signatures.setdefault(_variant_signature(row), []).append(name)
-        for duplicate_names in signatures.values():
-            if len(duplicate_names) > 1:
-                for duplicate_name in duplicate_names[1:]:
-                    rejected_variants.append({
-                        "variant": duplicate_name,
-                        "hard": 0,
-                        "hard_details": ["variant_not_distinct"],
-                        "quality_violations": [{
-                            "reason": "variant_not_distinct",
-                            "variants": duplicate_names,
-                        }],
-                    })
+            signatures.setdefault(schedule_fingerprint(row.get("schedule") or {}), []).append(name)
+        duplicate_variants = {
+            duplicate_name: duplicate_names
+            for duplicate_names in signatures.values()
+            if len(duplicate_names) > 1
+            for duplicate_name in duplicate_names[1:]
+        }
         for variant_name, result in variants.items():
             verification = result.get("verification") or {}
+            duplicate_names = duplicate_variants.get(variant_name)
             # Quality warnings are review guidance, not a generation failure.
             # Only hard feasibility violations may prevent replacing the old
             # plans; otherwise a valid plan could never be saved when one
@@ -449,12 +661,72 @@ def build_plan(
             # Regulatory KZ plans may retain advisory quality warnings, but
             # no jurisdiction may bypass a hard feasibility failure or a
             # programme LO without real-course evidence.
-            if must_reject_variant(verification):
+            if duplicate_names or must_reject_variant(verification):
+                hard_details = []
+                if duplicate_names:
+                    hard_details.append({
+                        "reason": "variant_not_distinct",
+                        "variants": duplicate_names,
+                    })
+                for key, label in (
+                    ("prerequisite_violations", "prerequisites"),
+                    ("semester_load_violations", "semester_load"),
+                    ("credit_violations", "credits"),
+                    ("domain_quota_violations", "domain_quota"),
+                    ("course_lo_violations", "course_lo"),
+                    ("bridge_module_overflow", "bridge_limit"),
+                ):
+                    value = verification.get(key)
+                    count = len(value) if isinstance(value, list) else int(value or 0)
+                    if count:
+                        hard_details.append({"reason": label, "count": count})
+                for item in (verification.get("goso_compliance") or {}).get("violations") or []:
+                    hard_details.append({"reason": item.get("reason", "goso"), "details": item})
+                hard_details.append({
+                    "reason": "verifier_breakdown",
+                    "quality_reasons": sorted(
+                        str(item.get("reason"))
+                        for item in (verification.get("quality_violations") or [])
+                        if isinstance(item, dict) and item.get("reason")
+                    ),
+                    "counts": {
+                        "prerequisites": len(verification.get("prerequisite_violations") or []),
+                        "semester_load": len(verification.get("semester_load_violations") or []),
+                        "credits": len(verification.get("credit_violations") or []),
+                        "domain_quota": len(verification.get("domain_quota_violations") or []),
+                        "goso": len((verification.get("goso_compliance") or {}).get("violations") or []),
+                        "course_lo": int(verification.get("course_lo_violations") or 0),
+                        "real_lo": len(verification.get("lo_without_real_course") or []),
+                        "bridge_overflow": int(verification.get("bridge_module_overflow") or 0),
+                    },
+                    "actual": {
+                        "total_credits": verification.get("total_credits"),
+                        "target_credits": verification.get("target_credits"),
+                        "semester_loads": verification.get("semester_loads"),
+                        "domain_credits": verification.get("domain_credits"),
+                        "lo_coverage": verification.get("min_lo_coverage"),
+                        "bridge_modules": verification.get("bridge_module_count"),
+                    },
+                    "missing_real_lo": [
+                        {
+                            "lo_code": item.get("lo_code"),
+                            "max_real_course_score": item.get("max_real_course_score"),
+                            "bridge_supported": bool(item.get("bridge_supported")),
+                        }
+                        for item in (verification.get("lo_without_real_course") or [])[:20]
+                    ],
+                })
+                quality_violations = list(verification.get("quality_violations") or [])
+                if duplicate_names:
+                    quality_violations.append({
+                        "reason": "variant_not_distinct",
+                        "variants": duplicate_names,
+                    })
                 rejected_variants.append({
                     "variant": variant_name,
                     "hard": int(verification.get("hard_violation_count") or 0),
-                    "hard_details": verification.get("hard_violations") or verification.get("violations") or [],
-                    "quality_violations": verification.get("quality_violations") or [],
+                    "hard_details": hard_details,
+                    "quality_violations": quality_violations,
                 })
         if rejected_variants:
             summary = "; ".join(
@@ -462,12 +734,14 @@ def build_plan(
                 + (f", details={row['hard_details']}" if row.get("hard_details") else "")
                 for row in rejected_variants
             )
-            raise ValueError(
+            raise BuildInfeasible(
                 "Новые варианты не прошли финальную проверку; старые планы сохранены. "
-                + summary
+                + summary,
+                details=rejected_variants,
             )
 
         stage_started = time.perf_counter()
+        _assert_build_is_live(project_version_id, deadline_at)
         _set_build_status(
             project_version_id, stage="saving", progress=92,
             elapsed_seconds=round(time.perf_counter() - build_started, 1), timings=dict(timings),
@@ -506,6 +780,7 @@ def build_plan(
         if epvo_translations:
             from app.services.content_localization import register_course_translations
             register_course_translations(epvo_translations, db)
+        _assert_build_is_live(project_version_id, deadline_at)
         db.commit()
         timings["saving"] = round(time.perf_counter() - stage_started, 2)
         _replace_build_status(project_version_id, **{
@@ -521,6 +796,11 @@ def build_plan(
         response_payload = {
             "variants": variants,
             "active_variant": best_variant,
+            "goso_ruleset_version": (
+                ((variants.get(best_variant, {}).get("metrics") or {}).get("goso_ruleset_version"))
+                if best_variant else None
+            ),
+            "job_id": (claimed or {}).get("job_id"),
             "epvo_repository": epvo_sync,
             "change_report": change_report,
             "descriptions": {
@@ -541,6 +821,67 @@ def build_plan(
             response_payload=response_payload,
         )
         return response_payload
+    except BuildCancelled:
+        if sql_query_count is None:
+            sql_query_count = finish_sql_query_measurement(sql_measurement)
+        db.rollback()
+        _replace_build_status(project_version_id, state="cancelled", stage="cancelled", progress=0, error="Построение отменено пользователем", timings=timings)
+        raise HTTPException(status_code=409, detail="Построение отменено пользователем")
+    except BuildInfeasible as exc:
+        if sql_query_count is None:
+            sql_query_count = finish_sql_query_measurement(sql_measurement)
+        db.rollback()
+        rejection_details = [
+            {
+                "variant": item.get("variant"),
+                "hard": int(item.get("hard") or 0),
+                "hard_details": item.get("hard_details") or [],
+                "quality_reasons": [
+                    value.get("reason") for value in (item.get("quality_violations") or [])
+                    if isinstance(value, dict) and value.get("reason")
+                ],
+            }
+            for item in getattr(exc, "details", [])
+            if isinstance(item, dict)
+        ][:3]
+        _replace_build_status(project_version_id, **{
+            "state": "rejected", "stage": "infeasible", "progress": 0,
+            # Keep the actionable, non-sensitive verifier summary in the
+            # durable status.  The HTTP response remains the generic safe
+            # 422 below; this text is for the authenticated owner’s status
+            # page and contains no traceback or model prompt.
+            "error": str(exc)[:2000] or "Финальная проверка вариантов выявила невыполнимые ограничения.",
+            "verification_summary": rejection_details,
+            "elapsed_seconds": round(time.perf_counter() - build_started, 1),
+            "timings": timings,
+        })
+        _record_build_telemetry(
+            db,
+            current_user=current_user,
+            project_version_id=project_version_id,
+            state="rejected",
+            elapsed_seconds=time.perf_counter() - build_started,
+            timings=timings,
+            sql_query_count=sql_query_count,
+            response_payload={"verification_summary": rejection_details},
+        )
+        raise _infeasible_build_response()
+    except BuildTimedOut:
+        if sql_query_count is None:
+            sql_query_count = finish_sql_query_measurement(sql_measurement)
+        db.rollback()
+        _replace_build_status(project_version_id, **{
+            "state": "timed_out", "stage": "timed_out", "progress": 0,
+            "error": "Построение превысило допустимое время до публикации результата.",
+            "elapsed_seconds": round(time.perf_counter() - build_started, 1),
+            "timings": timings,
+        })
+        _record_build_telemetry(
+            db, current_user=current_user, project_version_id=project_version_id,
+            state="timed_out", elapsed_seconds=time.perf_counter() - build_started,
+            timings=timings, sql_query_count=sql_query_count,
+        )
+        raise HTTPException(status_code=504, detail="Построение превысило допустимое время; повторите запрос после проверки ограничений")
     except HTTPException:
         if sql_query_count is None:
             sql_query_count = finish_sql_query_measurement(sql_measurement)
@@ -582,9 +923,35 @@ def build_plan(
         )
         logger.exception("Plan build failed for project version %s", project_version_id)
         raise HTTPException(status_code=500, detail="Не удалось сформировать учебный план") from e
+    finally:
+        heartbeat_stop.set()
+        heartbeat_thread.join(timeout=max(1.0, min(5.0, settings.BUILD_LEASE_SECONDS / 4)))
 
 
-@router.get("/{project_version_id}/build-status")
+@router.post("/{project_version_id}/build-retry", response_model=PlannerBuildResponse | PlannerBuildQueuedResponse, dependencies=[Depends(require_permission("planner", "write"))])
+def retry_build(
+    project_version_id: int,
+    payload: PlannerBuildRequest = Body(default_factory=PlannerBuildRequest),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    """Retry only a terminal build; never interrupt a live attempt."""
+    status = _get_build_status(project_version_id)
+    if status.get("state") in {"queued", "running", "cancellation_requested"}:
+        raise HTTPException(status_code=409, detail="Текущее построение ещё выполняется")
+    if status.get("state") not in {"failed", "timed_out", "cancelled", "rejected"}:
+        raise HTTPException(status_code=409, detail="Для этой версии нет неуспешного построения для повтора")
+    return build_plan(
+        project_version_id=project_version_id,
+        payload=payload,
+        db=db,
+        current_user=current_user,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.get("/{project_version_id}/build-status", response_model=PlannerBuildStatusResponse)
 async def get_build_status(
     project_version_id: int,
     current_user: User = Depends(get_current_user),
@@ -601,7 +968,22 @@ async def get_build_status(
     return status
 
 
-@router.get("/{project_version_id}/performance")
+@router.post("/{project_version_id}/build-cancel", response_model=PlannerBuildCancelResponse, dependencies=[Depends(require_permission("planner", "write"))])
+def cancel_build(
+    project_version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel a queued build immediately or request cancellation while running."""
+    status = _get_build_status(project_version_id)
+    if status.get("state") not in {"queued", "running"}:
+        return {"state": status.get("state", "idle"), "cancelled": False}
+    status = _request_build_cancel(project_version_id)
+    requested_state = "cancellation_requested" if status.get("state") == "running" else "cancelled"
+    return {"state": requested_state, "cancelled": True, "updated_at": status.get("updated_at")}
+
+
+@router.get("/{project_version_id}/performance", response_model=PlannerBuildPerformanceResponse)
 def get_build_performance(
     project_version_id: int,
     db: Session = Depends(get_db),
@@ -624,17 +1006,57 @@ def get_build_performance(
     query_counts = [float(row.get("sql_query_count") or 0) for row in entries]
     response_sizes = [float(row.get("response_bytes") or 0) for row in entries]
     cache_rates = [float(row.get("cache_hit_rate") or 0) for row in entries]
+    duration_p95 = _percentile(durations, 0.95)
     return {
         "sample_size": len(entries),
-        "duration_ms": {"p50": _percentile(durations, 0.5), "p95": _percentile(durations, 0.95)},
+        "duration_ms": {"p50": _percentile(durations, 0.5), "p95": duration_p95},
         "sql_query_count": {"p50": _percentile(query_counts, 0.5), "p95": _percentile(query_counts, 0.95)},
         "response_bytes": {"p50": _percentile(response_sizes, 0.5), "p95": _percentile(response_sizes, 0.95)},
         "cache_hit_rate": round(sum(cache_rates) / len(cache_rates), 3) if cache_rates else None,
+        "p95_budget_ms": settings.PLANNER_P95_BUDGET_MS,
+        "p95_within_budget": None if not durations else duration_p95 <= settings.PLANNER_P95_BUDGET_MS,
         "recent": entries[:10],
     }
 
 
-@router.post("/{project_version_id}/recompute-matches")
+@router.get("/observability/summary", response_model=PlannerObservabilityResponse, dependencies=[Depends(require_permission("planner", "read"))])
+def get_planner_observability_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return aggregate planner signals without exposing plan or user payloads."""
+    statuses = db.query(PlanBuildStatus.state).all()
+    state_counts: dict[str, int] = {}
+    for (state,) in statuses:
+        key = str(state or "unknown")
+        state_counts[key] = state_counts.get(key, 0) + 1
+    now = datetime.now(timezone.utc)
+    active_leases = db.query(PlanBuildStatus).filter(
+        PlanBuildStatus.lease_expires_at.is_not(None),
+        PlanBuildStatus.lease_expires_at > now,
+        PlanBuildStatus.state.in_(["queued", "running"]),
+    ).count()
+    rows = (
+        db.query(AuditEvent.details_json)
+        .filter(AuditEvent.action == "planner_build_telemetry")
+        .order_by(AuditEvent.timestamp.desc())
+        .limit(1000)
+        .all()
+    )
+    durations = [float(details.get("duration_ms") or 0) for (details,) in rows if isinstance(details, dict)]
+    p95 = _percentile(durations, 0.95)
+    return {
+        "build_states": state_counts,
+        "failed_or_timed_out": state_counts.get("failed", 0) + state_counts.get("timed_out", 0),
+        "active_leases": active_leases,
+        "telemetry_sample_size": len(durations),
+        "duration_ms": {"p50": _percentile(durations, 0.5), "p95": p95},
+        "p95_budget_ms": settings.PLANNER_P95_BUDGET_MS,
+        "p95_within_budget": None if not durations else p95 <= settings.PLANNER_P95_BUDGET_MS,
+    }
+
+
+@router.post("/{project_version_id}/recompute-matches", dependencies=[Depends(require_permission("planner", "write"))])
 def recompute_matches(
     project_version_id: int,
     db: Session = Depends(get_db),
@@ -696,18 +1118,17 @@ def recompute_matches(
 
 
 
-@router.post("/{plan_id}/toggle-active")
+@router.post("/{plan_id}/toggle-active", dependencies=[Depends(require_permission("planner", "write"))])
 async def toggle_plan_active(
     plan_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _plan_owner: User = Depends(require_plan_object_access),
 ):
     """Toggle a plan as active and deactivate others for the same project version"""
     from app.models.plan import Plan
 
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Учебный план не найден")
+    plan = require_plan_access(db, current_user, plan_id)
     verification = (plan.metrics_json or {}).get("verification", {})
 
     # A selected plan is the published/active curriculum for this version.

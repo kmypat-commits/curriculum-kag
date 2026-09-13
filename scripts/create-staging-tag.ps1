@@ -17,6 +17,22 @@ try {
     if (-not (Test-Path -LiteralPath $manifestPath)) { throw "Staging manifest is missing; run build-staging-manifest.ps1." }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($manifest.git.dirty -ne $false) { throw "Manifest records a dirty worktree." }
+    $policy = $manifest.release_policy
+    foreach ($field in @('database', 'migrations', 'models', 'epvo_dataset')) {
+        if (-not $policy -or [string]::IsNullOrWhiteSpace([string]$policy.$field)) {
+            throw "Staging manifest release_policy.$field is missing. Rebuild the manifest."
+        }
+    }
+    if ([string]$policy.database -notmatch '(?i)PostgreSQL.*restore') {
+        throw 'Staging manifest must require PostgreSQL backup and restore verification.'
+    }
+    if ([string]$policy.models -notmatch '(?i)separat') {
+        throw 'Staging manifest must declare model delivery as a separate artifact.'
+    }
+    $head = (git rev-parse HEAD).Trim()
+    if ([string]$manifest.git.commit -ne $head) {
+        throw "Staging manifest commit $($manifest.git.commit) does not match current HEAD $head; rebuild the manifest."
+    }
     if (-not $BrowserSmokeVerified) {
         throw "Pass -BrowserSmokeVerified only after manually checking graph and RU/KK/EN in an authenticated browser session."
     }

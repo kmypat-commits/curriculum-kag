@@ -8,9 +8,9 @@ export default function CompactSection({
     children,
 }) {
     return <details
-        className="card"
+        className="card compact-section"
         open={defaultOpen}
-        style={{ marginBottom: 20, borderLeft: `5px solid ${accent}`, padding: 0, overflow: 'hidden' }}
+        style={{ marginBottom: 20, '--section-accent': accent, padding: 0, overflow: 'hidden' }}
     >
         <summary style={{ cursor: 'pointer', listStyle: 'none', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', background: '#fbfdff' }}>
             <span>

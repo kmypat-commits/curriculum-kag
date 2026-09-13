@@ -52,6 +52,7 @@ export default function PrerequisiteGraph() {
     const [error, setError] = useState(null)
     const [semesterInsights, setSemesterInsights] = useState({})
     const [insightLoading, setInsightLoading] = useState(null)
+    const semesterStageRefs = useRef(new Map())
 
     useEffect(() => {
         axios.get('/api/projects/' + id).then(async response => {
@@ -79,14 +80,14 @@ export default function PrerequisiteGraph() {
 
     useEffect(() => {
         const update = () => {
-            const stages = [...document.querySelectorAll('[data-semester-stage]')]
+            const stages = [...semesterStageRefs.current.entries()]
             const marker = window.innerHeight * 0.48
-            let closest = stages[0], distance = Infinity
-            stages.forEach(stage => {
+            let closest = null, distance = Infinity
+            stages.forEach(([semester, stage]) => {
                 const value = Math.abs(stage.getBoundingClientRect().top - marker)
-                if (value < distance) { distance = value; closest = stage }
+                if (value < distance) { distance = value; closest = semester }
             })
-            if (closest) setActiveSemester(Number(closest.dataset.semesterStage))
+            if (closest != null) setActiveSemester(Number(closest))
         }
         window.addEventListener('scroll', update, { passive: true }); update()
         return () => window.removeEventListener('scroll', update)
@@ -104,18 +105,16 @@ export default function PrerequisiteGraph() {
                     ...graph.nodes.map(node => ({ data: { ...node, label: node.code + '\n' + localize(node.title_translations || node.title) } })),
                     ...graph.edges.map(edge => ({ data: edge }))
                 ],
-                wheelSensitivity: 0.18, minZoom: 0.15, maxZoom: 2.2,
+                minZoom: 0.15, maxZoom: 2.2,
                 style: [
                     { selector: 'node', style: {
                         'background-color': '#111b29', 'background-opacity': .98,
                         'border-color': element => neon[(Number(element.data('semester')) - 1) % neon.length],
                         'border-width': 2, 'label': 'data(label)', 'color': '#f5f7fa', 'text-wrap': 'wrap',
                         'text-max-width': 130, 'font-size': 9, 'font-weight': 600, 'text-valign': 'center',
-                        'text-halign': 'center', 'width': 158, 'height': 62, 'shape': 'round-rectangle',
-                        'shadow-blur': 14, 'shadow-color': '#000000',
-                        'shadow-opacity': .24, 'shadow-offset-x': 0, 'shadow-offset-y': 6
+                        'text-halign': 'center', 'width': 158, 'height': 62, 'shape': 'round-rectangle'
                     }},
-                    { selector: 'node[kind = "bridge"]', style: { 'shape': 'hexagon', 'border-color': '#ff40f5', 'shadow-color': '#ff40f5', 'background-color': '#240a2d' }},
+                    { selector: 'node[kind = "bridge"]', style: { 'shape': 'hexagon', 'border-color': '#ff40f5', 'border-width': 3, 'background-color': '#240a2d' }},
                     { selector: 'edge', style: {
                         'width': 1.6, 'line-color': '#506276', 'target-arrow-color': '#7eb6ff',
                         'target-arrow-shape': 'triangle', 'arrow-scale': .85, 'curve-style': 'taxi',
@@ -137,9 +136,9 @@ export default function PrerequisiteGraph() {
                         'width': 2, 'opacity': .58
                     }},
                     { selector: '.dimmed', style: { 'opacity': .07 } },
-                    { selector: '.semesterNode', style: { 'border-width': 4, 'background-color': '#17283d', 'shadow-opacity': .5, 'z-index': 20 }},
+                    { selector: '.semesterNode', style: { 'border-width': 4, 'background-color': '#17283d', 'z-index': 20 }},
                     { selector: '.flowPath', style: { 'opacity': 1, 'line-color': '#64a8ff', 'target-arrow-color': '#64a8ff', 'width': 3, 'z-index': 30 }},
-                    { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 4, 'shadow-color': '#64a8ff', 'shadow-opacity': .65 }}
+                    { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 4 }}
                 ],
                 layout: dagreAvailable
                     ? { name: 'dagre', rankDir: 'LR', rankSep: 86, nodeSep: 20, edgeSep: 10, padding: 35 }
@@ -203,7 +202,7 @@ export default function PrerequisiteGraph() {
     }
 
     if (loading) return <LoadingSpinner />
-    const css = '.future-grid{background-color:#0a111c;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:36px 36px}.stage-card{border:1px solid rgba(255,255,255,.09);background:rgba(15,25,38,.88);box-shadow:0 20px 55px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.035);border-radius:22px}.course-chip{border:1px solid rgba(255,255,255,.07);border-left:3px solid var(--neon);background:rgba(255,255,255,.035);padding:11px 12px;margin-bottom:8px;border-radius:12px;transition:.18s ease}.course-chip:hover{transform:translateY(-2px);background:rgba(255,255,255,.065)}.ability{padding:10px 12px;margin-bottom:8px;border:1px solid rgba(255,255,255,.075);background:rgba(255,255,255,.035);border-radius:12px;line-height:1.4}.semester-stage.active{border-color:var(--neon);box-shadow:0 18px 50px rgba(0,0,0,.32)}@media(max-width:1150px){.journey-grid{grid-template-columns:260px minmax(420px,1fr)!important}.right-rail{display:none}.graph-sticky{top:12px!important}}'
+    const css = '.future-grid{background-color:#0a111c}.stage-card{border:1px solid rgba(255,255,255,.09);background:rgba(15,25,38,.88);box-shadow:0 20px 55px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.035);border-radius:22px}.course-chip{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:11px 12px;margin-bottom:8px;border-radius:12px;transition:.18s ease}.course-chip:hover{transform:translateY(-2px);background:rgba(255,255,255,.065)}.ability{padding:10px 12px;margin-bottom:8px;border:1px solid rgba(255,255,255,.075);background:rgba(255,255,255,.035);border-radius:12px;line-height:1.4}.semester-stage.active{border-color:var(--neon);box-shadow:0 18px 50px rgba(0,0,0,.32)}@media(max-width:1150px){.journey-grid{grid-template-columns:260px minmax(420px,1fr)!important}.right-rail{display:none}.graph-sticky{top:12px!important}}'
 
     return <div className="graph-page" style={{ minHeight: '100vh', color: '#dcefff', background: '#030912' }}>
         <style>{css}</style>
@@ -220,7 +219,7 @@ export default function PrerequisiteGraph() {
             {error && <div className="stage-card" style={{ padding: 16, color: '#ff8a9a', marginBottom: 16 }}>
                 <div>{error}</div>
                 <button type="button" onClick={() => window.location.reload()} style={{ ...futureButton, marginTop: 10 }}>
-                    {language === 'ru' ? 'Повторить загрузку графа' : language === 'kk' ? 'Графты қайта жүктеу' : 'Retry graph loading'}
+                    {t('retry_graph_loading')}
                 </button>
             </div>}
             {graph && competencies && <>
@@ -229,7 +228,10 @@ export default function PrerequisiteGraph() {
                     <div style={{ color: graph.has_cycles ? '#ff5577' : '#00e676', fontWeight: 700 }}>{graph.has_cycles ? t('graph_has_cycles') : '● ' + t('graph_no_cycles')}</div>
                 </div>
                 <div className="journey-grid" style={{ display: 'grid', gridTemplateColumns: '300px minmax(520px,1fr) 350px', gap: 16, alignItems: 'start' }}>
-                    <div>{competencies.semesters.map(record => <CourseStage key={record.semester} record={record} graph={graph} active={activeSemester} t={t} onCourse={course => {
+                    <div>{competencies.semesters.map(record => <CourseStage key={record.semester} record={record} graph={graph} active={activeSemester} t={t} stageRef={node => {
+                        if (node) semesterStageRefs.current.set(record.semester, node)
+                        else semesterStageRefs.current.delete(record.semester)
+                    }} onCourse={course => {
                         const node = cyRef.current?.getElementById(course.id)
                         if (node?.length) { node.select(); node.trigger('tap') }
                     }} localize={localize} />)}</div>
@@ -238,16 +240,39 @@ export default function PrerequisiteGraph() {
                         <div style={{ position: 'absolute', zIndex: 3, right: 16, top: 14, padding: '9px 11px', borderRadius: 10, background: 'rgba(2,10,18,.8)', fontSize: 10, lineHeight: 1.65, pointerEvents: 'none' }}>
                             <div><span style={{ color: '#00e5ff' }}>━━▶</span> {t('formal_prerequisite')} ({graph.formal_edge_count})</div>
                             <div style={{ color: '#7fcfff' }}>
-                                {language === 'ru' ? 'репозиторий' : language === 'kk' ? 'репозиторий' : 'repository'}: {graph.edges.filter(edge => edge.relation === 'prerequisite' && edge.origin === 'catalogue').length}
+                                {t('repository_source_short')}: {graph.edges.filter(edge => edge.relation === 'prerequisite' && edge.origin === 'catalogue').length}
                                 {' · '}
-                                {language === 'ru' ? 'выведено в плане' : language === 'kk' ? 'жоспарда шығарылды' : 'plan-inferred'}: {graph.edges.filter(edge => edge.relation === 'prerequisite' && edge.origin === 'plan_inferred').length}
+                                {t('plan_inferred_short')}: {graph.edges.filter(edge => edge.relation === 'prerequisite' && edge.origin === 'plan_inferred').length}
                             </div>
                             <div><span style={{ color: '#d09cff' }}>┄┄▶</span> {t('competency_connection')} ({graph.competency_edge_count})</div>
                             <div><span style={{ color: '#00e676' }}>···▶</span> {t('semantic_progression')} ({graph.semantic_edge_count})</div>
                         </div>
-                        <div ref={graphContainer} style={{ width: '100%', height: '100%' }} />
+                         <div
+                             ref={graphContainer}
+                             role="img"
+                             aria-describedby="graph-text-alternative"
+                             aria-label={t('learning_trajectory')}
+                             style={{ width: '100%', height: '100%' }}
+                         />
+                         <details id="graph-text-alternative" style={{ position: 'absolute', left: 14, right: 14, bottom: 14, zIndex: 2, maxHeight: 70, overflow: 'auto', color: '#b8cddd', background: 'rgba(2,10,18,.88)', borderRadius: 10, padding: '6px 10px', fontSize: 11 }}>
+                             <summary>{t('graph_text_version')}</summary>
+                             <div style={{ marginTop: 6 }}>
+                                 <div>{t('courses_label')}:</div>
+                                 <ul style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+                                     {graph.nodes.map(node => <li key={`text-node-${node.id}`}>{node.code || node.id}: {localize(node.title_translations || node.title)} ({node.credits} {t('credits')}, {node.semester} {t('semester_short')})</li>)}
+                                 </ul>
+                                 <div>{t('connections')}:</div>
+                                 <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                                     {graph.edges.map((edge, index) => {
+                                         const source = graph.nodes.find(node => node.id === edge.source)
+                                         const target = graph.nodes.find(node => node.id === edge.target)
+                                         return <li key={`text-edge-${edge.id || index}`}>{source?.code || edge.source} → {target?.code || edge.target}: {edge.relation}</li>
+                                     })}
+                                 </ul>
+                             </div>
+                         </details>
                         {selected && <SelectedCard selected={selected} graph={graph} t={t} id={id} onClose={() => setSelected(null)} />}
-                        {selectedEdge && <EdgeCard edge={selectedEdge} graph={graph} language={language} localize={localize} onClose={() => setSelectedEdge(null)} />}
+                        {selectedEdge && <EdgeCard edge={selectedEdge} graph={graph} t={t} localize={localize} onClose={() => setSelectedEdge(null)} />}
                     </div>
                     <div className="right-rail">{competencies.semesters.map(record => <ResultStage key={record.semester} record={record} active={activeSemester} t={t} language={language} localize={localize} insight={semesterInsights[record.semester]} loading={insightLoading === record.semester} onAnalyze={() => analyzeSemester(record.semester)} />)}</div>
                 </div>
@@ -256,17 +281,15 @@ export default function PrerequisiteGraph() {
     </div>
 }
 
-function EdgeCard({ edge, graph, language, localize, onClose }) {
+function EdgeCard({ edge, graph, t, localize, onClose }) {
     const source = graph.nodes.find(node => node.id === edge.source)
     const target = graph.nodes.find(node => node.id === edge.target)
     const explanation = localize(edge.explanation_translations || edge.explanation)
-    const relation = edge.relation === 'prerequisite'
-        ? (language === 'ru' ? 'Пререквизит' : language === 'kk' ? 'Пререквизит' : 'Prerequisite')
-        : edge.relation
+    const relation = edge.relation === 'prerequisite' ? t('prerequisite_relation') : edge.relation
     const origin = edge.origin === 'catalogue'
-        ? (language === 'ru' ? 'Подтверждено репозиторием' : language === 'kk' ? 'Репозиториймен расталған' : 'Repository-confirmed')
+        ? t('repository_confirmed')
         : edge.origin === 'plan_inferred'
-            ? (language === 'ru' ? 'Выведено алгоритмом для этого плана' : language === 'kk' ? 'Осы жоспар үшін алгоритм шығарған' : 'Inferred for this plan')
+            ? t('plan_inferred')
             : ''
     return <div style={{ position: 'absolute', left: 14, right: 14, bottom: 14, zIndex: 5, padding: 14, border: '1px solid rgba(0,200,255,.42)', borderRadius: 14, background: 'rgba(2,10,18,.96)' }}>
         <button onClick={onClose} style={{ float: 'right', ...futureButton }}>×</button>
@@ -299,10 +322,10 @@ function SelectedCard({ selected, graph, t, id, onClose }) {
         {selected.lo_evidence?.length > 0 && <div style={{ marginTop: 8 }}>
             {selected.lo_evidence.slice(0, 6).map(item => (
                 <div key={item.lo_code} title={item.lo_text || item.lo_code} style={{ marginBottom: 7, padding: 8, borderRadius: 10, background: 'rgba(100,168,255,.09)' }}>
-                    <div style={{ color: '#9ec5ff', fontSize: 10 }}>{item.lo_code} · {Math.round(item.score * 100)}% · {item.source === 'epvo_expert' ? 'ЕПВО эксперт' : item.source === 'bridge_target' ? t('bridge_label') : t('ai_prediction')}{item.expert_feedback ? ` · expert: ${item.expert_feedback.verdict}` : ''}</div>
+                    <div style={{ color: '#9ec5ff', fontSize: 10 }}>{item.lo_code} · {Math.round(item.score * 100)}% · {item.source === 'epvo_expert' ? t('epvo_expert_label') : item.source === 'bridge_target' ? t('bridge_label') : t('ai_prediction')}{item.expert_feedback ? ` · ${t('expert_label')}: ${item.expert_feedback.verdict}` : ''}</div>
                     {item.lo_text && <div style={{ fontSize: 10, color: '#dbeafe', marginTop: 4 }}>{item.lo_text}</div>}
                     {item.evidence?.reasoning?.length > 0 && <div style={{ fontSize: 10, color: '#b8c7d8', marginTop: 4 }}>{item.evidence.reasoning.join('; ')}</div>}
-                    {item.evidence?.epvo_expert_score > 0 && <div style={{ fontSize: 10, color: '#b7f7c8', marginTop: 4 }}>ЕПВО эксперт: {Math.round(item.evidence.epvo_expert_score * 100)}%</div>}
+                    {item.evidence?.epvo_expert_score > 0 && <div style={{ fontSize: 10, color: '#b7f7c8', marginTop: 4 }}>{t('epvo_expert_label')}: {Math.round(item.evidence.epvo_expert_score * 100)}%</div>}
                     {item.chunk?.text && <div style={{ fontSize: 10, color: '#8aa3b8', marginTop: 4 }}>Evidence: {item.chunk.text}</div>}
                     {item.lo_id && <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
                         {['confirmed', 'weak', 'incorrect'].map(verdict => <button key={verdict} disabled={Boolean(feedbackState[item.lo_id])} style={{ ...futureButton, padding: '3px 7px', fontSize: 9 }} onClick={async () => { await axios.post('/api/kag/match-feedback', { project_version_id: graph.project_version_id, course_id: selected.entity_id, lo_id: item.lo_id, verdict }); setFeedbackState(current => ({ ...current, [item.lo_id]: verdict })) }}>{feedbackState[item.lo_id] === verdict ? '✓ ' : ''}{t(`feedback_${verdict}`)}</button>)}
@@ -321,12 +344,32 @@ function SelectedCard({ selected, graph, t, id, onClose }) {
     </div>
 }
 
-function CourseStage({ record, graph, active, t, onCourse, localize }) {
+function CourseStage({ record, graph, active, t, onCourse, localize, stageRef }) {
     const color = neon[(record.semester - 1) % neon.length]
     const courses = (graph.nodes || []).filter(node => Number(node.semester) === record.semester)
-    return <section data-semester-stage={record.semester} className={'semester-stage stage-card ' + (active === record.semester ? 'active' : '')} style={{ '--neon': color, minHeight: stageHeight, padding: 16, marginBottom: 16 }}>
+    return <section ref={stageRef} className={'semester-stage stage-card ' + (active === record.semester ? 'active' : '')} style={{ '--neon': color, minHeight: stageHeight, padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div><span style={{ color, fontSize: 12 }}>{t('stage')} {String(record.semester).padStart(2, '0')}</span><h3 style={{ margin: '3px 0 0' }}>{record.semester} {t('semester_short')}</h3></div><div style={{ color, fontSize: 22, fontWeight: 800 }}>{record.credits}</div></div>
-        {courses.map(course => <div className="course-chip" style={{ '--neon': color, cursor: 'pointer' }} key={course.id} onClick={() => onCourse(course)}><div style={{ color: '#67dfff', fontSize: 10 }}>{course.code} · {course.credits} {t('credits')}</div><div style={{ fontSize: 13, marginTop: 3 }}>{localize(course.title_translations || course.title)}</div></div>)}
+        {courses.map(course => {
+            const title = localize(course.title_translations || course.title)
+            return <div
+                className="course-chip"
+                style={{ '--neon': color, cursor: 'pointer' }}
+                key={course.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${course.code}: ${title}`}
+                onClick={() => onCourse(course)}
+                onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onCourse(course)
+                    }
+                }}
+            >
+                <div style={{ color: '#67dfff', fontSize: 10 }}>{course.code} · {course.credits} {t('credits')}</div>
+                <div style={{ fontSize: 13, marginTop: 3 }}>{title}</div>
+            </div>
+        })}
     </section>
 }
 
@@ -338,12 +381,12 @@ function ResultStage({ record, active, t, language, localize, insight, loading, 
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.08)' }}><div style={{ fontSize: 11, color: '#89a4b9' }}>{t('confirmed_program_los')}</div><div style={{ color, fontWeight: 700 }}>{record.cumulative_program_los.join(' · ') || '—'}</div></div>
         <div style={{ marginTop: 12 }}><div style={{ fontSize: 11, color: '#89a4b9' }}>{t('next_unlocked_courses')}</div><div style={{ fontSize: 12, lineHeight: 1.45 }}>{(record.next_unlocked_courses || []).slice(0, 5).map(item => localize(item.title_translations || item.title)).join('; ') || t('none')}</div></div>
         <button onClick={onAnalyze} disabled={loading} style={{ ...futureButton, marginTop: 14, width: '100%' }}>
-            {loading ? (language === 'ru' ? 'ИИ анализирует…' : language === 'kk' ? 'ЖИ талдап жатыр…' : 'AI is analysing…') : (language === 'ru' ? '✨ Объяснить итог семестра через ИИ' : language === 'kk' ? '✨ Семестр нәтижесін ЖИ арқылы түсіндіру' : '✨ Explain semester outcome with AI')}
+            {loading ? t('ai_analyzing_semester') : t('explain_semester_ai')}
         </button>
         {insight && <div style={{ marginTop: 10, padding: 11, borderRadius: 12, background: 'rgba(100,168,255,.10)', border: '1px solid rgba(100,168,255,.22)', fontSize: 11, lineHeight: 1.5 }}>
             <strong style={{ color }}>{insight.summary}</strong>
             {(insight.skills || []).map((skill, index) => <div key={index} style={{ marginTop: 6 }}>✓ {skill}</div>)}
-            <div style={{ marginTop: 7, color: '#7895aa' }}>{insight.source === 'ai' ? (language === 'ru' ? 'Сформировано ИИ по дисциплинам и РО' : 'AI + course/LO evidence') : (language === 'ru' ? 'Локальное объяснение по подтверждённым РО' : 'Local evidence-based explanation')}</div>
+            <div style={{ marginTop: 7, color: '#7895aa' }}>{insight.source === 'ai' ? t('ai_generated_from_evidence') : t('local_evidence_explanation')}</div>
         </div>}
     </section>
 }

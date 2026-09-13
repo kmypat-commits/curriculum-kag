@@ -6,6 +6,9 @@ from app.models.user import User
 from app.models.project import ProjectVersion
 from app.models.bridge_module import BridgeModule
 from app.services.auth import get_current_user
+from app.services.rbac import require_permission
+from app.services.access import require_version_access
+from app.services.access import require_project_version_access
 from app.services.language import normalize_language
 from app.kag.scoring import compute_all_matches
 from app.kag.gap_detector import detect_gaps
@@ -25,11 +28,12 @@ from app.planner.verifier import verify_curriculum_plan
 from app.services.ai_contracts import validate_achievability
 from app.services.pydantic_ai_adapter import run_achievability as run_pydantic_ai_achievability
 from app.services.llm_errors import LLM_ERRORS
+from app.schemas.planner import GenerateBridgeRequest, LoAchievabilityRequest, MatchFeedbackRequest, PlanFeedbackRequest
 import json
 import logging
 from typing import Optional
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_project_version_access)])
 logger = logging.getLogger(__name__)
 
 
@@ -41,19 +45,15 @@ def _internal_error(message: str, error: Exception) -> HTTPException:
 
 @router.post("/match-feedback")
 async def submit_match_feedback(
-    project_version_id: int = Body(...), course_id: int = Body(...), lo_id: int = Body(...),
-    verdict: str = Body(...), corrected_score: Optional[float] = Body(None), comment: Optional[str] = Body(None),
+    payload: MatchFeedbackRequest,
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
 ):
-    if verdict not in {"confirmed", "weak", "incorrect", "corrected"}:
-        raise HTTPException(status_code=400, detail="Недопустимая экспертная оценка")
-    if corrected_score is not None and not 0.0 <= float(corrected_score) <= 1.0:
-        raise HTTPException(status_code=400, detail="Оценка связи должна быть в диапазоне от 0 до 1")
-    match = db.query(MatchScore).filter(MatchScore.project_version_id == project_version_id, MatchScore.course_id == course_id, MatchScore.lo_id == lo_id).first()
+    require_version_access(db, current_user, payload.project_version_id)
+    match = db.query(MatchScore).filter(MatchScore.project_version_id == payload.project_version_id, MatchScore.course_id == payload.course_id, MatchScore.lo_id == payload.lo_id).first()
     snapshot = {"score": match.score, "model_name": match.model_name, "model_version": match.model_version, "evidence": match.evidence_json} if match else {"score": None, "source": "graph_suggestion"}
-    feedback = MatchFeedback(project_version_id=project_version_id, course_id=course_id, lo_id=lo_id, verdict=verdict, corrected_score=corrected_score, comment=comment, user_id=current_user.id, model_snapshot_json=snapshot)
+    feedback = MatchFeedback(project_version_id=payload.project_version_id, course_id=payload.course_id, lo_id=payload.lo_id, verdict=payload.verdict, corrected_score=payload.corrected_score, comment=payload.comment, user_id=current_user.id, model_snapshot_json=snapshot)
     db.add(feedback); db.commit(); db.refresh(feedback)
-    return {"id": feedback.id, "status": "recorded", "verdict": verdict}
+    return {"id": feedback.id, "status": "recorded", "verdict": payload.verdict}
 
 
 def _plan_coverage_for_version(project_version_id: int, db: Session, variant: str | None = None):
@@ -179,13 +179,13 @@ async def propose_merges(
 @router.post("/{project_version_id}/generate-bridge")
 async def generate_bridge(
     project_version_id: int,
-    payload: dict = Body(default={}),
+    payload: GenerateBridgeRequest = Body(default_factory=GenerateBridgeRequest),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Generate bridge modules for gap LOs"""
     try:
-        force_enrichment = bool(payload.get("force_enrichment")) if isinstance(payload, dict) else False
+        force_enrichment = payload.force_enrichment
         modules = generate_bridge_modules(project_version_id, db, force_enrichment=force_enrichment)
         return {
             "generated_modules": modules,
@@ -196,7 +196,7 @@ async def generate_bridge(
         raise _internal_error("Не удалось сформировать bridge-модули", e) from e
 
 
-@router.get("/system/status")
+@router.get("/system/status", dependencies=[Depends(require_permission("kag", "read"))])
 async def system_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     versions = [
         row[0] for row in db.query(Embedding.model_version)
@@ -213,7 +213,7 @@ async def system_status(db: Session = Depends(get_db), current_user: User = Depe
     }
 
 
-@router.post("/system/reindex")
+@router.post("/system/reindex", dependencies=[Depends(require_permission("kag", "admin"))])
 async def reindex_repository(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     stats = index_all_courses(db)
     graph = build_knowledge_graph(db)
@@ -223,7 +223,7 @@ async def reindex_repository(db: Session = Depends(get_db), current_user: User =
 # Knowledge Graph endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/graph/stats")
+@router.get("/graph/stats", dependencies=[Depends(require_permission("kag", "read"))])
 async def graph_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -235,7 +235,7 @@ async def graph_stats(
         raise _internal_error("Не удалось получить статистику графа", e) from e
 
 
-@router.post("/graph/build")
+@router.post("/graph/build", dependencies=[Depends(require_permission("kag", "admin"))])
 async def build_graph(
     project_version_id: Optional[int] = Body(None),
     similarity_threshold: float = Body(0.72),
@@ -250,6 +250,8 @@ async def build_graph(
     graph and makes future retrieval more accurate.
     """
     try:
+        if project_version_id is not None:
+            require_version_access(db, current_user, project_version_id)
         stats = build_knowledge_graph(
             db,
             similarity_threshold=similarity_threshold,
@@ -260,7 +262,7 @@ async def build_graph(
         raise _internal_error("Не удалось построить граф знаний", e) from e
 
 
-@router.post("/bridge/{bridge_module_id}/promote")
+@router.post("/bridge/{bridge_module_id}/promote", dependencies=[Depends(require_permission("kag", "admin"))])
 async def promote_bridge(
     bridge_module_id: int,
     force_domain: Optional[str] = Body(None),
@@ -276,6 +278,12 @@ async def promote_bridge(
     better courses to draw from.
     """
     try:
+        bridge = db.query(BridgeModule).filter(BridgeModule.id == bridge_module_id).first()
+        if bridge is None:
+            raise HTTPException(status_code=404, detail="Ресурс не найден")
+        # The KAG-admin permission controls the action; ownership controls
+        # which project-scoped bridge may be promoted.
+        require_version_access(db, current_user, bridge.project_version_id)
         result = promote_bridge_to_course(
             bridge_module_id=bridge_module_id,
             db=db,
@@ -299,22 +307,20 @@ async def promote_bridge(
 @router.post("/{project_version_id}/plan-feedback")
 async def submit_plan_feedback(
     project_version_id: int,
-    plan_id: int = Body(...),
-    feedback: str = Body(...),  # accepted | rejected | modified
-    details: Optional[dict] = Body(None),
+    payload: PlanFeedbackRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Record expert feedback on a generated plan (for audit trail)."""
     try:
         record_plan_feedback(
-            plan_id=plan_id,
-            feedback=feedback,
-            details=details,
+            plan_id=payload.plan_id,
+            feedback=payload.feedback,
+            details=payload.details,
             db=db,
             user_id=current_user.id,
         )
-        return {"status": "recorded", "feedback": feedback}
+        return {"status": "recorded", "feedback": payload.feedback}
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise _internal_error("Не удалось сохранить обратную связь по плану", e) from e
 
@@ -322,7 +328,7 @@ async def submit_plan_feedback(
 @router.post("/{project_version_id}/lo-achievability")
 async def analyze_lo_achievability(
     project_version_id: int,
-    payload: dict = Body(default={}),
+    payload: LoAchievabilityRequest = Body(default_factory=LoAchievabilityRequest),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -383,7 +389,7 @@ async def analyze_lo_achievability(
         project = project_version.project
         domains = f"{getattr(project, 'domain1', '')} and {getattr(project, 'domain2', '')}".strip(" and")
 
-        language = normalize_language(payload.get("language") if isinstance(payload, dict) else "ru")
+        language = normalize_language(payload.language)
         response_language = {"ru": "Russian", "kk": "Kazakh", "en": "English"}.get(language, "Russian")
 
         prompt = f"""You are an expert curriculum quality assessor.
@@ -537,7 +543,7 @@ Write summary, issue, and suggestion in {response_language}. Keep verdict and st
         # If a legacy project has incomplete match rows or the optional AI
         # provider fails before the normal fallback is reached, return an
         # explicit deterministic status instead of leaking a generic HTTP 500.
-        language = normalize_language(payload.get("language") if isinstance(payload, dict) else "ru")
+        language = normalize_language(payload.language)
         messages = {
             "ru": "Автоматическая проверка не смогла завершить полный расчёт для этой версии. Сохранён честный результат: требуется проверка покрытия LO и связей дисциплина–LO.",
             "kk": "Бұл нұсқа үшін автоматты тексеру толық есепті аяқтай алмады. Адал нәтиже сақталды: LO қамтуы мен пән–LO байланыстарын тексеру қажет.",

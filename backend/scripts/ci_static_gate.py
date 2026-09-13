@@ -4,6 +4,16 @@ import subprocess
 import re, sys
 ROOT=Path(__file__).resolve().parents[2]
 fail=[]
+action_ref_pattern = re.compile(r"uses:\s*([^\s#]+)")
+image_ref_pattern = re.compile(r"^\s*image:\s*([^\s#]+)")
+for workflow in (ROOT / '.github' / 'workflows').glob('*.y*ml'):
+    for line_number, line in enumerate(workflow.read_text(encoding='utf-8').splitlines(), 1):
+        match = action_ref_pattern.search(line)
+        if match and not re.fullmatch(r"[^@]+@[0-9a-f]{40}", match.group(1)):
+            fail.append(f'GitHub Action is not pinned to a commit SHA: {workflow}:{line_number}')
+        image_match = image_ref_pattern.match(line)
+        if image_match and '@sha256:' not in image_match.group(1):
+            fail.append(f'Container image is not pinned to a digest: {workflow}:{line_number}')
 for base in (ROOT/'frontend'/'src', ROOT/'backend'/'app'):
     for path in base.rglob('*'):
         if path.suffix.lower() in {'.js','.jsx','.ts','.tsx','.py','.json','.css'}:

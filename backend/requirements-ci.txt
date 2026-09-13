@@ -1,0 +1,6 @@
+# CI-only tooling. Production images install requirements.lock instead.
+-r requirements-minimal.txt
+coverage==7.6.1
+pytest==9.1.1
+pip-audit==2.7.3
+httpx2==2.12.0

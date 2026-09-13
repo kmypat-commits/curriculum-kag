@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable, Tuple
 
 
@@ -15,6 +16,19 @@ _DOMAIN_ALIASES = {
         "business", "management", "эконом", "управ", "менедж", "бизнес",
     ),
 }
+
+
+def _label_contains(value: str, term: str) -> bool:
+    """Match short aliases as whole tokens and language stems as fragments."""
+    normalized = str(term or "").casefold().strip()
+    if not normalized:
+        return False
+    # `it` is a valid ICT abbreviation but a very common pair of letters in
+    # ordinary words such as Literature and Hospitality.  Do not use a
+    # substring rule for compact abbreviations.
+    if len(normalized) <= 3:
+        return normalized in re.findall(r"[\w-]+", value, flags=re.UNICODE)
+    return normalized in value
 
 
 def domain_label_matches(label: str | None, project_domains: Iterable[str]) -> bool:
@@ -36,9 +50,18 @@ def domain_label_matches(label: str | None, project_domains: Iterable[str]) -> b
                 aliases = _DOMAIN_ALIASES["information and communication technologies"]
             elif any(token in key for token in ("business", "management", "бизнес", "управ", "эконом")):
                 aliases = _DOMAIN_ALIASES["business and management"]
-        if key in value or value in key or any(alias in value for alias in aliases):
+        if (
+            _label_contains(value, key)
+            or _label_contains(key, value)
+            or any(_label_contains(value, alias) for alias in aliases)
+        ):
             return True
     return False
+
+
+def is_information_technology_domain(label: str | None) -> bool:
+    """Classify a declared project domain without a raw substring heuristic."""
+    return domain_label_matches(label, ["information and communication technologies"])
 
 
 def domain_credit_shares(primary_scope: int, secondary_scope: int) -> Tuple[float, float]:

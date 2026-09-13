@@ -27,6 +27,9 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Integer, default=1)
     language = Column(String, default="ru")
+    # Incrementing this value revokes all previously issued CLI tokens for the
+    # account without maintaining a process-local blacklist.
+    cli_token_version = Column(Integer, default=0, nullable=False)
     
     # Relationships
     roles = relationship("Role", secondary=user_roles, back_populates="users")

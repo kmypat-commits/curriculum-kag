@@ -6,6 +6,8 @@ accepted candidates and is loaded lazily, so ordinary API requests stay light.
 from __future__ import annotations
 
 import math
+import hashlib
+from collections import OrderedDict
 from threading import RLock
 from typing import Iterable
 
@@ -20,6 +22,39 @@ class EpvoTwoStageRanker:
         self.load_error: str | None = None
         self._attempted = False
         self._lock = RLock()
+        self._vector_cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._vector_cache_limit = 4096
+
+    def _encode_cached(self, texts: list[str], batch_size: int) -> np.ndarray:
+        """Encode only unseen texts; course descriptions repeat across LOs."""
+        keys = [hashlib.sha256(str(value or "").encode("utf-8")).hexdigest() for value in texts]
+        vectors: list[np.ndarray | None] = [None] * len(texts)
+        missing: list[int] = []
+        with self._lock:
+            for index, key in enumerate(keys):
+                cached = self._vector_cache.get(key)
+                if cached is None:
+                    missing.append(index)
+                else:
+                    self._vector_cache.move_to_end(key)
+                    vectors[index] = cached
+        if missing:
+            encoded = self.model.encode(
+                [texts[index] for index in missing],
+                batch_size=batch_size,
+                normalize_embeddings=True,
+                convert_to_numpy=True,
+                show_progress_bar=False,
+            )
+            with self._lock:
+                for index, vector in zip(missing, encoded):
+                    value = np.asarray(vector, dtype=np.float32)
+                    vectors[index] = value
+                    self._vector_cache[keys[index]] = value
+                    self._vector_cache.move_to_end(keys[index])
+                while len(self._vector_cache) > self._vector_cache_limit:
+                    self._vector_cache.popitem(last=False)
+        return np.asarray(vectors, dtype=np.float32)
 
     def _ensure_loaded(self) -> bool:
         if not settings.EPVO_RANKER_ENABLED:
@@ -60,14 +95,9 @@ class EpvoTwoStageRanker:
         if not accepted:
             return {}
         try:
-            lo_vector = self.model.encode(
-                [lo_text], normalize_embeddings=True, convert_to_numpy=True,
-                show_progress_bar=False,
-            )[0]
-            course_vectors = self.model.encode(
-                [row["text"] for row in accepted], batch_size=48,
-                normalize_embeddings=True, convert_to_numpy=True,
-                show_progress_bar=False,
+            lo_vector = self._encode_cached([lo_text], batch_size=1)[0]
+            course_vectors = self._encode_cached(
+                [row["text"] for row in accepted], batch_size=48
             )
             similarities = np.asarray(course_vectors) @ np.asarray(lo_vector)
             mean = float(np.mean(similarities))

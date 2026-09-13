@@ -13,15 +13,41 @@ def bridge_module_limit(project_version) -> int:
         requested = int(constraints.get("max_new_courses", settings.MAX_BRIDGE_MODULES))
     except (TypeError, ValueError):
         requested = settings.MAX_BRIDGE_MODULES
-    # Interdisciplinary curricula need one structural core bridge plus the
-    # secondary-domain foundation/data/project/integration sequence.  A
-    # legacy per-project value of 4 silently capped that sequence and the
-    # final assembly dropped SECONDARY_INTEGRATION, leaving the second-domain
-    # quota short (notably ict-medicine).  Keep explicit zero disabled, but
-    # reserve the five-module envelope for interdisciplinary plans.
-    program_type = str(constraints.get("program_type") or "").lower()
-    if requested > 0 and program_type in {"interdisciplinary", "joint"}:
-        # Interdisciplinary plans need the explicit core + secondary
-        # sequence; it has a dedicated seven-module envelope.
-        return max(requested, 7)
     return max(0, min(requested, int(settings.MAX_BRIDGE_MODULES)))
+
+
+def scheduled_bridge_count(schedule: dict) -> int:
+    """Count every generated module in a schedule, including the core bridge.
+
+    A structural bridge remains a new curriculum unit.  Excluding it from a
+    user-facing limit makes a cap of one mean two different things in the
+    planner and verifier.
+    """
+    return sum(
+        1
+        for items in schedule.values()
+        for item in items or []
+        if isinstance(item, dict) and item.get("bridge_module_id") is not None
+    )
+
+
+def bridge_can_close_program_lo(bridge) -> bool:
+    """Whether a bridge is approved evidence, rather than a generated proposal.
+
+    A target-LO label is authored by the same planner that is being verified;
+    it cannot independently prove that a student has a credible learning path.
+    Only a review-approved module with traceable source evidence may contribute
+    to this strict gate. The UI may still display generated bridges as
+    proposals needing expert review.
+    """
+    parameters = getattr(bridge, "generation_params_json", None)
+    sources = getattr(bridge, "source_chunks_json", None)
+    targets = getattr(bridge, "target_los", None)
+    return bool(
+        isinstance(parameters, dict)
+        and parameters.get("evidence_status") == "approved"
+        and isinstance(sources, list)
+        and sources
+        and isinstance(targets, list)
+        and targets
+    )

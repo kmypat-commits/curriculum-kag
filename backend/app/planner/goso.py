@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.course import Course
 from app.models.project import LearningOutcome, ProjectVersion
+from app.planner.goso_ruleset import GOSO_RULESET, GOSO_RULESET_CHECKSUM, GOSO_RULESET_VERSION, supports_profile
 
 
 GOSO_DISPLAY_TITLES = {
@@ -294,6 +295,8 @@ def ensure_goso_items(version: ProjectVersion, db: Session) -> List[Dict]:
     constraints = version.project.constraints_json or {}
     if str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() != "KZ":
         return []
+    if not supports_profile(constraints):
+        raise ValueError("Выбранный regulatory profile ГОСО РК не поддерживается текущим ruleset")
     definitions = _definitions_for_constraints(constraints)
     if not definitions:
         return []
@@ -372,6 +375,24 @@ def evaluate_goso_compliance(schedule: Dict[int, List[Dict]], version: ProjectVe
     constraints = version.project.constraints_json or {}
     if str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() != "KZ":
         return {"applicable": False, "violations": [], "compliant": True}
+    regulatory_profile = str(constraints.get("regulatory_profile") or "KZ_GOSO_2026").upper()
+    ruleset_metadata = {
+        "regulatory_profile": regulatory_profile,
+        "ruleset_version": GOSO_RULESET_VERSION,
+        "ruleset_checksum": GOSO_RULESET_CHECKSUM,
+        "source": GOSO_RULESET["source"]["url"],
+    }
+    if not supports_profile(constraints):
+        return {
+            "applicable": True,
+            **ruleset_metadata,
+            "compliant": False,
+            "violations": [{
+                "reason": "unsupported_regulatory_profile",
+                "regulatory_profile": regulatory_profile,
+                "message": "Требуется внешняя нормативная проверка: этот regulatory profile не реализован текущим ruleset.",
+            }],
+        }
     level = str(constraints.get("education_level") or "bachelor").lower()
     selected = [item for rows in schedule.values() for item in rows]
     codes = set()
@@ -408,6 +429,7 @@ def evaluate_goso_compliance(schedule: Dict[int, List[Dict]], version: ProjectVe
         "applicable": bool(definitions),
         "jurisdiction": "KZ",
         "education_level": level,
+        **ruleset_metadata,
         "compliant": not violations,
         "mandatory_credits": mandatory_credits,
         "violations": violations,

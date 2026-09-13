@@ -5,6 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.database import get_db
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.services.access import require_project_version_access
 from app.models.plan import Plan, PlanItem
 from app.models.project import ProjectVersion
 from app.models.course import Course
@@ -19,7 +20,28 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from io import BytesIO
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_project_version_access)])
+
+
+def export_cell_value(value):
+    """Make nested metrics safe for an XLSX cell without losing evidence."""
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list, tuple)):
+        import json
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    return value
+
+
+def resolve_export_plan(db: Session, project_version_id: int, variant: str | None) -> Plan | None:
+    """Use the active plan by default, or an explicitly requested A/B/C plan."""
+    query = db.query(Plan).filter(Plan.project_version_id == project_version_id)
+    if variant:
+        normalized = variant.upper()
+        if normalized not in {"A", "B", "C"}:
+            raise HTTPException(status_code=422, detail="Вариант плана должен быть A, B или C")
+        query = query.filter(Plan.variant_type == normalized)
+    return query.order_by(Plan.is_active.desc(), Plan.id.desc()).first()
 
 
 def localized_title(localizations: dict, course: Course, language: str = "ru") -> str:

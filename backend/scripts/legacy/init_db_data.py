@@ -3,6 +3,7 @@ Database initialization script
 Creates initial admin user and roles
 """
 import bcrypt
+import os
 if not hasattr(bcrypt, "__about__"):
     bcrypt.__about__ = type('about', (object,), {'__version__': bcrypt.__version__})
 
@@ -14,6 +15,11 @@ from app.services.auth import get_password_hash
 
 def init_db():
     """Initialize database with tables and seed data"""
+    if os.getenv("ALLOW_DEMO_SEED", "").lower() != "true":
+        raise RuntimeError("Legacy demo seed is disabled; set ALLOW_DEMO_SEED=true explicitly for local/test only")
+    admin_password = os.getenv("CURRICULUM_LOCAL_PASSWORD")
+    if not admin_password:
+        raise RuntimeError("Set CURRICULUM_LOCAL_PASSWORD; legacy seed never uses a default password")
     
     # Create all tables
     Base.metadata.create_all(bind=engine)
@@ -76,7 +82,7 @@ def init_db():
         admin_user = User(
             email="admin@curriculum-kag.local",
             full_name="System Administrator",
-            hashed_password=get_password_hash("admin123"),
+            hashed_password=get_password_hash(admin_password),
             is_active=1,
             language="ru"
         )
@@ -88,8 +94,7 @@ def init_db():
         print("Database initialized successfully!")
         print("Admin user created:")
         print("  Email: admin@curriculum-kag.local")
-        print("  Password: admin123")
-        print("  IMPORTANT: Change this password after first login!")
+        print("  Password: supplied through CURRICULUM_LOCAL_PASSWORD")
         
     except Exception as e:
         print(f"Error initializing database: {e}")

@@ -1,12 +1,13 @@
-version: '3.8'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: curriculum-kag-db
     environment:
+      # Development-only defaults keep the local one-command stack usable
+      # when no .env exists.  Production uses docker-compose.production.yml,
+      # where all three values remain mandatory and fail closed.
       POSTGRES_USER: ${POSTGRES_USER:-curriculum_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-curriculum_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only-change-me}
       POSTGRES_DB: ${POSTGRES_DB:-curriculum_kag}
     ports:
       - "5432:5432"
@@ -14,7 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U curriculum_user"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,8 +26,9 @@ services:
       dockerfile: Dockerfile
     container_name: curriculum-kag-backend
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-curriculum_user}:${POSTGRES_PASSWORD:-curriculum_pass}@postgres:5432/${POSTGRES_DB:-curriculum_kag}
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-curriculum_user}:${POSTGRES_PASSWORD:-local-dev-only-change-me}@postgres:5432/${POSTGRES_DB:-curriculum_kag}
+      SECRET_KEY: ${SECRET_KEY:-local-development-secret-change-me}
+      APP_ENV: local
       EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4}

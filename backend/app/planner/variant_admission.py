@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 
 from app.models.course import Course
+from app.planner.domain_evidence import is_information_technology_domain
 
 
 def remove_weak_general_items(
@@ -64,19 +65,43 @@ def is_project_domain_course(
         return False
     if professional_scope and foreign_professional_title(course, project_domains):
         return False
-    if interdisciplinary_professional and not medicine_support_course(course, project_domains):
-        return False
-
     course_code = str(course.course_id or "")
     project_confirmed_prefix = f"AI-CONFIRMED-{project_version_id}-"
-    non_it_domains = [
-        str(domain) for domain in project_domains
-        if not any(marker in str(domain).casefold() for marker in ("it", "информ", "computer", "цифров"))
-    ]
-    secondary_domain_match = bool(
-        interdisciplinary_professional and non_it_domains
-        and course_domain_matches(course, non_it_domains)
+    # Both declared domains are valid evidence for an interdisciplinary
+    # programme.  The former non-IT-only gate silently rejected ICT courses
+    # even when the project explicitly declared ICT as domain 2, which made
+    # otherwise well-supported LOs appear uncovered at final verification.
+    declared_domain_match = (
+        course_domain_matches(course, project_domains)
+        or domain_label_matches(course.domain, project_domains)
+        or (
+            is_information_technology_domain(course.domain)
+            and any(is_information_technology_domain(domain) for domain in project_domains)
+        )
     )
+    secondary_domain_match = bool(
+        interdisciplinary_professional and project_domains
+        and (
+            declared_domain_match
+            or medicine_support_course(course, project_domains)
+        )
+    )
+    evidence = aggregates.get(course.id, {})
+    strong_lo_evidence = (
+        course_code.startswith("EPVO-")
+        and bool(evidence.get("professional_lo_codes"))
+        and float(evidence.get("max") or 0.0) >= 0.8
+    )
+    # An explicit catalogue-domain match is authoritative secondary-domain
+    # evidence. The narrower medicine-support heuristic is still useful for
+    # ambiguous interdisciplinary titles, but must not discard clearly
+    # labelled medical/health courses before quota repair sees them.
+    if (
+        interdisciplinary_professional
+        and not secondary_domain_match
+        and not declared_domain_match
+    ):
+        return False
     if course_code.startswith("AI-CONFIRMED-") and not course_code.startswith(project_confirmed_prefix):
         # Synthetic expert-confirmed replacements are project-local.
         return False
@@ -84,21 +109,23 @@ def is_project_domain_course(
         course_code.startswith("EPVO-")
         and course.id not in epvo_level_scope_allowed_ids
         and not secondary_domain_match
+        and not strong_lo_evidence
     ):
         return False
     if course.id not in epvo_domain_index and not (
         course_domain_matches(course, project_domains)
         or domain_label_matches(course.domain, project_domains)
+        or strong_lo_evidence
     ):
         return False
 
-    evidence = aggregates.get(course.id, {})
     if professional_scope and not course_code.startswith("GOSO-KZ-"):
         if (
             epvo_professional_scope
             and course_code.startswith("EPVO-")
             and scope_rank(course) <= 0
             and float(evidence.get("max") or 0.0) < 0.55
+            and not strong_lo_evidence
         ):
             return False
         # Scope membership alone is not enough for a non-regulatory course.
@@ -110,7 +137,6 @@ def is_project_domain_course(
             and float(evidence.get("expert") or 0.0) < 0.5
             and not exact_scope
             and not course_code.startswith(project_confirmed_prefix)
-            and not secondary_domain_match
         ):
             return False
 

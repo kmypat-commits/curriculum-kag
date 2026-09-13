@@ -1,6 +1,8 @@
 ﻿from __future__ import annotations
 from typing import Dict, List
-from sqlalchemy.orm import Session
+import time
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchScore
@@ -9,7 +11,7 @@ from app.models.project import ProjectVersion
 from app.models.epvo import EpvoDisciplineNormalized
 from app.kag.embedding_service import embedding_service
 from app.planner.goso import GOSO_COURSE_LO_CODES, evaluate_goso_compliance
-from app.planner.bridge_policy import bridge_module_limit
+from app.planner.bridge_policy import bridge_can_close_program_lo, bridge_module_limit, scheduled_bridge_count
 from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
 LOAD_TOLERANCE = 3
 TOTAL_CREDIT_TOLERANCE = 5
@@ -94,8 +96,12 @@ def _semantic_max_semester(title: str | None, num_semesters: int) -> int:
 
 def _ict_competency_requirements(constraints: Dict) -> Dict:
     """Return the explainable competency ontology for a known ICT scope."""
+    # The competency ontology belongs to the programme's primary field.
+    # Secondary fields in an interdisciplinary programme are validated by
+    # domain quotas and LO evidence; treating a secondary ICT code as a full
+    # ICT programme incorrectly rejects otherwise feasible mixed curricula.
     scope = " ".join(str(constraints.get(key) or "").upper() for key in (
-        "direction_code", "secondary_direction_code", "group_code", "secondary_group_code",
+        "direction_code", "group_code",
     ))
     if not any(code in scope for code in ("6B061", "7M061", "8D061", "B057", "M094", "D094")):
         return {}
@@ -105,7 +111,15 @@ def _ict_competency_requirements(constraints: Dict) -> Dict:
             "research_methodology": (("исслед",), ("методолог",), ("research",)),
             "advanced_ai_and_data": (("искусствен", "интеллект"), ("больш", "данн"), ("data",)),
             "experimental_validation": (("эксперимент",), ("валидац",), ("validation",)),
-            "systems_modelling": (("модел", "систем"), ("информацион", "ресурс")),
+            "systems_modelling": (
+                ("модел", "систем"),
+                ("информацион", "ресурс"),
+                ("информацион", "систем"),
+                ("системн", "анализ"),
+                ("проектирован", "систем"),
+                ("моделирован",),
+                ("systems", "analysis"),
+            ),
             "research_leadership": (("управлен", "проект"), ("project management",)),
         }
     elif level in {"master", "masters", "magistracy"}:
@@ -145,7 +159,7 @@ def _ict_competency_audit(courses: List[Course], constraints: Dict) -> Dict:
     educational fields.
     """
     scope = " ".join(str(constraints.get(key) or "").upper() for key in (
-        "direction_code", "secondary_direction_code", "group_code", "secondary_group_code",
+        "direction_code", "group_code",
     ))
     requirements = _ict_competency_requirements(constraints)
     if not requirements:
@@ -175,6 +189,15 @@ def _ict_competency_audit(courses: List[Course], constraints: Dict) -> Dict:
 
 
 def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: ProjectVersion, db: Session) -> Dict:
+    _verify_started = time.perf_counter()
+
+    def _trace_verify(stage: str) -> None:
+        print(
+            f"[planner-verifier-timing] stage={stage} "
+            f"elapsed={time.perf_counter() - _verify_started:.2f}s",
+            flush=True,
+        )
+
     constraints = project_version.project.constraints_json or {}
     num_semesters = int(constraints.get("total_semesters", len(schedule) or 1))
     target_credits = int(constraints.get("total_credits", 240))
@@ -223,13 +246,18 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         {
             "semester": s,
             "credits": semester_loads.get(s, 0),
+            "non_regulatory_credits": semester_loads.get(s, 0) - regulatory_credits_by_semester.get(s, 0),
+            "regulatory_credits": regulatory_credits_by_semester.get(s, 0),
             "allowed_min": min_load,
             "allowed_max": max_load,
         }
         for s in range(1, num_semesters + 1)
         if (
             s not in goso_load_exemptions
-            and (semester_loads.get(s, 0) < min_load or semester_loads.get(s, 0) > max_load)
+            and (
+                semester_loads.get(s, 0) < min_load
+                or semester_loads.get(s, 0) - regulatory_credits_by_semester.get(s, 0) > max_load
+            )
         )
     ]
     credit_violations = []
@@ -264,9 +292,28 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         int(course.id): str(course.domain or "")
         for course in db.query(Course).filter(Course.id.in_(selected_course_ids)).all()
     }
+    canonical_course_by_epvo_id = {
+        int(str(course.course_id).split("-", 1)[1]): int(course.id)
+        for course in db.query(Course).filter(Course.id.in_(selected_course_ids)).all()
+        if str(course.course_id or "").startswith("EPVO-")
+        and str(course.course_id).split("-", 1)[1].isdigit()
+    }
     if selected_course_ids and (primary_group or secondary_group or primary_direction or secondary_direction):
+        # Legacy imports can leave ``approved_course_id`` pointing at a
+        # duplicate normalized row while Course.course_id still contains the
+        # canonical EPVO row id.  Read both links; otherwise valid group
+        # evidence (and therefore a whole domain) disappears at verification.
+        epvo_row_ids = {
+            int(str(course.course_id).split("-", 1)[1])
+            for course in db.query(Course).filter(Course.id.in_(selected_course_ids)).all()
+            if str(course.course_id or "").startswith("EPVO-")
+            and str(course.course_id).split("-", 1)[1].isdigit()
+        }
         normalized_rows = db.query(EpvoDisciplineNormalized).filter(
-            EpvoDisciplineNormalized.approved_course_id.in_(selected_course_ids)
+            or_(
+                EpvoDisciplineNormalized.approved_course_id.in_(selected_course_ids),
+                EpvoDisciplineNormalized.id.in_(epvo_row_ids or [-1]),
+            )
         ).all()
         scope_evidence: Dict[int, List[int]] = {}
         for row in normalized_rows:
@@ -274,8 +321,10 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             row_directions = set(row.direction_codes or [])
             primary_scope = 3 if primary_group and primary_group in row_groups else 2 if primary_direction and primary_direction in row_directions else 0
             secondary_scope = 3 if secondary_group and secondary_group in row_groups else 2 if secondary_direction and secondary_direction in row_directions else 0
-            if row.approved_course_id and (primary_scope or secondary_scope):
-                evidence = scope_evidence.setdefault(int(row.approved_course_id), [0, 0])
+            canonical_course_id = canonical_course_by_epvo_id.get(int(row.id))
+            linked_course_id = canonical_course_id or row.approved_course_id
+            if linked_course_id and (primary_scope or secondary_scope):
+                evidence = scope_evidence.setdefault(int(linked_course_id), [0, 0])
                 evidence[0] = max(evidence[0], primary_scope)
                 evidence[1] = max(evidence[1], secondary_scope)
         scoped_domain_by_course = {
@@ -403,7 +452,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         bridge_supported = False
         for bridge in bridge_modules:
             target_los = bridge.target_los or []
-            if lo.lo_code in target_los:
+            if bridge_can_close_program_lo(bridge) and lo.lo_code in target_los:
                 scores.append(0.75)
                 bridge_supported = True
         product = 1.0
@@ -418,11 +467,9 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             "max_real_course_score": round(real_max, 4),
             "bridge_supported": bridge_supported,
         }
-        # A bridge is an explicit generated learning unit with its own target
-        # LO and assessment, so it can close a gap when no repository course
-        # reaches the threshold. Keep that evidence visible as
-        # ``bridge_supported``; only an LO with neither a credible real-course
-        # signal nor a targeted bridge is a hard quality defect.
+        # A generated bridge remains a proposal until its sources and
+        # programme-LO mapping are independently approved. Only that explicit
+        # approval may supplement real-course evidence in this strict gate.
         if real_max < 0.5 and not bridge_supported:
             lo_without_real_course.append({
                 "lo_code": lo.lo_code,
@@ -434,6 +481,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     min_coverage = min(coverages) if coverages else 0.0
     average_coverage = sum(coverages) / len(coverages) if coverages else 0.0
     redundancy = _mean_pairwise_cosine_redundancy(selected_course_ids, db)
+    _trace_verify("redundancy_done")
     embedding_mode = embedding_service.get_status()["mode"]
     redundancy_threshold = (
         REDUNDANCY_THRESHOLD
@@ -447,9 +495,13 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         quality_violations.append({"reason": "redundancy", "actual": redundancy, "maximum": redundancy_threshold})
     courses_by_id = {
         course.id: course
-        for course in db.query(Course).filter(Course.id.in_(selected_course_ids or [-1])).all()
+        for course in db.query(Course)
+        .options(selectinload(Course.prerequisites))
+        .filter(Course.id.in_(selected_course_ids or [-1]))
+        .all()
     }
     competency_audit = _ict_competency_audit(list(courses_by_id.values()), constraints)
+    _trace_verify("course_quality_done")
     weak_courses = []
     structural_foundations = []
     semester_misplacements = []
@@ -581,16 +633,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             "reason": "missing_core_competency_blocks",
             "missing": competency_audit["missing"],
         })
-    bridge_count = sum(
-        1
-        for items in schedule.values()
-        for item in items
-        if item.get("bridge_module_id") is not None
-        and not (
-            str(getattr(bridge_by_id.get(item.get("bridge_module_id")), "course_id", "") or "")
-            .startswith("CORE_BRIDGE_")
-        )
-    )
+    bridge_count = scheduled_bridge_count(schedule)
     bridge_limit = bridge_module_limit(project_version)
     bridge_overflow = max(0, bridge_count - bridge_limit)
     if bridge_overflow:
@@ -615,7 +658,11 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         "semester_misplacements": semester_misplacements,
         "competency_blocks": competency_audit,
     }
+    # Keep missing/weak evidence explicit for API and UI remediation.  It is
+    # distinct from a credit, schedule, or prerequisite violation.
+    insufficient_evidence = bool(lo_without_real_course or weak_courses)
     goso_compliance = evaluate_goso_compliance(schedule, project_version)
+    _trace_verify("goso_done")
     # A curriculum unit without a direct programme-LO link is not merely a
     # warning: it has no auditable educational purpose and must not be active.
     course_lo_violations = len(weak_courses) + len(structural_foundations)
@@ -625,7 +672,9 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     # close a genuine repository gap without hiding the fallback.
     real_lo_violations = len(lo_without_real_course)
     hard_count = len(prerequisite_violations) + len(load_violations) + len(credit_violations) + len(domain_quota_violations) + len(goso_compliance["violations"]) + course_lo_violations + real_lo_violations + bridge_overflow
-    return {"feasible": hard_count == 0, "quality_passed": not quality_violations and goso_compliance["compliant"], "hard_violation_count": hard_count, "course_lo_violations": course_lo_violations, "bridge_module_count": bridge_count, "bridge_module_limit": bridge_limit, "bridge_module_overflow": bridge_overflow, "prerequisite_violations": prerequisite_violations, "semester_load_violations": load_violations, "goso_load_exemptions": sorted(goso_load_exemptions), "regulatory_credits_by_semester": regulatory_credits_by_semester, "credit_violations": credit_violations, "domain_quota_violations": domain_quota_violations, "domain_credits": {"domain1": round(domain_credits[0], 2), "domain2": round(domain_credits[1], 2)}, "domain_quota_base_credits": domain_quota_base_credits, "domain_quota_tolerance_credits": domain_quota_tolerance, "goso_compliance": goso_compliance, "pedagogical_audit": pedagogical_audit, "semester_loads": semester_loads, "nominal_semester_load": round(nominal_load, 2), "allowed_semester_load": {"min": round(min_load, 2), "max": round(max_load, 2)}, "target_credits": target_credits, "total_credits": total_credits, "credit_tolerance": credit_tolerance, "maximum_total_credits": target_credits + credit_tolerance, "min_lo_coverage": round(min_coverage, 4), "average_lo_coverage": round(average_coverage, 4), "coverage_threshold": settings.COVERAGE_THRESHOLD, "coverage_by_lo": coverage_by_lo, "evidence_count": evidence_count, "redundancy": redundancy, "redundancy_threshold": redundancy_threshold, "strict_redundancy_threshold": REDUNDANCY_THRESHOLD, "embedding_mode": embedding_mode, "quality_violations": quality_violations}
+    result = {"feasible": hard_count == 0, "quality_passed": not quality_violations and goso_compliance["compliant"], "insufficient_evidence": insufficient_evidence, "hard_violation_count": hard_count, "course_lo_violations": course_lo_violations, "bridge_module_count": bridge_count, "bridge_module_limit": bridge_limit, "bridge_module_overflow": bridge_overflow, "prerequisite_violations": prerequisite_violations, "semester_load_violations": load_violations, "goso_load_exemptions": sorted(goso_load_exemptions), "regulatory_credits_by_semester": regulatory_credits_by_semester, "credit_violations": credit_violations, "domain_quota_violations": domain_quota_violations, "domain_credits": {"domain1": round(domain_credits[0], 2), "domain2": round(domain_credits[1], 2)}, "domain_quota_base_credits": domain_quota_base_credits, "domain_quota_tolerance_credits": domain_quota_tolerance, "goso_compliance": goso_compliance, "pedagogical_audit": pedagogical_audit, "semester_loads": semester_loads, "nominal_semester_load": round(nominal_load, 2), "allowed_semester_load": {"min": round(min_load, 2), "max": round(max_load, 2)}, "target_credits": target_credits, "total_credits": total_credits, "credit_tolerance": credit_tolerance, "maximum_total_credits": target_credits + credit_tolerance, "min_lo_coverage": round(min_coverage, 4), "average_lo_coverage": round(average_coverage, 4), "coverage_threshold": settings.COVERAGE_THRESHOLD, "coverage_by_lo": coverage_by_lo, "evidence_count": evidence_count, "redundancy": redundancy, "redundancy_threshold": redundancy_threshold, "strict_redundancy_threshold": REDUNDANCY_THRESHOLD, "embedding_mode": embedding_mode, "quality_violations": quality_violations}
+    result["lo_without_real_course"] = lo_without_real_course
+    return result
 
 
 def _mean_pairwise_cosine_redundancy(course_ids: List[int], db: Session) -> float:
@@ -650,9 +699,10 @@ def _mean_pairwise_cosine_redundancy(course_ids: List[int], db: Session) -> floa
     if len(normalized) < 2:
         return 0.0
 
-    similarities = [
-        float(np.dot(normalized[i], normalized[j]))
-        for i in range(len(normalized))
-        for j in range(i + 1, len(normalized))
-    ]
-    return round(sum(similarities) / len(similarities), 4) if similarities else 0.0
+    # The previous nested Python loop made final verification quadratic in
+    # interpreter time.  Keep the exact same upper-triangle mean, but let
+    # NumPy perform the dot products in one BLAS-backed operation.
+    matrix = np.asarray(normalized, dtype=np.float32)
+    similarities = matrix @ matrix.T
+    upper = similarities[np.triu_indices(len(matrix), k=1)]
+    return round(float(upper.mean()), 4) if upper.size else 0.0

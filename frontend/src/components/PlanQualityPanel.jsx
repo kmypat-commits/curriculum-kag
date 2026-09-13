@@ -37,7 +37,7 @@ export default function PlanQualityPanel({
     loadingBridgePreview,
     loadingCourseReplacement,
     loadingLoCoverageSources,
-    localText,
+    onShowSemester,
     localize,
     localizeDomain,
     localizedCourseField,
@@ -55,16 +55,12 @@ export default function PlanQualityPanel({
         <>
             {currentPlan && currentPlan.metrics_current === false && (
             <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082', color: '#6d4c41' }}>
-                <strong>{localText('Метрики плана требуют обновления', 'Жоспар метрикаларын жаңарту қажет', 'Plan metrics need refresh')}</strong>
+                <strong>{t('metrics_refresh')}</strong>
                 <div style={{ marginTop: 4, fontSize: 13 }}>
-                    {localText(
-                        'Этот вариант создан предыдущей версией валидатора. Перестройте вариант, чтобы заново проверить кредиты, нагрузку, пререквизиты и доказательства LO.',
-                        'Бұл нұсқа валидатордың алдыңғы нұсқасымен жасалған. Кредиттерді, жүктемені, пререквизиттерді және LO дәлелдерін қайта тексеру үшін нұсқаны қайта құрыңыз.',
-                        'This variant was created by an earlier validator. Rebuild it to recheck credits, workload, prerequisites, and LO evidence.',
-                    )}
+                    {t('metrics_refresh_desc')}
                 </div>
                 <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={handleBuild} disabled={building}>
-                    {localText('Перестроить и проверить', 'Қайта құрып, тексеру', 'Rebuild and verify')}
+                    {t('rebuild_verify')}
                 </button>
             </div>
             )}
@@ -86,7 +82,7 @@ export default function PlanQualityPanel({
             disabled={applyingQuality || building}
             style={{ marginTop: 12 }}
             >
-            {applyingQuality ? t('applying_quality_improvements') : localText('Исправить порядок, нагрузку и кредиты', 'Ретті, жүктемені және кредиттерді түзету', 'Fix order, load, and credits')}
+            {applyingQuality ? t('applying_quality_improvements') : t('fix_quality')}
             </button>
             )}
             <BridgeReplacementPanel
@@ -104,7 +100,6 @@ export default function PlanQualityPanel({
             loadBridgePreview={loadBridgePreview}
             loadingAiBridge={loadingAiBridge}
             loadingBridgePreview={loadingBridgePreview}
-            localText={localText}
             localizedCourseField={localizedCourseField}
             replacingAllBridges={replacingAllBridges}
             replacingBridge={replacingBridge}
@@ -130,16 +125,16 @@ export default function PlanQualityPanel({
             <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f5fbff', border: '1px solid #d7ecfb' }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <strong>{localText('Дисциплины плана из ЕПВО', 'Жоспардағы ЕПВО пәндері', 'Plan courses from EPVO')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
+            <strong>{t('epvo_courses')}: {currentPlan.epvo_plan_quality.match_percentage}%</strong>
             <span style={{ color: '#566' }}>
-            {localText('типовых дисциплин', 'типтік пәндер', 'typical courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
+            {t('typical_courses')}: {currentPlan.epvo_plan_quality.matched_courses}/{currentPlan.epvo_plan_quality.course_count}
             </span>
             <span style={{ color: '#566' }}>
-            {localText('экспертных связей', 'сараптамалық байланыстар', 'expert links')}: {currentPlan.epvo_plan_quality.expert_links}
+            {t('expert_links_label')}: {currentPlan.epvo_plan_quality.expert_links}
             </span>
             </div>
             <Link to={`/projects/${id}/epvo`} className="btn btn-secondary" style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-            {localText('Полный анализ ЕПВО', 'ЕПВО толық талдауы', 'Full EPVO analysis')}
+            {t('full_epvo_analysis')}
             </Link>
             </div>
             </div>
@@ -149,13 +144,13 @@ export default function PlanQualityPanel({
             loCoverageSources={loCoverageSources}
             loadLoCoverageSources={loadLoCoverageSources}
             loadingLoCoverageSources={loadingLoCoverageSources}
-            localText={localText}
+            onShowSemester={onShowSemester}
             t={t}
             />
             {currentPlan.suspicious_courses?.length > 0 && (
             <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082' }}>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong>{localText('Сомнительные дисциплины', 'Күмәнді пәндер', 'Suspicious courses')}: {currentPlan.suspicious_courses.length}</strong>
+            <strong>{t('suspicious_courses')}: {currentPlan.suspicious_courses.length}</strong>
             <button
             className="btn btn-secondary"
             style={{ padding: '5px 9px', fontSize: 11, borderColor: '#c17b00' }}
@@ -163,8 +158,8 @@ export default function PlanQualityPanel({
             onClick={loadAllVisibleCourseReplacements}
             >
             {loadingCourseReplacement === 'all'
-            ? localText('Ищем замены…', 'Ауыстырулар ізделуде…', 'Searching replacements…')
-            : localText('Подобрать замены для всех видимых', 'Көрінетіндердің бәріне ауыстыру табу', 'Find replacements for all visible')}
+            ? t('searching_replacements')
+            : t('find_all_replacements')}
             </button>
             </div>
             <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
@@ -172,14 +167,10 @@ export default function PlanQualityPanel({
             <div key={`${row.course_id}-${idx}`} style={{ fontSize: 12, color: '#6d4c41' }}>
             <strong>{row.title}</strong> · {t('semester')} {row.semester} · {Math.round((row.max_score || 0) * 100)}%
             <span style={{ marginLeft: 6 }}>
-            {row.reasons?.map(reason => localText(
-            reason === 'wrong_education_level' ? 'не соответствует уровню образования' : reason === 'not_core_for_program' ? 'не ядро программы' : reason === 'weak_lo_evidence' ? 'слабое LO-доказательство' : 'слишком рано',
-            reason === 'wrong_education_level' ? 'білім деңгейіне сәйкес емес' : reason === 'not_core_for_program' ? 'бағдарлама өзегі емес' : reason === 'weak_lo_evidence' ? 'LO дәлелі әлсіз' : 'тым ерте',
-            reason === 'wrong_education_level' ? 'wrong degree level' : reason === 'not_core_for_program' ? 'not programme core' : reason === 'weak_lo_evidence' ? 'weak LO evidence' : 'too early',
-            )).join('; ')}
+            {row.reasons?.map(reason => t(reason === 'wrong_education_level' ? 'reason_wrong_level' : reason === 'not_core_for_program' ? 'reason_not_core' : reason === 'weak_lo_evidence' ? 'reason_weak_evidence' : 'reason_too_early')).join('; ')}
             </span>
             {row.top_lo_code && <div style={{ marginTop: 4, color: '#5d6470' }} title={row.top_lo_text || row.top_lo_code}>
-            {localText('Лучшая связь', 'Ең жақсы байланыс', 'Best link')}: {row.top_lo_code} · {Math.round((row.max_score || 0) * 100)}%
+            {t('best_link')}: {row.top_lo_code} · {Math.round((row.max_score || 0) * 100)}%
             </div>}
             {row.reason_details?.length > 0 && (
             <div style={{ marginTop: 4, color: '#6d4c41', lineHeight: 1.35 }}>
@@ -201,14 +192,14 @@ export default function PlanQualityPanel({
             onClick={() => handleMatchFeedback(row.course_id, row.top_lo_id, 'confirmed')}
             >
             {matchFeedbackState[`${row.course_id}:${row.top_lo_id}`] === 'confirmed' ? '✓ ' : ''}
-            {localText('Подтвердить связь', 'Байланысты растау', 'Confirm link')}
+            {t('confirm_link')}
             </button>}
             <button
             className="btn btn-secondary"
             style={{ padding: '5px 8px', fontSize: 11, borderColor: '#2e7d32', color: '#2e7d32' }}
             onClick={() => confirmSuspiciousCourse(row.course_id, row.title)}
             >
-            {localText('Оставить в плане', 'Жоспарда қалдыру', 'Keep in plan')}
+            {t('keep_in_plan')}
             </button>
             <button
             className="btn btn-secondary"
@@ -216,8 +207,8 @@ export default function PlanQualityPanel({
             onClick={() => toggleCourseExclusion(row.course_id, row.title)}
             >
             {excludedCourses[row.course_id]
-            ? localText('✓ Заменить при перегенерации', '✓ Қайта құруда ауыстыру', '✓ Replace on regeneration')
-            : localText('Отметить на замену', 'Ауыстыруға белгілеу', 'Mark for replacement')}
+            ? t('replace_on_regeneration_checked')
+            : t('mark_replacement')}
             </button>
             <button
             className="btn btn-primary"
@@ -226,37 +217,37 @@ export default function PlanQualityPanel({
             onClick={() => loadCourseReplacements(row.course_id)}
             >
             {loadingCourseReplacement === row.course_id
-            ? localText('Поиск…', 'Іздеу…', 'Searching…')
-            : localText('Подобрать 3 замены', '3 ауыстыруды таңдау', 'Find 3 replacements')}
+            ? t('search_replacements')
+            : t('find_replacements')}
             </button>
             </div>
             {courseReplacementPreviews[row.course_id] && <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
             {courseReplacementPreviews[row.course_id].elapsed_seconds !== undefined && (
             <div style={{ color: '#6d4c41', fontSize: 12 }}>
-            {localText(`Подбор замен выполнен за ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`, `Ауыстыруды таңдау ${courseReplacementPreviews[row.course_id].elapsed_seconds}s ішінде орындалды.`, `Replacement preview completed in ${courseReplacementPreviews[row.course_id].elapsed_seconds}s.`)}
+            {t('replacement_preview_done').replace('{seconds}', courseReplacementPreviews[row.course_id].elapsed_seconds)}
             </div>
             )}
             {(courseReplacementPreviews[row.course_id].candidates || []).length ? (courseReplacementPreviews[row.course_id].candidates || []).map(candidate => (
             <div key={candidate.course_id} style={{ padding: 8, borderRadius: 7, background: '#fff', border: '1px solid #ead49e' }}>
             <strong>{localize(candidate.title_translations || candidate.title)}</strong> · {candidate.credits} {t('credits')}
-            <div style={{ color: '#667', marginTop: 3 }}>AI {Math.round((candidate.model_score || 0) * 100)}% · ЕПВО {Math.round((candidate.expert_score || 0) * 100)}% · LO {candidate.covered_lo_count}</div>
+            <div style={{ color: '#667', marginTop: 3 }}>{t('ai_short')} {Math.round((candidate.model_score || 0) * 100)}% · {t('epvo_short')} {Math.round((candidate.expert_score || 0) * 100)}% · LO {candidate.covered_lo_count}</div>
             {candidate.covered_los?.length > 0 && <div style={{ color: '#46566a', marginTop: 3 }}>
-            {localText('Профессиональные LO', 'Кәсіби ОН', 'Professional LOs')}: {candidate.covered_los.join(', ')}
-            {candidate.recommended_semester ? ` · ${localText('рекомендуемый семестр', 'ұсынылатын семестр', 'recommended semester')} ${candidate.recommended_semester}` : ''}
+            {t('professional_los')}: {candidate.covered_los.join(', ')}
+            {candidate.recommended_semester ? ` · ${t('recommended_semester')} ${candidate.recommended_semester}` : ''}
             </div>}
             {candidate.selection_reason && <div style={{ color: '#39704c', marginTop: 3 }}>{localize(candidate.selection_reason_translations || candidate.selection_reason)}</div>}
             {candidate.description && <div style={{ color: '#667', marginTop: 3 }}>{candidate.description}</div>}
             <button className="btn btn-primary" style={{ marginTop: 6, padding: '5px 8px', fontSize: 11 }} disabled={Boolean(applyingCourseReplacement)} onClick={() => applyCourseReplacement(row.course_id, candidate.course_id)}>
-            {applyingCourseReplacement === `${row.course_id}:${candidate.course_id}` ? localText('Замена…', 'Ауыстыру…', 'Replacing…') : localText('Подтвердить замену', 'Ауыстыруды растау', 'Confirm replacement')}
+            {applyingCourseReplacement === `${row.course_id}:${candidate.course_id}` ? t('replacing') : t('confirm_replacement')}
             </button>
             </div>
-            )) : <div style={{ color: '#8a5a00' }}>{courseReplacementPreviews[row.course_id].no_candidate_reason || localText('Подходящей равноценной замены пока нет.', 'Сәйкес балама әлі жоқ.', 'No equivalent replacement found yet.')}</div>}
+            )) : <div style={{ color: '#8a5a00' }}>{courseReplacementPreviews[row.course_id].no_candidate_reason || t('no_equivalent')}</div>}
             </div>}
             </div>
             ))}
             </div>
             <div style={{ marginTop: 6, fontSize: 12, color: '#795548' }}>
-            {localText('Система не блокирует просмотр, но такие дисциплины нужно заменить или подтвердить экспертом.', 'Жүйе қарауды бұғаттамайды, бірақ мұндай пәндерді ауыстыру немесе сарапшымен растау керек.', 'The system does not block viewing, but these courses should be replaced or expert-confirmed.')}
+            {t('system_not_blocking')}
             </div>
             </div>
             )}

@@ -248,6 +248,8 @@ def _diversify_variant_items(
                 course.id if variant_type == "C" else -course.id,
             )
         )
+        if variant_type == "C" and len(alternatives) > 1:
+            alternatives[:] = alternatives[1:] + alternatives[:1]
     pair_candidates = [
         course
         for values in alternatives_by_credit.values()
@@ -261,6 +263,14 @@ def _diversify_variant_items(
         reverse=(variant_type == "C"),
     )
     pair_candidates = pair_candidates[:30]
+
+    # B and C are generated against the same evidence pool.  When the pool is
+    # narrow, both deterministic orderings can still select the same highest
+    # scoring replacement.  Rotate C's candidate frontier once: it remains
+    # subject to every admission/coverage/competency guard below, but gets a
+    # real opportunity to produce a different safe alternative.
+    if variant_type == "C" and len(pair_candidates) > 1:
+        pair_candidates = pair_candidates[1:] + pair_candidates[:1]
 
     removable = [
         (index, item)

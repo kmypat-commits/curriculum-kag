@@ -27,11 +27,16 @@ def request_json(url: str, token: str | None = None, data: dict | None = None):
 
 
 def login(base_url: str) -> str:
-    email = os.getenv("CURRICULUM_LOCAL_EMAIL", "admin@curriculum-kag.local")
-    password = os.getenv("CURRICULUM_LOCAL_PASSWORD", "admin123")
+    email = os.getenv("CURRICULUM_LOCAL_EMAIL")
+    password = os.getenv("CURRICULUM_LOCAL_PASSWORD")
+    if not email or not password:
+        raise RuntimeError(
+            "Set CURRICULUM_LOCAL_EMAIL and CURRICULUM_LOCAL_PASSWORD; "
+            "audit scripts never use demo credentials."
+        )
     body = urllib.parse.urlencode({"username": email, "password": password}).encode()
     request = urllib.request.Request(
-        f"{base_url}/auth/login",
+        f"{base_url}/auth/token",
         data=body,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )

@@ -1,18 +1,94 @@
 """Composition tests for the split planner API routers."""
 
 from types import SimpleNamespace
+from collections import Counter
 
 from app.api import planner
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 
+def _routes(router):
+    for route in router.routes:
+        if hasattr(route, "path"):
+            yield route
+        elif hasattr(route, "original_router"):
+            yield from _routes(route.original_router)
+        else:
+            yield route
+
+
+def _effective_app_routes(app):
+    for route in app.routes:
+        contexts = getattr(route, "effective_route_contexts", None)
+        if contexts is not None:
+            yield from contexts()
+        else:
+            yield route
+
+
 def _paths():
-    return {route.path for route in planner.router.routes}
+    return {route.path for route in _routes(planner.router)}
+
+
+def test_planner_router_has_no_duplicate_paths():
+    route_keys = [
+        (route.path, tuple(sorted(route.methods or [])))
+        for route in _routes(planner.router)
+    ]
+    duplicates = [key for key, count in Counter(route_keys).items() if count > 1]
+    assert duplicates == []
+
+
+def test_expired_build_lease_is_reconciled_as_timeout():
+    from datetime import datetime, timedelta, timezone
+    from app.api import planner_state
+
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    status = {"state": "running", "stage": "scoring", "lease_expires_at": expired, "progress": 42}
+    result = planner_state._reconcile_stale_snapshot(876543210, status)
+    assert result["state"] == "timed_out"
+    assert result["stage"] == "timed_out"
+    assert result["stale"] is True
+
+
+def test_expired_queued_build_is_reconciled_as_timeout():
+    from app.api import planner_state
+
+    expired = "2026-01-01T00:00:01+00:00"
+    status = {"state": "queued", "stage": "queued", "lease_expires_at": expired, "progress": 0}
+    result = planner_state._reconcile_stale_snapshot(876543211, status)
+    assert result["state"] == "timed_out"
+    assert result["stage"] == "timed_out"
+    assert result["stale"] is True
+    planner_state.plan_build_status.pop(876543210, None)
+
+
+def test_every_version_scoped_route_has_ownership_dependency():
+    from app.main import app
+
+    unprotected = []
+    for route in _effective_app_routes(app):
+        if not route.path.startswith("/planner/") or "{project_version_id}" not in route.path:
+            continue
+        dependency_names = {getattr(item.call, "__name__", "") for item in route.dependant.dependencies}
+        if "require_project_version_access" not in dependency_names:
+            unprotected.append((route.path, tuple(sorted(route.methods or []))))
+    assert unprotected == []
 
 
 def test_planner_build_router_contract_is_registered():
     assert {"/{project_version_id}/build", "/{project_version_id}/build-status"} <= _paths()
+
+
+def test_infeasible_plan_rejection_is_a_safe_client_error_not_an_internal_error():
+    from app.api.planner_build import BuildInfeasible, _infeasible_build_response
+
+    assert issubclass(BuildInfeasible, ValueError)
+    response = _infeasible_build_response()
+    assert response.status_code == 422
+    assert "Новые варианты" not in str(response.detail)
+    assert "ограничения" in str(response.detail)
 
 
 def test_planner_coverage_router_contract_is_registered():
@@ -27,10 +103,78 @@ def test_planner_replacement_router_contract_is_registered():
     assert {"/{project_version_id}/bridge-replacement-preview", "/{project_version_id}/bridge-ai-candidates"} <= _paths()
 
 
+def test_bridge_replacement_candidate_contract_rejects_unknown_fields():
+    from app.schemas.planner import BridgeReplacementCandidate
+
+    candidate = BridgeReplacementCandidate(
+        title_ru="Прикладной междисциплинарный проект",
+        description_ru="Практическая дисциплина с проверяемым результатом обучения программы.",
+        target_los=["LO1"],
+    )
+    assert candidate.title_ru.startswith("Прикладной")
+    try:
+        BridgeReplacementCandidate(
+            title_ru="Valid title",
+            description_ru="A sufficiently descriptive course proposal for review.",
+            unexpected="must be rejected",
+        )
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("unknown bridge replacement fields must be rejected")
+
+
+def test_kag_mutation_request_contracts_are_bounded():
+    from app.schemas.planner import GenerateBridgeRequest, LoAchievabilityRequest
+
+    assert GenerateBridgeRequest().force_enrichment is False
+    assert LoAchievabilityRequest(language="kk").language == "kk"
+    for model in (GenerateBridgeRequest, LoAchievabilityRequest):
+        try:
+            model(unexpected="must be rejected")
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError(f"{model.__name__} must reject unknown fields")
+
+
+def test_feedback_request_contracts_bound_ids_scores_and_verdicts():
+    from app.schemas.planner import MatchFeedbackRequest, PlanFeedbackRequest
+
+    match = MatchFeedbackRequest(
+        project_version_id=1,
+        course_id=2,
+        lo_id=3,
+        verdict="corrected",
+        corrected_score=0.75,
+        comment="Reviewed by an expert.",
+    )
+    assert match.corrected_score == 0.75
+    assert PlanFeedbackRequest(plan_id=4, feedback="modified").feedback == "modified"
+    for kwargs in (
+        {"project_version_id": 1, "course_id": 2, "lo_id": 3, "verdict": "unknown"},
+        {"project_version_id": 1, "course_id": 2, "lo_id": 3, "verdict": "confirmed", "corrected_score": 2},
+        {"plan_id": 4, "feedback": "unknown"},
+    ):
+        try:
+            (MatchFeedbackRequest if "verdict" in kwargs else PlanFeedbackRequest)(**kwargs)
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError("invalid feedback payload must be rejected")
+
+
 def test_course_replacement_router_contract_is_registered():
     assert {
         "/{project_version_id}/course-replacement-preview",
         "/{project_version_id}/course-replacement-apply",
+    } <= _paths()
+
+
+def test_course_flag_router_contract_is_registered():
+    assert {
+        "/{project_version_id}/course-exclusions",
+        "/{project_version_id}/confirm-suspicious-course",
     } <= _paths()
 
 
@@ -541,7 +685,7 @@ def test_variant_prerequisite_depth_is_cycle_safe_and_memoized():
     assert depth(99) == 5
 
 
-def test_build_claim_blocks_a_duplicate_even_when_status_storage_is_unavailable():
+def test_build_claim_never_uses_process_local_ownership_when_status_storage_is_unavailable():
     from app.api import planner_state
 
     class BrokenSession:
@@ -568,8 +712,9 @@ def test_build_claim_blocks_a_duplicate_even_when_status_storage_is_unavailable(
     try:
         first = planner_state.claim_build_status(version_id, state="running", stage="matching", progress=5)
         second = planner_state.claim_build_status(version_id, state="running", stage="matching", progress=5)
-        assert first is not None
+        assert first is None
         assert second is None
+        assert version_id not in planner_state.plan_build_status
     finally:
         planner_state.plan_build_status.pop(version_id, None)
         planner_state.SessionLocal = original

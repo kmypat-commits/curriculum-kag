@@ -15,7 +15,6 @@ export default function Repository() {
         const translations = course.title_translations || (course.title_ru || course.title_kk || course.title_en ? { ru: course.title_ru, kk: course.title_kk || course.title_kz, en: course.title_en } : null)
         return localize(translations || course.title)
     }
-    const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const navigate = useNavigate()
     const { notify } = useNotifications()
     const [courses, setCourses] = useState([])
@@ -110,7 +109,7 @@ export default function Repository() {
             setImportFile(null)
             fetchCourses()
         } catch (error) {
-            notify(localText('Ошибка импорта', 'Импорт қатесі', 'Import error') + ': ' + formatApiError(error, t('error')))
+            notify(t('error') + ': ' + formatApiError(error, t('error')))
         }
     }
 
@@ -146,7 +145,7 @@ export default function Repository() {
             setAddForm({ course_id: '', title: '', domain: '', credits: 4, cycle_component: 'elective', recommended_semester: 1, description: '' })
             fetchCourses()
         } catch (err) {
-            notify(localText('Ошибка', 'Қате', 'Error') + ': ' + formatApiError(err, t('error')))
+            notify(t('error') + ': ' + formatApiError(err, t('error')))
         } finally {
             setAddSaving(false)
         }
@@ -210,7 +209,7 @@ export default function Repository() {
     }
 
     const handleDeleteCourse = async (courseId) => {
-        if (!window.confirm('Are you sure you want to delete this course?')) return
+        if (!window.confirm(t('confirm_delete_course'))) return
         try {
             await axios.delete(`/api/repository/courses/${courseId}`)
             setCourses(courses.filter(c => c.id !== courseId))
@@ -273,7 +272,7 @@ export default function Repository() {
                     <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                         <LanguageSelector />
                         <Link to="/" style={{ textDecoration: 'none', color: '#366092' }}>{t('dashboard')}</Link>
-                        <Link to="/versions" style={{ textDecoration: 'none', color: '#366092' }}>{localText('Версии', 'Нұсқалар', 'Versions')}</Link>
+                        <Link to="/versions" style={{ textDecoration: 'none', color: '#366092' }}>{t('versions')}</Link>
                         <span>{user?.full_name || user?.email}</span>
                         <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-secondary">{t('logout')}</button>
                     </div>
@@ -283,14 +282,14 @@ export default function Repository() {
             <div className="container" style={{ paddingTop: '30px' }}>
                 <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h2 style={{ margin: 0 }}>{localText('Дисциплины', 'Пәндер', 'Courses')} ({filteredCourses.length}/{repositoryStats.total_courses || filteredCourses.length}) {coursesLoading && <small style={{ color: '#667' }}>{localText('загрузка…', 'жүктелуде…', 'loading…')}</small>}</h2>
+                        <h2 style={{ margin: 0 }}>{t('courses')} ({filteredCourses.length}/{repositoryStats.total_courses || filteredCourses.length}) {coursesLoading && <small style={{ color: '#667' }}>{t('loading')}</small>}</h2>
                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                             <button
                                 onClick={() => { setShowGenerate(!showGenerate); setGenerateResult(null) }}
                                 className="btn btn-primary"
                                 style={{ background: '#6c3483', borderColor: '#6c3483' }}
                             >
-                                🤖 {localText('Предложить дисциплины с ИИ', 'ЖИ арқылы пәндерді ұсыну', 'Suggest courses with AI')}
+                                🤖 {t('suggest_courses_ai')}
                             </button>
                             <button onClick={() => setShowAdd(true)} className="btn btn-primary" style={{ background: '#1a7a4a', borderColor: '#1a7a4a' }}>➕ {t('add_course')}</button>
                             <button onClick={() => { setShowAutoReq(true); setAutoReqResult(null) }} className="btn btn-primary" style={{ background: '#b7600a', borderColor: '#b7600a' }}>🔗 {t('auto_assign_requisites')}</button>
@@ -302,16 +301,16 @@ export default function Repository() {
                     {showGenerate && (
                         <div style={{ background: 'linear-gradient(135deg, #f3e8ff, #ede0ff)', border: '1px solid #c39bd3', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
                             <h3 style={{ margin: '0 0 15px', color: '#6c3483', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🤖 {localText('Предложить дисциплины с ИИ', 'ЖИ арқылы пәндерді ұсыну', 'Suggest courses with AI')}
+                                🤖 {t('suggest_courses_ai')}
                             </h3>
                             <form onSubmit={handleGenerateCourses}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '12px', alignItems: 'flex-end' }}>
                                     <div className="form-group" style={{ margin: 0 }}>
-                                        <label className="form-label" style={{ color: '#6c3483', fontWeight: 'bold' }}>{localText('Предметная область', 'Пәндік сала', 'Subject area')}</label>
+                                        <label className="form-label" style={{ color: '#6c3483', fontWeight: 'bold' }}>{t('subject_area')}</label>
                                         <input
                                             type="text"
                                             className="form-control"
-                                            placeholder={localText('Например: информационная безопасность, анализ данных, медицина', 'Мысалы: ақпараттық қауіпсіздік, деректер ғылымы, медицина', 'e.g. information security, data science, medicine')}
+                                            placeholder={t('subject_placeholder')}
                                             value={generateDomain}
                                             onChange={e => setGenerateDomain(e.target.value)}
                                             required
@@ -320,7 +319,7 @@ export default function Repository() {
                                     </div>
                                     <div className="form-group" style={{ margin: 0, minWidth: '120px' }}>
                                         <label className="form-label" style={{ color: '#6c3483', fontWeight: 'bold' }}>
-                                            {localText('Количество дисциплин', 'Пәндер саны', 'Number of courses')}: <strong>{generateCount}</strong>
+                                            {t('course_count')}: <strong>{generateCount}</strong>
                                         </label>
                                         <input
                                             type="range"
@@ -346,7 +345,7 @@ export default function Repository() {
                                             fontSize: '14px'
                                         }}
                                     >
-                                        {generating ? `⏳ ${localText('Создание…', 'Құрылуда…', 'Generating…')}` : `✨ ${localText('Создать', 'Құру', 'Generate')}`}
+                                        {generating ? `⏳ ${t('generating')}` : `✨ ${t('generate')}`}
                                     </button>
                                 </div>
                             </form>
@@ -360,8 +359,8 @@ export default function Repository() {
                                     fontWeight: 'bold'
                                 }}>
                                     {generateResult.success
-                                        ? localText(`✅ Создано дисциплин: ${generateResult.count}. Таблица обновлена.`, `✅ Құрылған пәндер: ${generateResult.count}. Кесте жаңартылды.`, `✅ Generated courses: ${generateResult.count}. Table refreshed.`)
-                                        : `${localText('❌ Ошибка', '❌ Қате', '❌ Error')}: ${generateResult.error}`}
+                                        ? t('generated_courses').replace('{count}', generateResult.count)
+                                        : `❌ ${t('error')}: ${generateResult.error}`}
                                 </div>
                             )}
                         </div>
@@ -390,9 +389,9 @@ export default function Repository() {
                     </div>
                     {(filter.direction_code || filter.group_code) && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-6px 0 18px', color: '#40556b', fontSize: '13px' }}>
-                            <span>Если в выбранном направлении нет дисциплин, добавьте нормализованные записи ЕПВО в утверждённый репозиторий.</span>
+                            <span>{t('repository_scope_hint')}</span>
                             <button type="button" className="btn btn-secondary" disabled={scopeIndexing} onClick={handleReindexScope}>
-                                {scopeIndexing ? 'Индексация ЕПВО…' : 'Индексировать ЕПВО'}
+                                {scopeIndexing ? t('repository_indexing') : t('repository_index')}
                             </button>
                             {scopeIndexResult && <span style={{ color: scopeIndexResult.error ? '#a33' : '#26734d' }}>
                                 {scopeIndexResult.error || `Готово: добавлено ${scopeIndexResult.created}, связано ${scopeIndexResult.linked}`}
@@ -417,7 +416,7 @@ export default function Repository() {
                             {filteredCourses.map(course => (
                                 <tr key={course.id}>
                                     <td><code>{course.course_id}</code></td>
-                                    <td><strong>{localizedCourse(course)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}{course.translation_status === 'needs_translation' && <small style={{display:'block',color:'#a15c00'}}>{localText('Нужен перевод KK/EN', 'KK/EN аудармасы қажет', 'KK/EN translation needed')}</small>}</td>
+                                    <td><strong>{localizedCourse(course)}</strong>{course.translation_status === 'machine_reviewed' && <small style={{display:'block',color:'#9a5b00'}}>{t('ai_translation')}</small>}{course.translation_status === 'needs_translation' && <small style={{display:'block',color:'#a15c00'}}>{t('translation_needed')}</small>}</td>
                                     <td>{localizeDomain(course.domain)}</td>
                                     <td>{course.credits}</td>
                                     <td>{localizeCycle(course.cycle_component || course.academic_component || course.type)}</td>
@@ -452,26 +451,26 @@ export default function Repository() {
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: 10 }}>
                                 {['ru', 'kk', 'en'].map(lang => <div key={lang}>
-                                    <label className="form-label">{lang.toUpperCase()} title</label>
+                                    <label className="form-label">{t(`title_${lang}`)}</label>
                                     <input className="form-control" value={editingCourse.title_translations?.[lang] || ''} onChange={e => setEditingCourse({ ...editingCourse, title_translations: { ...(editingCourse.title_translations || {}), [lang]: e.target.value } })} />
                                 </div>)}
                             </div>
                             <div className="form-group" style={{ marginTop: '12px' }}>
-                                <label className="form-label">{localText('\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u2014 \u0440\u0443\u0441\u0441\u043a\u0438\u0439', '\u041f\u04d9\u043d \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430\u0441\u044b \u2014 \u043e\u0440\u044b\u0441\u0448\u0430', 'Course description \u2014 Russian')}</label>
+                                <label className="form-label">{t('description_ru')}</label>
                                 <div style={{ whiteSpace: 'pre-wrap', background: '#f7f9fc', border: '1px solid #e1e7ef', padding: '10px', borderRadius: '7px', minHeight: '42px' }}>
-                                    {editingCourse.description_translations?.ru || editingCourse.description || localText('\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043f\u043e\u043a\u0430 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442', '\u0421\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430 \u04d9\u0437\u0456\u0440\u0433\u0435 \u0436\u043e\u049b', 'Description is not available yet')}
+                                    {editingCourse.description_translations?.ru || editingCourse.description || t('description_missing_ru')}
                                 </div>
-                                <label className="form-label" style={{ marginTop: '9px' }}>{localText('\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u2014 \u043a\u0430\u0437\u0430\u0445\u0441\u043a\u0438\u0439', '\u041f\u04d9\u043d \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430\u0441\u044b \u2014 \u049b\u0430\u0437\u0430\u049b\u0448\u0430', 'Course description \u2014 Kazakh')}</label>
+                                <label className="form-label" style={{ marginTop: '9px' }}>{t('description_kk')}</label>
                                 <div style={{ whiteSpace: 'pre-wrap', background: '#f7f9fc', border: '1px solid #e1e7ef', padding: '10px', borderRadius: '7px', minHeight: '42px' }}>
-                                    {editingCourse.description_translations?.kk || localText('\u041a\u0430\u0437\u0430\u0445\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043f\u043e\u043a\u0430 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442', '\u049a\u0430\u0437\u0430\u049b\u0448\u0430 \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430 \u04d9\u0437\u0456\u0440\u0433\u0435 \u0436\u043e\u049b', 'Kazakh description is not available yet')}
+                                    {editingCourse.description_translations?.kk || t('description_missing_kk')}
                                 </div>
-                                <label className="form-label" style={{ marginTop: '9px' }}>{localText('\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u2014 \u0430\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u0438\u0439', '\u041f\u04d9\u043d \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430\u0441\u044b \u2014 \u0430\u0493\u044b\u043b\u0448\u044b\u043d\u0448\u0430', 'Course description \u2014 English')}</label>
+                                <label className="form-label" style={{ marginTop: '9px' }}>{t('description_en')}</label>
                                 <div style={{ whiteSpace: 'pre-wrap', background: '#f7f9fc', border: '1px solid #e1e7ef', padding: '10px', borderRadius: '7px', minHeight: '42px' }}>
-                                    {editingCourse.description_translations?.en || localText('\u0410\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043f\u043e\u043a\u0430 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442', '\u0410\u0493\u044b\u043b\u0448\u044b\u043d\u0448\u0430 \u0441\u0438\u043f\u0430\u0442\u0442\u0430\u043c\u0430 \u04d9\u0437\u0456\u0440\u0433\u0435 \u0436\u043e\u049b', 'English description is not available yet')}
+                                    {editingCourse.description_translations?.en || t('description_missing_en')}
                                 </div>
                                 <div style={{ marginTop: 10 }}>
-                                    <label className="form-label">{localText('Редактировать описания RU/KK/EN', 'RU/KK/EN сипаттамаларын өңдеу', 'Edit RU/KK/EN descriptions')}</label>
-                                    {['ru', 'kk', 'en'].map(lang => <textarea key={`edit-desc-${lang}`} className="form-control" rows={2} placeholder={`${lang.toUpperCase()} description`} value={editingCourse.description_translations?.[lang] || ''} onChange={e => setEditingCourse({ ...editingCourse, description_translations: { ...(editingCourse.description_translations || {}), [lang]: e.target.value } })} style={{ marginBottom: 6 }} />)}
+                                    <label className="form-label">{t('edit_translations')}</label>
+                                    {['ru', 'kk', 'en'].map(lang => <textarea key={`edit-desc-${lang}`} className="form-control" rows={2} placeholder={t(`description_placeholder_${lang}`)} value={editingCourse.description_translations?.[lang] || ''} onChange={e => setEditingCourse({ ...editingCourse, description_translations: { ...(editingCourse.description_translations || {}), [lang]: e.target.value } })} style={{ marginBottom: 6 }} />)}
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -504,7 +503,7 @@ export default function Repository() {
                                             prerequisites: e.target.checked ? [] : editingCourse.prerequisites,
                                         })}
                                     />
-                                    Для этой базовой дисциплины пререквизиты не требуются
+                                    {t('prerequisite_exempt')}
                                 </label>
                                 <label className="form-label">{t('prerequisites')} ({t('selected')}: {editingCourse.prerequisites?.length || 0})</label>
                                 <div style={{ marginBottom: '10px', fontSize: '13px', color: '#366092' }}>

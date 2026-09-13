@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 
 WORKDIR /app
 
@@ -10,16 +10,21 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY requirements.lock .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies only when every artifact matches the generated lock.
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 # Copy application code
 COPY . .
 
 # Create directories for logs and uploads
-RUN mkdir -p /app/logs /app/uploads
+RUN mkdir -p /app/logs /app/uploads \
+    && addgroup --system app \
+    && adduser --system --ingroup app app \
+    && chown -R app:app /app
+
+USER app
 
 # Expose port
 EXPOSE 8000

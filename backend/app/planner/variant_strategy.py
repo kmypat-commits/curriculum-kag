@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from functools import partial
 from itertools import combinations
-import heapq
 import math
 from typing import Dict, List
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.models.bridge_module import BridgeModule
@@ -45,6 +44,7 @@ from app.planner.scheduler_text import (
     has_domain_term as _has_domain_term,
     short_lo_theme as _short_lo_theme,
 )
+from app.planner.timing import PlannerTimer
 from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.semester_rules import (
     complexity_min_semester as _complexity_min_semester,
@@ -86,6 +86,9 @@ from app.planner.variant_assembly import (
     assemble_foundation_frontier,
     build_prerequisite_bundle,
     selected_domain_credits,
+    top_up_with_fallback_courses,
+    diversify_standard_variant_b,
+    assemble_foundation_selection,
     top_up_with_real_epvo_courses as _top_up_with_real_epvo_courses,
 )
 from app.planner.variant_admission import (
@@ -109,7 +112,10 @@ from app.planner.variant_quota import (
     quality_preserved_after_swap as _quality_preserved_after_swap,
     required_domain_credits as _required_domain_credits,
 )
-from app.planner.variant_repairs import top_up_with_credit_bridges as _top_up_with_credit_bridges
+from app.planner.variant_repairs import (
+    top_up_with_credit_bridges as _top_up_with_credit_bridges,
+    reduce_bridge_credit_excess as _reduce_bridge_credit_excess,
+)
 from app.planner.variant_coverage import (
     coverage_objective as _coverage_objective,
     coverage_state as _coverage_state,
@@ -128,18 +134,44 @@ from app.planner.variant_policy import (
     course_matches_scope_theme as _policy_course_matches_scope_theme,
     foreign_scope_conflict as _policy_foreign_scope_conflict,
     priority_rank as _policy_priority_rank,
-    project_domain_index as _policy_project_domain_index,
-    project_domain_share as _policy_project_domain_share,
+    build_domain_policy_callbacks as _build_domain_policy_callbacks,
     role_rank as _policy_role_rank,
     scope_rank as _policy_scope_rank,
     semester_stability_rank as _policy_semester_stability_rank,
     strong_exact_scope_evidence as _policy_strong_exact_scope_evidence,
+    frontier_admissible as _policy_frontier_admissible,
 )
+from app.planner.match_aggregation import aggregate_match_scores
+from app.planner.prerequisite_index import build_prerequisite_index
+from app.planner.selection_frontier import build_domain_quota_frontier
+
+
+def _apply_quality_repair_pipeline(
+    items: List[Dict],
+    *,
+    remove_weak_general_items,
+    top_up_with_real_epvo_courses,
+    top_up_with_credit_bridges,
+    close_professional_lo_gaps,
+    trim_to_target_credits,
+    target: int,
+    db: Session,
+) -> List[Dict]:
+    """Apply the canonical post-selection repair order.
+
+    Selection has several callers (deterministic and optimized variants).
+    Keeping this order in one place prevents a late fix from being applied to
+    one path but omitted from another.
+    """
+    repaired = remove_weak_general_items(items)
+    repaired = top_up_with_real_epvo_courses(repaired)
+    repaired = top_up_with_credit_bridges(repaired)
+    repaired = close_professional_lo_gaps(repaired)
+    return trim_to_target_credits(repaired, target, db)
+
 
 def select_courses_for_variant(project_version_id: int, db: Session, variant_type: str) -> List[Dict]:
-    def trace(stage: str) -> None:
-        if db.info.get("planner_trace"):
-            print(f"planner stage={stage}", flush=True)
+    trace = PlannerTimer("planner", enabled=bool(db.info.get("planner_trace"))).trace
 
     trace("select_start")
     version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
@@ -159,12 +191,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # the core bridge already supplies integration evidence, so omit the
     # lowest-priority secondary specialization when necessary.
     bridge_budget = bridge_module_limit(version)
-    secondary_domain_key = str(project_domains[1] or "").casefold() if len(project_domains) > 1 else ""
-    medical_secondary = any(
-        marker in secondary_domain_key
-        for marker in ("медицин", "медицина", "здрав", "health", "medical", "clinical")
-    )
-    if core_bridge and not medical_secondary and len(secondary_bridges) + 1 > bridge_budget:
+    if core_bridge and len(secondary_bridges) + 1 > bridge_budget:
         secondary_bridges = secondary_bridges[: max(0, bridge_budget - 1)]
     cyber_forensics_program = (
         any("it" in d or "информ" in d or "computer" in d or "кибер" in d for d in project_domains)
@@ -236,43 +263,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             unique_items_by_title=_unique_items_by_title,
             bridge_item=_bridge_item,
         )
-    def project_domain_index(course: Course) -> int | None:
-        return _policy_project_domain_index(course, project_domains, epvo_domain_index)
-
-    def project_domain_share(course: Course | None, domain_index: int) -> float:
-        """Return a course's non-duplicated contribution to one domain quota."""
-        return _policy_project_domain_share(
-            course, domain_index, epvo_domain_shares, project_domain_index
-        )
-
-    weights = {lo.id: lo.weight or 1.0 for lo in version.learning_outcomes}
-    lo_codes_by_id = {lo.id: lo.lo_code for lo in version.learning_outcomes}
-    aggregates: Dict[int, Dict] = {}
-    for match in db.query(MatchScore).filter(MatchScore.project_version_id == project_version_id).all():
-        data = aggregates.setdefault(match.course_id, {
-            "sum": 0.0, "los": set(), "lo_codes": set(), "credible_lo_codes": set(),
-            "professional_lo_codes": set(), "lo_scores": {}, "max": 0.0, "expert": 0.0,
-        })
-        data["sum"] += match.score * weights.get(match.lo_id, 1.0)
-        data["los"].add(match.lo_id)
-        if lo_codes_by_id.get(match.lo_id):
-            data["lo_codes"].add(lo_codes_by_id[match.lo_id])
-        expert_value = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-        effective_value = max(float(match.score or 0.0), expert_value)
-        lo_code = str(lo_codes_by_id.get(match.lo_id) or "")
-        if lo_code:
-            data["lo_scores"][lo_code] = max(
-                float(data["lo_scores"].get(lo_code) or 0.0), effective_value
-            )
-        if lo_code and effective_value >= 0.4:
-            data["credible_lo_codes"].add(lo_code)
-            if not lo_code.startswith("LO-GOSO-"):
-                data["professional_lo_codes"].add(lo_code)
-        data["expert"] = max(data["expert"], expert_value)
-        data["max"] = max(data["max"], effective_value)
-    prereq_ids_by_course: Dict[int, List[int]] = {}
-    for row in db.execute(course_prerequisites.select()).fetchall():
-        prereq_ids_by_course.setdefault(int(row.course_id), []).append(int(row.prerequisite_id))
+    weights, lo_codes_by_id, aggregates = aggregate_match_scores(
+        db, MatchScore, project_version_id, version.learning_outcomes
+    )
+    prereq_ids_by_course = build_prerequisite_index(db, course_prerequisites)
     eligible_course_ids = set(aggregates)
     if professional_scope:
         frontier = set(eligible_course_ids)
@@ -291,9 +285,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         eligible_course_ids.update(
             row[0] for row in db.query(Course.id).filter(Course.course_id.like(f"{local_prefix}%")).all()
         )
-        course_query = db.query(Course).filter(Course.id.in_(eligible_course_ids or [-1]))
+        course_query = db.query(Course).options(selectinload(Course.prerequisites)).filter(
+            Course.id.in_(eligible_course_ids or [-1])
+        ).order_by(Course.id.asc())
     else:
-        course_query = db.query(Course)
+        course_query = db.query(Course).options(selectinload(Course.prerequisites)).order_by(Course.id.asc())
     courses = {
         course.id: course for course in course_query.all()
         if not _is_component_placeholder_title(_title_key(course.title))
@@ -315,6 +311,14 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     epvo_level_scope_allowed_ids = scope_index.level_scope_allowed_ids
     epvo_domain_index = scope_index.domain_index_by_course
     epvo_domain_shares = scope_index.domain_shares_by_course
+    # Build callbacks only after scoped EPVO evidence is available.  Binding
+    # them earlier captured empty dictionaries and incorrectly zeroed the
+    # secondary-domain credit shares used by quota repair.
+    project_domain_index, project_domain_share = _build_domain_policy_callbacks(
+        project_domains=project_domains,
+        epvo_domain_index=epvo_domain_index,
+        epvo_domain_shares=epvo_domain_shares,
+    )
 
     if interdisciplinary:
         # Keep a bounded secondary-domain safety pool for courses whose
@@ -322,7 +326,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         domain_filters = [Course.domain.ilike(f"%{alias}%") for alias in project_domains if alias]
         if domain_filters:
             for course in (
-                db.query(Course).filter(or_(*domain_filters))
+                db.query(Course).options(selectinload(Course.prerequisites)).filter(or_(*domain_filters))
                 .order_by(Course.recommended_semester.asc(), Course.id.asc())
                 .limit(250).all()
             ):
@@ -346,8 +350,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             if course_id in eligible_course_ids
         }
 
-    def scope_rank(course: Course) -> int:
-        return _policy_scope_rank(course, epvo_scope_by_id, epvo_scope)
+    scope_rank = partial(_policy_scope_rank, epvo_scope_by_id=epvo_scope_by_id, epvo_scope=epvo_scope)
 
     is_project_domain = partial(
         _is_project_domain_course,
@@ -380,38 +383,36 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         min_general_lo_evidence=min_general_lo_evidence,
     )
 
-    def priority_rank(course: Course) -> int:
-        return _policy_priority_rank(course, epvo_priority_by_id, epvo_priority)
-    def semester_stability_rank(course: Course | None) -> float:
-        """Prefer candidates whose scoped EPVO semester evidence is stable.
-
-        This is deliberately a secondary rank component: LO evidence, expert
-        support, scope and domain relevance remain dominant. A zero value means
-        that no scoped semester evidence is available and therefore never
-        penalizes a candidate by itself.
-        """
-        return _policy_semester_stability_rank(course, epvo_semester_values)
-    def role_rank(course: Course | None) -> int:
-        return _policy_role_rank(course, project_domains)
+    priority_rank = partial(_policy_priority_rank, epvo_priority_by_id=epvo_priority_by_id, epvo_priority=epvo_priority)
+    semester_stability_rank = partial(_policy_semester_stability_rank, epvo_semester_values=epvo_semester_values)
+    role_rank = partial(_policy_role_rank, project_domains=project_domains)
 
     domain_text = " ".join(project_domains).lower()
     ict_programme = any(marker in domain_text for marker in ("информац", "коммуникац", "it", "computer", "software", "digital", "кибер"))
     medical_programme = any(marker in domain_text for marker in ("медицин", "здрав", "clinical", "health"))
     agro_programme = any(marker in domain_text for marker in ("агро", "сельск", "растен", "почв"))
 
-    def has_foreign_scope_conflict(course: Course) -> bool:
-        return _policy_foreign_scope_conflict(course, domain_text)
+    has_foreign_scope_conflict = partial(_policy_foreign_scope_conflict, domain_text=domain_text)
 
-    def course_matches_scope_theme(course: Course) -> bool:
-        return _policy_course_matches_scope_theme(
-            course, project_domains, domain_text, ict_programme, medical_programme, agro_programme
-        )
-
-    def has_strong_exact_scope_evidence(course: Course) -> bool:
-        """Let exact EPVO group evidence override a shallow keyword mismatch."""
-        return _policy_strong_exact_scope_evidence(
-            course, aggregates, scope_rank, domain_text
-        )
+    course_matches_scope_theme = partial(
+        _policy_course_matches_scope_theme,
+        project_domains=project_domains,
+        domain_text=domain_text,
+        ict_programme=ict_programme,
+        medical_programme=medical_programme,
+        agro_programme=agro_programme,
+    )
+    has_strong_exact_scope_evidence = partial(
+        _policy_strong_exact_scope_evidence,
+        aggregates=aggregates,
+        scope_rank_fn=scope_rank,
+        domain_text=domain_text,
+    )
+    is_frontier_admissible = partial(
+        _policy_frontier_admissible,
+        is_project_domain=is_project_domain,
+        strong_exact_scope_evidence=has_strong_exact_scope_evidence,
+    )
 
     admit_real_courses = partial(
         _admit_real_course_items,
@@ -452,9 +453,14 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # bounded frontier only for scoped/professional programmes; it remains
     # deterministic and avoids scanning the full repository.
     candidate_limit = 350 if interdisciplinary or epvo_professional_scope else 100
+    # B must start from the same admissible interdisciplinary frontier as A.
+    # Its later safe substitutions provide the variant difference; applying
+    # the B ordering at admission time can consume the whole frontier with
+    # one domain before quota repair gets a chance to act.
+    frontier_variant_type = "A" if interdisciplinary and variant_type == "B" else variant_type
     candidate_ids = rank_admissible_frontier(
         aggregates,
-        is_admissible=lambda cid: is_project_domain(courses[cid]),
+        is_admissible=lambda cid: is_frontier_admissible(courses[cid]),
         max_depth=num_semesters,
         aggregates=aggregates,
         courses=courses,
@@ -464,12 +470,13 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         scope_rank=scope_rank,
         priority_rank=priority_rank,
         semester_stability_rank=semester_stability_rank,
-        variant_type=variant_type,
+        variant_type=frontier_variant_type,
         project_domains=(version.project.domain1, version.project.domain2),
         title_for=lambda cid: _title_key(courses[cid].title),
         limit=candidate_limit,
     )
     secondary_quota_candidate_ids = candidate_ids
+    primary_quota_candidate_ids = candidate_ids
     if interdisciplinary:
         # The generic frontier is LO-score first and may consist entirely of
         # the primary ICT domain. Reserve a separate, bounded secondary-domain
@@ -478,7 +485,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         secondary_tail = [
             course for course in courses.values()
             if course.id not in selected_ids
-            and is_project_domain(course)
+            and is_frontier_admissible(course)
             and project_domain_share(course, 1) > 0.0
             and course_depth(course.id) < num_semesters
         ]
@@ -492,6 +499,25 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         ))
         secondary_quota_candidate_ids = [
             *(course.id for course in secondary_tail[:120]),
+            *candidate_ids,
+        ]
+        primary_tail = [
+            course for course in courses.values()
+            if course.id in aggregates
+            and is_frontier_admissible(course)
+            and project_domain_share(course, 0) > 0.0
+            and course_depth(course.id) < num_semesters
+        ]
+        primary_tail.sort(key=lambda course: (
+            -project_domain_share(course, 0),
+            -role_rank(course),
+            -scope_rank(course),
+            -priority_rank(course),
+            int(course.recommended_semester or 99),
+            int(course.id),
+        ))
+        primary_quota_candidate_ids = [
+            *(course.id for course in primary_tail[:160]),
             *candidate_ids,
         ]
     root_credits = sum(
@@ -637,9 +663,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             scope_rank=scope_rank,
         )
     foundation_target = max(0, int(constraints.get("max_credits_per_semester", target / max(num_semesters, 1))) - 3)
-    foundation_ids = sorted(
-        (cid for cid in courses if is_project_domain(courses[cid]) and course_depth(cid) == 0),
-        key=lambda cid: variant_candidate_key(
+    foundation_rank_key = lambda cid: variant_candidate_key(
             cid,
             aggregates=aggregates,
             courses=courses,
@@ -651,36 +675,32 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             semester_stability_rank=semester_stability_rank,
             variant_type=variant_type,
             project_domains=(version.project.domain1, version.project.domain2),
-        ) if cid in aggregates else (0, 0, 0),
-        reverse=True,
-    )
-    total = assemble_foundation_frontier(
-        foundation_ids,
-        selected=selected,
+        ) if cid in aggregates else (0, 0, 0)
+    total = assemble_foundation_selection(
+        selected,
+        courses,
+        courses.keys(),
+        is_admissible=is_project_domain,
+        course_depth=course_depth,
         bundle_for_course=bundle,
-        rank_key=lambda cid: variant_candidate_key(
-            cid,
-            aggregates=aggregates,
-            courses=courses,
-            prerequisite_ids_by_course=prereq_ids_by_course,
-            course_depth=course_depth,
-            role_rank=role_rank,
-            scope_rank=scope_rank,
-            priority_rank=priority_rank,
-            semester_stability_rank=semester_stability_rank,
-            variant_type=variant_type,
-            project_domains=(version.project.domain1, version.project.domain2),
-        ) if cid in aggregates else (0, 0, 0),
+        rank_key=foundation_rank_key,
         foundation_target=foundation_target,
         maximum_credits=maximum,
     )
 
     domain_quota_candidate_cache: Dict[int, List[Course]] = {}
+    quota_frontier_courses = build_domain_quota_frontier(
+        courses,
+        aggregates,
+        candidate_ids,
+        secondary_quota_candidate_ids,
+        project_domain_share,
+    )
 
     domain_quota_candidates = partial(
         get_domain_quota_candidates,
         cache=domain_quota_candidate_cache,
-        courses=courses.values(),
+        courses=quota_frontier_courses,
         is_admissible=is_project_domain,
         domain_share=project_domain_share,
         course_depth=course_depth,
@@ -760,7 +780,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         maximum=maximum,
         quota_total_credits=quota_total_credits,
         minimum_percentages=min_domain_percent,
-        candidate_ids=candidate_ids,
+        candidate_ids=primary_quota_candidate_ids,
         courses=courses,
         project_domain_share=project_domain_share,
         bundle_for_course=bundle,
@@ -772,30 +792,20 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         if not added:
             continue
         if total >= target: break
-    if total < target:
-        fallback_candidates = (
-            c for c in courses.values()
-            if is_project_domain(c) and course_depth(c.id) < num_semesters
-        )
-        if variant_type == "C":
-            fallback = heapq.nsmallest(
-                500,
-                fallback_candidates,
-                key=lambda c: (-role_rank(c), -scope_rank(c), (c.domain or "").lower(), c.recommended_semester or 99, -c.id),
-            )
-        else:
-            fallback = heapq.nsmallest(
-                500,
-                fallback_candidates,
-                key=lambda c: (-role_rank(c), -scope_rank(c), c.recommended_semester or 99, c.credits or 5, c.id),
-            )
-        for course in fallback:
-            additions = list({item["course_id"]: item for item in bundle(course.id) if item["course_id"] not in selected}.values())
-            addition_credits = sum(item["credits"] for item in additions)
-            if additions and total + addition_credits <= maximum:
-                for item in additions: selected[item["course_id"]] = item
-                total = sum(item["credits"] for item in selected.values())
-                if total >= target: break
+    total = top_up_with_fallback_courses(
+        selected,
+        courses.values(),
+        total=total,
+        target=target,
+        maximum=maximum,
+        variant_type=variant_type,
+        is_admissible=is_project_domain,
+        course_depth=course_depth,
+        bundle_for_course=bundle,
+        num_semesters=num_semesters,
+        role_rank=role_rank,
+        scope_rank=scope_rank,
+    )
     result = _limit_general_course_items(
         list(selected.values()),
         courses,
@@ -806,10 +816,15 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = top_up_with_real_epvo_courses(remove_weak_general_items(result))
     for bridge in [core_bridge]:
         result = _force_bridge_item(result, bridge, variant_type, target)
-    result = _trim_to_target_credits(
-        close_professional_lo_gaps(top_up_with_credit_bridges(result)),
-        target,
-        db,
+    result = _apply_quality_repair_pipeline(
+        result,
+        remove_weak_general_items=remove_weak_general_items,
+        top_up_with_real_epvo_courses=top_up_with_real_epvo_courses,
+        top_up_with_credit_bridges=top_up_with_credit_bridges,
+        close_professional_lo_gaps=close_professional_lo_gaps,
+        trim_to_target_credits=_trim_to_target_credits,
+        target=target,
+        db=db,
     )
     total = sum(int(item.get("credits") or 0) for item in result)
     if constraints.get("allow_new_courses", True):
@@ -870,66 +885,16 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 total += credits
                 if total >= target:
                     break
-    if variant_type == "B" and not interdisciplinary:
-        # Some legacy projects have many equal 5-credit candidates.  In that
-        # case the "reuse-first" B heuristic can converge to the same final
-        # set as A even when the ordering differs.  Swap a few safe electives
-        # for same-credit alternatives from the same project domains so B is a
-        # genuine alternative without breaking prerequisites or credits.
-        selected_ids = {
-            item.get("course_id")
-            for item in result
-            if item.get("course_id") is not None
-        }
-        protected_ids = {
-            prerequisite_id
-            for item in result
-            for prerequisite_id in (item.get("prerequisites") or [])
-            if prerequisite_id in selected_ids
-        }
-        alternatives_by_credit: Dict[int, List[Course]] = {}
-        for course in courses.values():
-            if (
-                course.id not in selected_ids
-                and is_project_domain(course)
-                and course_depth(course.id) < num_semesters
-                and not prereq_ids_by_course.get(course.id)
-            ):
-                alternatives_by_credit.setdefault(int(course.credits or 5), []).append(course)
-        for alternatives in alternatives_by_credit.values():
-            alternatives.sort(key=lambda course: course.id, reverse=True)
-        removable = [
-            (index, item)
-            for index, item in enumerate(result)
-            if item.get("course_id") is not None
-            and item.get("course_id") not in protected_ids
-        ]
-        removable.sort(key=lambda pair: int(pair[1].get("course_id") or 0))
-        swaps = 0
-        for index, item in removable:
-            if swaps >= 4:
-                break
-            credits = int(item.get("credits") or 5)
-            alternative = None
-            while alternatives_by_credit.get(credits):
-                candidate = alternatives_by_credit[credits].pop(0)
-                if candidate.id not in selected_ids:
-                    alternative = candidate
-                    break
-            if alternative is None:
-                continue
-            selected_ids.discard(item.get("course_id"))
-            selected_ids.add(alternative.id)
-            result[index] = {
-                "course_id": alternative.id,
-                "title": alternative.title,
-                "domain": alternative.domain,
-                "credits": alternative.credits or 5,
-                "recommended_semester": alternative.recommended_semester,
-                "prerequisites": [],
-                "type": alternative.cycle_component or "mandatory",
-            }
-            swaps += 1
+    if not interdisciplinary:
+        result = diversify_standard_variant_b(
+            result,
+            courses.values(),
+            is_admissible=is_project_domain,
+            course_depth=course_depth,
+            has_prerequisites=lambda course_id: bool(prereq_ids_by_course.get(course_id)),
+            num_semesters=num_semesters,
+            selected_variant=variant_type,
+        )
     result = _promote_epvo_priority_courses(result, courses, prereq_ids_by_course, is_project_domain, course_depth, num_semesters, priority_rank, target, maximum)
     if not interdisciplinary:
         result = _limit_general_course_items(
@@ -942,7 +907,16 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     result = rebalance_domain_quotas(result)
     if not (interdisciplinary and variant_type == "B"):
         result = _diversify_variant_items(result, version, db, variant_type)
-    result = _trim_to_target_credits(close_professional_lo_gaps(top_up_with_credit_bridges(top_up_with_real_epvo_courses(remove_weak_general_items(result)))), target, db)
+    result = _apply_quality_repair_pipeline(
+        result,
+        remove_weak_general_items=remove_weak_general_items,
+        top_up_with_real_epvo_courses=top_up_with_real_epvo_courses,
+        top_up_with_credit_bridges=top_up_with_credit_bridges,
+        close_professional_lo_gaps=close_professional_lo_gaps,
+        trim_to_target_credits=_trim_to_target_credits,
+        target=target,
+        db=db,
+    )
     if not interdisciplinary:
         result = _limit_general_course_items(
             result,
@@ -998,7 +972,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # Run diversification after all priority-promotion passes.  Previously B
     # was diversified earlier and then the final EPVO promotion restored the
     # same courses as A.  Recheck hard quotas and LO gaps after the late swap.
-    if variant_type in {"A", "B", "C"} and not (interdisciplinary and variant_type == "C"):
+    if variant_type in {"A", "B", "C"} and not (
+        interdisciplinary and variant_type in {"B", "C"}
+    ):
         result = _diversify_variant_items(result, version, db, variant_type)
         result = rebalance_domain_quotas(result)
         result = close_professional_lo_gaps(result)
@@ -1039,26 +1015,15 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # remaining real course is protected.  Flex only an existing bridge in
     # that narrow case; its evidence/LO links remain unchanged and the final
     # plan still has an exact target total.
-    excess = max(0, sum(int(item.get("credits") or 0) for item in result) - target)
-    if excess:
-        for item in result:
-            if excess <= 0 or item.get("bridge_module_id") is None:
-                continue
-            current_credits = int(item.get("credits") or 0)
-            reduction = min(excess, max(0, current_credits - 1))
-            if reduction <= 0:
-                continue
-            item["credits"] = current_credits - reduction
-            module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
-            if module:
-                module.credits = item["credits"]
-            excess -= reduction
+    result = _reduce_bridge_credit_excess(result, target, db)
     # Final pass: all credit/domain/LO repairs above can converge B/C back to A.
     # Diversify only after the last mutation so an accepted plan keeps its
     # variant identity. The helper preserves same-credit courses, professional
     # LO coverage, core competencies and prerequisite safety; the verifier
     # remains the final authority for hard constraints.
-    if variant_type in {"A", "B", "C"} and not (interdisciplinary and variant_type == "C"):
+    if variant_type in {"A", "B", "C"} and not (
+        interdisciplinary and variant_type in {"B", "C"}
+    ):
         result = _diversify_variant_items(result, version, db, variant_type)
     if (
         variant_type == "C"
@@ -1070,7 +1035,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             item for item in result
             if item.get("course_id") is not None
             and not item.get("regulatory_required")
-            and int(item.get("credits") or 0) == 5
+            # Doctoral professional blocks often use 3–4 credit courses.
+            # Restricting this final C-only trajectory nudge to five credits
+            # made B and C converge whenever the narrow profile had no such
+            # course, even though a safe semester distinction was available.
+            and int(item.get("credits") or 0) > 0
             and _foundation_max_semester(
                 item.get("title"),
                 int(constraints.get("total_semesters") or 6),
@@ -1095,20 +1064,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # it so a replacement cannot reintroduce a one-credit overage.
     result = _unique_items_by_title(result)
     result = _trim_to_target_credits(result, target, db)
-    excess = max(0, sum(int(item.get("credits") or 0) for item in result) - target)
-    if excess:
-        for item in result:
-            if excess <= 0 or item.get("bridge_module_id") is None:
-                continue
-            current_credits = int(item.get("credits") or 0)
-            reduction = min(excess, max(0, current_credits - 1))
-            if reduction <= 0:
-                continue
-            item["credits"] = current_credits - reduction
-            module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
-            if module:
-                module.credits = item["credits"]
-            excess -= reduction
+    result = _reduce_bridge_credit_excess(result, target, db)
     # No mutation is allowed after the final professional-LO repair.  The
     # last trim/diversification passes above can remove the sole real course
     # supporting a programme LO, so close gaps at the actual return boundary
@@ -1130,4 +1086,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         # the earlier quota pass. Re-assert the quota at the true return
         # boundary so every variant remains compliant.
         result = rebalance_domain_quotas(result)
+        # Quota exchange can remove the course that closes a professional LO.
+        # Restore only an evidence-backed real replacement at the boundary;
+        # bridges must never be used to hide this loss.
+        result = close_professional_lo_gaps(result)
     return result

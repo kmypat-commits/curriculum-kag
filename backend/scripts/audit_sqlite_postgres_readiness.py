@@ -6,6 +6,9 @@ import sqlite3
 from pathlib import Path
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
 KEY_TABLES = [
     "courses",
     "course_localizations",
@@ -24,7 +27,7 @@ KEY_TABLES = [
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db", default="backend/curriculum_kag.db")
+    parser.add_argument("--db", default=str(ROOT / "backend" / "curriculum_kag.db"))
     parser.add_argument("--check-fk", action="store_true")
     parser.add_argument("--full-integrity", action="store_true")
     args = parser.parse_args()

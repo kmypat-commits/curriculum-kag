@@ -32,15 +32,24 @@ def main() -> int:
     parser.add_argument("project_version_id", type=int)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--poll-seconds", type=int, default=60,
+        help="Seconds between status reads after a 202 response (default: 60)",
+    )
     args = parser.parse_args()
 
-    email = os.getenv("CURRICULUM_LOCAL_EMAIL", "admin@curriculum-kag.local")
-    password = os.getenv("CURRICULUM_LOCAL_PASSWORD", "admin123")
+    email = os.getenv("CURRICULUM_LOCAL_EMAIL")
+    password = os.getenv("CURRICULUM_LOCAL_PASSWORD")
+    if not email or not password:
+        raise RuntimeError(
+            "Set CURRICULUM_LOCAL_EMAIL and CURRICULUM_LOCAL_PASSWORD; "
+            "build verification never uses demo credentials."
+        )
     login_data = urllib.parse.urlencode({"username": email, "password": password}).encode()
     started = time.perf_counter()
     result: dict
     try:
-        login = request_json(f"{args.base_url}/auth/login", data=login_data)
+        login = request_json(f"{args.base_url}/auth/token", data=login_data)
         token = login["access_token"]
         build_request = urllib.request.Request(
             f"{args.base_url}/planner/{args.project_version_id}/build",
@@ -50,6 +59,35 @@ def main() -> int:
         )
         with urllib.request.urlopen(build_request, timeout=1800) as response:
             payload = json.loads(response.read().decode("utf-8"))
+            response_status = response.status
+        if response_status == 202 or payload.get("state") in {"queued", "running"}:
+            if args.poll_seconds < 10:
+                raise ValueError("--poll-seconds must be at least 10 for long-running builds")
+            terminal = {"complete", "rejected", "failed", "timed_out", "cancelled"}
+            while payload.get("state") not in terminal:
+                time.sleep(args.poll_seconds)
+                payload = request_json(f"{args.base_url}/planner/{args.project_version_id}/build-status", token=token)
+            if payload.get("state") != "complete":
+                result = {
+                    "ok": False,
+                    "project_version_id": args.project_version_id,
+                    "elapsed_seconds": round(time.perf_counter() - started, 2),
+                    "state": payload.get("state"),
+                    "stage": payload.get("stage"),
+                    "error": payload.get("error"),
+                    "verification_summary": payload.get("verification_summary") or [],
+                }
+            else:
+                result = {
+                    "ok": True,
+                    "project_version_id": args.project_version_id,
+                    "elapsed_seconds": round(time.perf_counter() - started, 2),
+                    "state": payload.get("state"),
+                    "variants": payload.get("variants") or {},
+                }
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            return 0 if result["ok"] else 1
         result = {
             "ok": True,
             "project_version_id": args.project_version_id,

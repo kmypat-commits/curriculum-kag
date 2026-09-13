@@ -20,8 +20,19 @@ if ((Test-Path -LiteralPath $resultPath) -and ((Get-Content -LiteralPath $result
     Write-Host "Restore was already verified by the interactive verifier."
     exit 0
 }
-$docker = Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\resources\bin\docker.exe"
-if (-not (Test-Path $docker)) { throw "Docker CLI not found." }
+function Find-DockerCli {
+    $command = Get-Command docker.exe -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    foreach ($candidate in @(
+        (Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\resources\bin\docker.exe"),
+        (Join-Path $env:LOCALAPPDATA "Docker\resources\bin\docker.exe"),
+        "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+    )) {
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+    throw "Docker CLI not found. Install Docker Desktop or add its resources\\bin directory to PATH."
+}
+$docker = Find-DockerCli
 
 function Invoke-Docker([string[]]$Arguments) {
     $result = & $docker @Arguments

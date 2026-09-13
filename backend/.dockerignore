@@ -15,6 +15,19 @@ experiment-results/
 outputs/
 logs/
 uploads/
+.runtime/
+checkpoints/
+ml/
+# Keep only the checked-in runtime ruleset; raw/exported data must stay out
+# of the image build context.
+data/*
+!data/goso/
+!data/goso/**
+*.csv
+*.parquet
+*.npy
+*.npz
+*.bin
 tests/
 *.log
 Dockerfile*

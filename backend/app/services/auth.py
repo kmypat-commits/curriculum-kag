@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 import bcrypt
 
 # Fix for Passlib + Bcrypt 4.1.0+ compatibility on Python 3.14
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 # A CLI may continue to use Authorization: Bearer, while the browser uses the
 # HttpOnly cookie issued by /auth/login.  ``auto_error=False`` lets us safely
 # evaluate both transports before returning a uniform 401.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash using direct bcrypt"""
@@ -51,9 +52,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """Create a JWT access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -65,7 +66,7 @@ def decode_access_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -85,13 +86,20 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    supplied_bearer = bool(token)
     payload = decode_access_token(token or access_token or "")
+    expected_token_use = "cli" if supplied_bearer else "browser"
+    if payload.get("token_use") != expected_token_use:
+        raise credentials_exception
     email: str = payload.get("sub")
     if email is None:
         raise credentials_exception
     
     user = db.query(User).filter(User.email == email).first()
     if user is None:
+        raise credentials_exception
+
+    if expected_token_use == "cli" and int(payload.get("token_version", -1)) != int(getattr(user, "cli_token_version", 0) or 0):
         raise credentials_exception
     
     if not user.is_active:

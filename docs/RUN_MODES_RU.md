@@ -10,6 +10,20 @@
 недоступны, запуск завершается понятной ошибкой: SQLite **не** выбирается
 молча. Это защищает от работы со старой локальной копией данных.
 
+После переноса Docker Desktop/WSL-диска launcher ждёт готовности daemon до 180
+секунд, проверяя его раз в 5 секунд, а PostgreSQL — до 300 секунд. При особо
+долгом восстановлении можно увеличить значения без правки кода:
+`$env:DOCKER_DESKTOP_STARTUP_TIMEOUT_SECONDS=600`,
+`$env:DOCKER_COMPOSE_STARTUP_TIMEOUT_SECONDS=600`,
+`$env:POSTGRES_STARTUP_TIMEOUT_SECONDS=600`. Значения принимаются от 5 до
+1800 секунд; некорректное значение останавливает запуск понятной ошибкой.
+
+Для локального запуска используйте `start.bat` (или только
+`docker compose -f docker-compose.postgres-only.yml up -d`). Не объединяйте
+`docker-compose.yml` с `docker-compose.postgres-only.yml`: базовый файл является
+production/local-конфигурацией и намеренно требует `POSTGRES_USER`,
+`POSTGRES_PASSWORD` и `POSTGRES_DB` из `.env`; это не ошибка переноса VHDX.
+
 ## Принудительно SQLite
 
 ```powershell
@@ -60,6 +74,11 @@ user: curriculum_user
 проверяет уже работающий backend и не создаёт второй процесс. Если запрошен
 PostgreSQL, а backend работает с SQLite, запуск остановится с понятной ошибкой
 вместо ложного сообщения об успешном старте.
+
+В production `ASYNC_BUILDS=true` запускает генерацию отдельным короткоживущим
+worker-процессом: API сразу возвращает `202 queued`, а интерфейс получает
+прогресс через `/build-status`. Для локальной диагностики можно оставить
+`ASYNC_BUILDS=false` и выполнять тот же pipeline синхронно.
 
 Быстрая проверка после запуска:
 

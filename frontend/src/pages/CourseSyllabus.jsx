@@ -126,7 +126,7 @@ export default function CourseSyllabus() {
                         <tfoot><tr><th style={cell} colSpan="2">{t('total')}</th><th style={cell}>{data.lecture_hours}</th><th style={cell}>{data.practical_hours}</th><th style={cell}>{data.independent_hours}</th><th style={cell}>{data.total_hours}</th><th style={cell} colSpan="4">{data.hours_check ? '✓ ' + t('hours_match') : t('hours_do_not_match')}</th></tr></tfoot>
                     </table>
                 </div>
-                <div style={{ marginTop: 20, padding: 12, background: '#fff8e1', borderLeft: '4px solid #ffb300' }}>
+                <div style={{ marginTop: 20, padding: 12, background: '#fff8e1', borderTop: '1px solid #ffb300' }}>
                     <strong>{t('important_assumptions')}</strong>
                     <ul><li>{t('credit_30_hours_rule')}</li><li>{t('institution_template_note')}</li><li>{t('expert_review_required')}</li></ul>
                 </div>

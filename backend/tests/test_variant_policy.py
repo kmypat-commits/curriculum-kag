@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 from app.planner.variant_policy import (
+    build_domain_policy_callbacks,
     foreign_scope_conflict,
     project_domain_index,
     scope_rank,
@@ -28,6 +29,20 @@ def _course(**values):
 def test_policy_prefers_explicit_domain_before_epvo_fallback():
     course = _course(domain="Medicine", id=17)
     assert project_domain_index(course, ["Information technologies", "Medicine"], {17: 0}) == 1
+
+
+def test_domain_callbacks_use_loaded_epvo_scope_evidence():
+    """A scoped secondary-domain share must not be lost after index loading."""
+    course = _course(id=42, domain="Unmapped catalogue label")
+    domain_index, domain_share = build_domain_policy_callbacks(
+        project_domains=["Law", "Information technologies"],
+        epvo_domain_index={42: 2},
+        epvo_domain_shares={42: (0.25, 0.75)},
+    )
+
+    assert domain_index(course) == 1
+    assert domain_share(course, 0) == 0.25
+    assert domain_share(course, 1) == 0.75
 
 
 def test_policy_scope_rank_prefers_stable_course_id_evidence():

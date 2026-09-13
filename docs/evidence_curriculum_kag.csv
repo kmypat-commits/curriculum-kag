@@ -1,0 +1,15 @@
+indicator,value,unit,status,evidence_or_note
+Approved discipline cards,21525,records,confirmed,Knowledge base aggregate
+Normalized discipline-learning-outcome links,932483,links,confirmed,Knowledge graph aggregate
+Educational programs evaluated,114,programs,confirmed,AI model evaluation report
+Evaluation test pairs,6000,pairs,confirmed,Independent model evaluation set
+Supported education levels,3,levels,confirmed,Bachelor master doctoral programs
+Supported interface languages,3,languages,confirmed,Russian Kazakh English localization
+MAU,,users,not_yet_measured,To be collected during institutional pilots
+DAU,,users,not_yet_measured,To be collected during institutional pilots
+Average session duration,,minutes,not_yet_measured,To be collected during institutional pilots
+Completed user courses,,courses,not_yet_measured,No production cohort yet
+Demo access,free,access condition,available,For demonstration and institutional pilots
+Inclusion approach,multilingual localized access,description,available,Adaptable pilot access for universities and resource-limited organizations
+User testimonials,,items,not_yet_available,Collect after pilot deployment
+End-user case studies,,cases,not_yet_available,Collect after pilot deployment

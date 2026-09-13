@@ -6,7 +6,7 @@ replacement, coverage reporting, or syllabus authoring can evolve and be
 tested independently.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.planner_build import router as build_router
 from app.api.planner_coverage import router as coverage_router
@@ -16,9 +16,10 @@ from app.api.planner_replacement_courses import router as course_replacements_ro
 from app.api.planner_state import plan_build_status as _plan_build_status
 from app.api.planner_state import set_build_status as _set_build_status
 from app.api.planner_syllabus import router as syllabus_router
+from app.services.access import require_project_version_access
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_project_version_access)])
 router.include_router(graph_router)
 router.include_router(syllabus_router)
 router.include_router(build_router)

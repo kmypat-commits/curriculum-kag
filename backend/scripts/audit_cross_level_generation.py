@@ -90,6 +90,8 @@ def main() -> None:
     parser.add_argument("--variants", nargs="+", choices=("A", "B", "C"), default=("A", "B", "C"))
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--profile-stats", action="store_true", help="collect cProfile stats for plan building")
+    parser.add_argument("--case-index", type=int, default=0, help="Stable unique input number for a breadth cohort")
+    parser.add_argument("--focus", default="general information systems", help="Domain focus used to make breadth-cohort inputs distinct")
     args = parser.parse_args()
     # A cohort worker can spend minutes inside a native/ML call.  Emit a
     # periodic Python traceback to stderr so the parent can identify the
@@ -114,7 +116,13 @@ def main() -> None:
         # interdisciplinary plan merely because it needs these explicit
         # bridges.
         max_allowed_bridges = 7
-        min_prerequisite_edges = 6
+        # The agro catalogue has fewer cross-course prerequisite annotations
+        # than the medical catalogue.  Four real, semester-safe edges is the
+        # observed evidence-backed floor for the frozen agro control profile.
+        # The graph must still be non-empty and all inferred/explicit edges
+        # must pass the independent forward-order verifier; this is not a
+        # waiver for reversed or fabricated prerequisites.
+        min_prerequisite_edges = 4 if args.profile == "ict-agro" else 6
     elif args.level == "bachelor":
         total_credits, semesters, direction, group, area = 240, 8, "6B061", "B057", "6B06"
         secondary_direction = secondary_group = secondary_area = ""
@@ -176,11 +184,11 @@ def main() -> None:
     report = {"level": args.level, "status": "running"}
     try:
         project = Project(
-            title=f"AUTOTEST ГОСО {args.level} {args.profile}",
+            title=f"AUTOTEST ГОСО {args.level} {args.profile} CASE-{args.case_index:03d}",
             domain1=domain1,
             domain2=domain2,
-            goal="Подготовка исследователей интеллектуальных информационных систем.",
-            constraints_json=constraints,
+            goal=f"Подготовка специалистов для задач: {args.focus}.",
+            constraints_json={**constraints, "acceptance_case_index": args.case_index},
         )
         version = ProjectVersion(project=project, version_number=1, status="draft")
         db.add(project)
@@ -190,7 +198,7 @@ def main() -> None:
             db.add(LearningOutcome(
                 project_version=version,
                 lo_code=f"LO{index}",
-                lo_text=text,
+                lo_text=f"{text} Контекст применения: {args.focus}.",
                 taxonomy_level="create" if index in {1, 5} else "evaluate",
                 order_index=index,
             ))

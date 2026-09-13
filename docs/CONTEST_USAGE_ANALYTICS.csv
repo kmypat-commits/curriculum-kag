@@ -1,0 +1,11 @@
+metric,value,unit,period,status,source,notes
+registered_users,0,users,до институционального пилота,not_collected,https://frontend-kojanoff.vercel.app/login,Реальные пользователи ещё не подключались
+MAU,0,users,до институционального пилота,not_collected,https://frontend-kojanoff.vercel.app/login,Не выдавать как коммерческую пользовательскую статистику
+DAU,0,users,до институционального пилота,not_collected,https://frontend-kojanoff.vercel.app/login,Не выдавать как коммерческую пользовательскую статистику
+average_session_duration,,minutes,до институционального пилота,not_collected,https://frontend-kojanoff.vercel.app/login,Телеметрия пользовательских сессий ещё не включена
+approved_course_cards,21525,cards,текущий frozen baseline,verified,../README.md,Одобренные мультиязычные карточки дисциплин
+course_learning_outcome_links,932483,links,текущий frozen baseline,verified,../DATASET_CARD.md,Нормализованные связи дисциплина–результат обучения
+evaluation_programmes,114,programmes,замороженная модельная оценка,verified,../backend/ml/EPVO_MODEL_RESULTS_RU.md,Независимая тестовая выборка программ
+evaluation_pairs,6000,pairs,замороженная модельная оценка,verified,../docs/scientific_article/TEM_SUPPLEMENTARY_MATERIALS_EN.md,Тестовые пары дисциплина–результат обучения
+demo_programmes,3,programmes,текущий Vercel demo,verified,https://frontend-kojanoff.vercel.app/,Обезличенные демонстрационные записи; не реальные пользователи
+languages,3,languages,текущий frontend,verified,https://frontend-kojanoff.vercel.app/login,RU/KK/EN

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from app.planner.scheduler_utils import title_key as _title_key
 from app.planner.scheduler_text import has_domain_term as _has_domain_term
+from app.planner.domain_evidence import domain_label_matches as _domain_label_matches
+from app.models.course import Course
 
 
 def course_domain_matches(course, project_domains: list[str]) -> bool:
@@ -18,8 +20,10 @@ def course_domain_matches(course, project_domains: list[str]) -> bool:
         "research methodology",
     )):
         return True
-    domain = (course.domain or "").lower().strip()
-    return bool(domain) and any(d and (d in domain or domain in d) for d in project_domains)
+    # Use the same canonical RU/KK/EN alias matcher as verification and quota
+    # repair. Raw substring checks made legacy labels such as Medicine and
+    # Здравоохранение disagree across planner stages.
+    return _domain_label_matches(getattr(course, "domain", ""), project_domains)
 
 
 def invalid_project_domain_label(value: str | None) -> bool:
@@ -90,12 +94,21 @@ def has_foreign_professional_title(course, project_domains: list[str]) -> bool:
     domains = " ".join(project_domains).casefold()
     course_domain = str(getattr(course, "domain", "") or "").casefold()
     # EPVO often stores enterprise/1C courses under the IT domain.  For an
-    # explicitly IT-scoped programme that is a valid application context, not
-    # a foreign business programme; LO/EPVO evidence still controls admission.
+    # explicitly IT-scoped programme that is a valid application context only
+    # when the title still exposes an IT/data/project context.  A bare
+    # business course such as ``Маркетинговый менеджмент`` must not pass just
+    # because a deduplicated catalogue row inherited ``domain=it``.
     if any(marker in course_domain for marker in ("it", "информ", "computer")) and any(
         marker in domains for marker in ("it", "информ", "computer", "6b", "7m", "8d")
     ):
-        return False
+        it_context = (
+            "it", "информ", "цифр", "данн", "технолог", "систем",
+            "программ", "алгоритм", "проект", "software", "computer",
+            "data", "digital", "database", "business intelligence",
+            "1с", "enterprise resource",
+        )
+        if _has_domain_term(title, it_context):
+            return False
     # Cross-domain foundation subjects (for example, Health Economics) are
     # valid when the title explicitly names the selected secondary field.
     if any(
@@ -112,3 +125,127 @@ def has_foreign_professional_title(course, project_domains: list[str]) -> bool:
         (("эмоциональн", "эмоциональный интеллект", "emotional intelligence"), ("психолог", "человеческ ресурс", "hr", "управлен", "psycholog", "human resource", "management")),
     )
     return any(_has_domain_term(title, title_markers) and not _has_domain_term(domains, allowed) for title_markers, allowed in context_groups)
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
+
+
+def find_invalid_project_domain_courses(
+    schedule: Mapping[int, Sequence[Mapping[str, Any]]],
+    db: Any,
+    project_domains: Sequence[str],
+    declared_secondary_domain: str,
+    is_project_domain: Callable[[Any], bool],
+    is_general_course: Callable[[Any], bool] | None = None,
+) -> list[dict[str, Any]]:
+    """Return non-regulatory courses that violate the declared programme domain.
+
+    This is deliberately a pure audit boundary: it never removes or rewrites
+    schedule items.  Keeping it separate from the planner pipeline prevents a
+    late repair from silently weakening the final admission check.
+    """
+    invalid: list[dict[str, Any]] = []
+    prerequisite_ids = {
+        int(prerequisite_id)
+        for items in schedule.values()
+        for item in items
+        for prerequisite_id in (item.get("prerequisites") or [])
+        if str(prerequisite_id).isdigit()
+    }
+    # Scheduling may materialize prerequisite rows without copying the
+    # relationship into every transient item snapshot. Resolve the graph
+    # from the persisted Course relation as the authoritative source.
+    scheduled_course_ids = {
+        int(item["course_id"])
+        for items in schedule.values()
+        for item in items
+        if item.get("course_id") is not None
+    }
+    for course_id in scheduled_course_ids:
+        course = db.get(Course, course_id)
+        prerequisite_ids.update(
+            int(prerequisite.id)
+            for prerequisite in (getattr(course, "prerequisites", None) or [])
+        )
+    project_text = f"{declared_secondary_domain} {' '.join(project_domains)}"
+    has_agriculture = any(
+        token in project_text
+        for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл")
+    )
+    has_medical = any(
+        token in project_text
+        for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical")
+    )
+    has_it = any(
+        token in project_text
+        for token in ("it", "информ", "computer", "цифр", "software")
+    )
+    has_law = any(
+        token in project_text
+        for token in ("law", "legal", "право", "юрид", "юриспруд", "криминал", "судеб")
+    )
+    for items in schedule.values():
+        for item in items:
+            if item.get("regulatory_required") or item.get("course_id") is None:
+                continue
+            course = db.get(Course, int(item["course_id"]))
+            if course is None:
+                continue
+            # A prerequisite is an ordering dependency, not a professional
+            # domain contribution. Its validity is checked by the prerequisite
+            # graph verifier; applying the programme-domain quota to it caused
+            # legitimate cross-domain foundation courses to be rejected.
+            if course.id in prerequisite_ids:
+                continue
+            # General education courses are governed by the programme's
+            # general-course budget, not by the professional-domain quota.
+            # Treating them as domain violations made valid interdisciplinary
+            # plans fail at the final boundary.
+            if is_general_course is not None and is_general_course(course):
+                continue
+            item_domain = str(item.get("domain") or "").casefold().strip()
+            canonical_domain = str(course.domain or "").casefold()
+            medical = any(
+                token in f"{item_domain} {canonical_domain}"
+                for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical")
+            )
+            # Legacy EPVO deduplication can retain a source-domain label from
+            # Medicine on a valid cross-domain foundation course.  The
+            # admission policy handles this case explicitly; the final domain
+            # audit must not turn that source label into a false violation.
+            if medical and not has_medical:
+                continue
+            item_has_domain = bool(item_domain) and (
+                any(domain and (domain in item_domain or item_domain in domain) for domain in project_domains)
+                or _domain_label_matches(item_domain, project_domains)
+            )
+            if is_project_domain(course) or item_has_domain:
+                continue
+            # A deduplicated EPVO record may retain a forensic source label
+            # although its title is a valid IT foundation in an IT+agriculture
+            # programme.  Preserve that evidence-backed exception explicitly.
+            forensic = any(token in canonical_domain for token in ("forensic", "криминал", "расслед", "след"))
+            title_is_it = any(
+                token in str(course.title or "").casefold()
+                for token in ("алгоритм", "данн", "программ", "информацион", "систем", "компьютер", "цифров", "кибер", "криминал", "computer", "data")
+            )
+            # EPVO deduplication may preserve a forensic source label for an
+            # IT course in any interdisciplinary IT programme (not only the
+            # historical IT+agriculture profile).  The title-level guard is
+            # intentionally retained so unrelated forensic courses remain
+            # rejected.
+            if has_it and forensic and title_is_it:
+                continue
+            # In a Law + IT programme, digital/specialist forensics is not a
+            # third, foreign domain: it is the professional intersection of
+            # the two declared fields. EPVO's legacy ``forensics`` label is
+            # therefore admissible only for this explicit pairing, while the
+            # normal foreign-domain guard remains active for every other
+            # programme profile.
+            title_is_forensic = any(
+                token in str(course.title or "").casefold()
+                for token in ("forensic", "криминал", "расслед", "судеб", "digital evidence")
+            )
+            if has_it and has_law and forensic and title_is_forensic:
+                continue
+            invalid.append({"course_id": course.id, "title": course.title, "domain": course.domain})
+    return invalid

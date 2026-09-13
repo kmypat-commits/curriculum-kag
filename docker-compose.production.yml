@@ -1,7 +1,10 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -21,9 +24,31 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Keep this explicit: the password must be URL-encoded when it contains
+      # reserved URI characters such as @, #, / or :. Constructing the URL
+      # from raw env fragments causes intermittent connection failures.
+      DATABASE_URL: ${DATABASE_URL:?set URL-encoded DATABASE_URL}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      APP_ENV: production
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      CLI_TOKEN_EXPIRE_MINUTES: ${CLI_TOKEN_EXPIRE_MINUTES:-60}
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-postgres}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?set ALLOWED_HOSTS}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
+      DOCS_ENABLED: ${DOCS_ENABLED:-false}
+      GIT_UI_ENABLED: ${GIT_UI_ENABLED:-false}
+      MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-2097152}
+      RATE_LIMIT_LOGIN_PER_MINUTE: ${RATE_LIMIT_LOGIN_PER_MINUTE:-10}
+      RATE_LIMIT_BUILD_PER_TEN_MINUTES: ${RATE_LIMIT_BUILD_PER_TEN_MINUTES:-3}
+      RATE_LIMIT_EXPENSIVE_PER_TEN_MINUTES: ${RATE_LIMIT_EXPENSIVE_PER_TEN_MINUTES:-10}
+      ASYNC_BUILDS: ${ASYNC_BUILDS:-true}
+      PERSISTENT_PLANNER_WORKER: ${PERSISTENT_PLANNER_WORKER:-true}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4}
@@ -45,30 +70,67 @@ services:
       - ${MODEL_DIR:-./backend/models/epvo-sbert-finetuned-40k}:/app/models/epvo-sbert-finetuned-40k:ro
       - backend_uploads:/app/uploads
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import os, urllib.request; req = urllib.request.Request('http://127.0.0.1:8000/health', headers={'Host': os.environ['DOMAIN']}); urllib.request.urlopen(req, timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 30s
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}"
 
+  planner-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set URL-encoded DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      APP_ENV: production
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ASYNC_BUILDS: "true"
+      PERSISTENT_PLANNER_WORKER: "true"
+      BUILD_LEASE_SECONDS: ${BUILD_LEASE_SECONDS:-120}
+      BUILD_DEADLINE_SECONDS: ${BUILD_DEADLINE_SECONDS:-3600}
+      ENABLE_SBERT: ${ENABLE_SBERT:-false}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
+      SBERT_DEVICE: ${SBERT_DEVICE:-cpu}
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-2}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-2}
+      CURRICULUM_KAG_WORKER: "1"
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ${MODEL_DIR:-./backend/models/epvo-sbert-finetuned-40k}:/app/models/epvo-sbert-finetuned-40k:ro
+      - backend_uploads:/app/uploads
+    command: python scripts/run_planner_build_worker.py --daemon --poll-seconds ${PLANNER_WORKER_POLL_SECONDS:-2} --max-jobs ${PLANNER_WORKER_MAX_JOBS:-1}
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       backend:
         condition: service_healthy
 
   proxy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

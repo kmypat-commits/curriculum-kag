@@ -1,3 +1,5 @@
+import { localizedCopy } from './i18n'
+
 const QUALITY_EVIDENCE_PATTERNS = {
     kk: [
         [/^Project feedback: (\d+); EPVO expert-supported links: (\d+); promoted bridge events: (\d+); bridge modules in plan: (\d+)\.$/, 'Кері байланыс: $1; CEER сарапшылары растаған байланыстар: $2; расталған bridge оқиғалары: $3; жоспардағы bridge модульдері: $4.'],
@@ -28,9 +30,9 @@ const QUALITY_EVIDENCE_PATTERNS = {
 }
 
 const BUILD_STAGE_LABELS = {
-    ru: { idle: 'Ожидание', matching: 'Сопоставляем результаты обучения с дисциплинами', epvo_repository: 'Подтягиваем дисциплины CEER по выбранным направлениям', scoring: 'Оцениваем связи дисциплина–результат обучения', variants: 'Готовим варианты A/B/C', variant_A_start: 'Строим вариант A', variant_A: 'Проверяем вариант A', variant_B_start: 'Строим вариант B', variant_B: 'Проверяем вариант B', variant_C_start: 'Строим вариант C', variant_C: 'Проверяем вариант C', saving: 'Сохраняем новые планы без порчи старого активного', complete: 'Готово', failed: 'Ошибка' },
-    kk: { idle: 'Күту', matching: 'Оқу нәтижелерін пәндермен сәйкестендіру', epvo_repository: 'Таңдалған бағыттар бойынша CEER пәндерін қосу', scoring: 'Пән–оқу нәтижесі байланыстарын бағалау', variants: 'A/B/C нұсқаларын дайындау', variant_A_start: 'A нұсқасын құру', variant_A: 'A нұсқасын тексеру', variant_B_start: 'B нұсқасын құру', variant_B: 'B нұсқасын тексеру', variant_C_start: 'C нұсқасын құру', variant_C: 'C нұсқасын тексеру', saving: 'Ескі белсенді жоспарды бұзбай жаңа жоспарларды сақтау', complete: 'Дайын', failed: 'Қате' },
-    en: { idle: 'Waiting', matching: 'Matching learning outcomes with courses', epvo_repository: 'Adding CEER courses for selected fields', scoring: 'Scoring course–learning outcome links', variants: 'Preparing A/B/C variants', variant_A_start: 'Building variant A', variant_A: 'Checking variant A', variant_B_start: 'Building variant B', variant_B: 'Checking variant B', variant_C_start: 'Building variant C', variant_C: 'Checking variant C', saving: 'Saving new plans without corrupting the active one', complete: 'Complete', failed: 'Failed' },
+    ru: { idle: 'Ожидание', queued: 'В очереди на построение', matching: 'Сопоставляем результаты обучения с дисциплинами', epvo_repository: 'Подтягиваем дисциплины CEER по выбранным направлениям', scoring: 'Оцениваем связи дисциплина–результат обучения', candidate_texts_ready: 'Готовим тексты кандидатов', embedding_start: 'Векторизуем кандидатов', embedding: 'Завершили векторизацию кандидатов', variants: 'Готовим варианты A/B/C', variant_A_start: 'Строим вариант A', variant_A: 'Проверяем вариант A', variant_B_start: 'Строим вариант B', variant_B: 'Проверяем вариант B', variant_C_start: 'Строим вариант C', variant_C: 'Проверяем вариант C', saving: 'Сохраняем новые планы без порчи старого активного', complete: 'Готово', failed: 'Ошибка', timed_out: 'Время построения истекло' },
+    kk: { idle: 'Күту', queued: 'Құру кезегінде', matching: 'Оқу нәтижелерін пәндермен сәйкестендіру', epvo_repository: 'Таңдалған бағыттар бойынша CEER пәндерін қосу', scoring: 'Пән–оқу нәтижесі байланыстарын бағалау', candidate_texts_ready: 'Кандидат мәтіндерін дайындау', embedding_start: 'Кандидаттарды векторлау', embedding: 'Кандидаттарды векторлау аяқталды', variants: 'A/B/C нұсқаларын дайындау', variant_A_start: 'A нұсқасын құру', variant_A: 'A нұсқасын тексеру', variant_B_start: 'B нұсқасын құру', variant_B: 'B нұсқасын тексеру', variant_C_start: 'C нұсқасын құру', variant_C: 'C нұсқасын тексеру', saving: 'Ескі белсенді жоспарды бұзбай жаңа жоспарларды сақтау', complete: 'Дайын', failed: 'Қате', timed_out: 'Құру уақыты аяқталды' },
+    en: { idle: 'Waiting', queued: 'Queued for build', matching: 'Matching learning outcomes with courses', epvo_repository: 'Adding CEER courses for selected fields', scoring: 'Scoring course–learning outcome links', candidate_texts_ready: 'Preparing candidate texts', embedding_start: 'Vectorizing candidates', embedding: 'Candidate vectorization complete', variants: 'Preparing A/B/C variants', variant_A_start: 'Building variant A', variant_A: 'Checking variant A', variant_B_start: 'Building variant B', variant_B: 'Checking variant B', variant_C_start: 'Building variant C', variant_C: 'Checking variant C', saving: 'Saving new plans without corrupting the active one', complete: 'Complete', failed: 'Failed', timed_out: 'Build timed out' },
 }
 
 export const localizeQualityEvidenceText = (text = '', language = 'ru') => {
@@ -45,14 +47,27 @@ export const planBuildStageLabel = (stage = 'idle', language = 'ru') => {
 }
 
 export const planBuildStageDetail = (status = {}, language = 'ru') => {
+    if (status.state === 'timed_out' || status.stage === 'timed_out') {
+        return localizedCopy(language,
+            'Срок lease истёк. Предыдущий план сохранён; построение можно запустить повторно.',
+            'Lease мерзімі аяқталды. Алдыңғы жоспар сақталды; құруды қайта іске қосуға болады.',
+            'The build lease expired. The previous plan was preserved; you can run the build again.',
+        )
+    }
     if (status.stage === 'scoring' && status.lo_total) {
-        const linkWord = language === 'kk' ? 'байланыс' : language === 'en' ? 'links' : 'связей'
+        const linkWord = localizedCopy(language, 'связей', 'байланыс', 'links')
         return `LO ${status.lo_index}/${status.lo_total}${status.lo_code ? ` — ${status.lo_code}` : ''}${status.matches ? `, ${linkWord}: ${status.matches}` : ''}`
     }
+    if (status.stage === 'matching' && status.lo_total) {
+        const candidateWord = localizedCopy(language, 'кандидатов', 'кандидат', 'candidates')
+        return `LO ${status.lo_index}/${status.lo_total}${status.lo_code ? ` — ${status.lo_code}` : ''}${status.candidate_count ? `, ${candidateWord}: ${status.candidate_count}` : ''}`
+    }
     if (status.stage?.startsWith?.('variant_')) {
-        if (language === 'kk') return 'Пәндер таңдалып, кредиттер, пререквизиттер және домен шектеулері тексеріліп жатыр.'
-        if (language === 'en') return 'Selecting courses and checking credits, prerequisites, and domain constraints.'
-        return 'Идёт подбор дисциплин, проверка кредитов, пререквизитов и доменных ограничений.'
+        return localizedCopy(language,
+            'Идёт подбор дисциплин, проверка кредитов, пререквизитов и доменных ограничений.',
+            'Пәндер таңдалып, кредиттер, пререквизиттер және домен шектеулері тексеріліп жатыр.',
+            'Selecting courses and checking credits, prerequisites, and domain constraints.',
+        )
     }
     return null
 }
@@ -62,20 +77,20 @@ export const planBuildElapsedLabel = (status = {}, language = 'ru') => {
     if (!total) return null
     const minutes = Math.floor(total / 60)
     const seconds = total % 60
-    const value = minutes ? `${minutes} ${language === 'en' ? 'min' : 'мин'} ${seconds} ${language === 'en' ? 'sec' : 'сек'}` : `${seconds} ${language === 'en' ? 'sec' : 'сек'}`
-    if (language === 'kk') return `Өткен уақыт: ${value}`
-    if (language === 'en') return `Elapsed: ${value}`
-    return `Прошло: ${value}`
+    const minuteWord = localizedCopy(language, 'мин', 'мин', 'min')
+    const secondWord = localizedCopy(language, 'сек', 'сек', 'sec')
+    const value = minutes ? `${minutes} ${minuteWord} ${seconds} ${secondWord}` : `${seconds} ${secondWord}`
+    return localizedCopy(language, `Прошло: ${value}`, `Өткен уақыт: ${value}`, `Elapsed: ${value}`)
 }
 
-export const alreadyRunningText = language => language === 'kk'
-    ? 'Құру процесі жүріп жатыр. Ағымдағы процесс аяқталғанын күтіңіз.'
-    : language === 'en'
-        ? 'Plan generation is already running. Please wait for the current process to finish.'
-        : 'Построение уже идёт. Дождитесь завершения текущего процесса.'
+export const alreadyRunningText = language => localizedCopy(language,
+    'Построение уже идёт. Дождитесь завершения текущего процесса.',
+    'Құру процесі жүріп жатыр. Ағымдағы процесс аяқталғанын күтіңіз.',
+    'Plan generation is already running. Please wait for the current process to finish.',
+)
 
-export const longRunningHint = language => language === 'kk'
-    ? 'CEER базасы үлкен болса, бұл кезең бірнеше минутқа созылуы мүмкін. Ескі белсенді жоспар барлық нұсқалар сәтті құрылғанша сақталады.'
-    : language === 'en'
-        ? 'If the CEER catalogue is large, this step may take several minutes. The old active plan is kept until all variants are built successfully.'
-        : 'Если экспертная база CEER большая, этап может идти несколько минут. Старый активный план сохраняется до успешного построения всех вариантов.'
+export const longRunningHint = language => localizedCopy(language,
+    'Если экспертная база CEER большая, этап может идти несколько минут. Старый активный план сохраняется до успешного построения всех вариантов.',
+    'CEER базасы үлкен болса, бұл кезең бірнеше минутқа созылуы мүмкін. Ескі белсенді жоспар барлық нұсқалар сәтті құрылғанша сақталады.',
+    'If the CEER catalogue is large, this step may take several minutes. The old active plan is kept until all variants are built successfully.',
+)

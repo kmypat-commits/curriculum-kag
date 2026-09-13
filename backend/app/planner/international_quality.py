@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, List
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditEvent
@@ -10,6 +11,7 @@ from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.planner.bridge_policy import bridge_module_limit
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 
 
 def _is_kz_regulatory_course(course: Course) -> bool:
@@ -50,12 +52,18 @@ def project_course_relevance(project_version: ProjectVersion, courses: List[Cour
         if str(constraints.get(key) or "").strip()
     }
     scope_ids = set()
+    epvo_index = epvo_code_index({course.id: course for course in courses})
     normalized_rows = db.query(EpvoDisciplineNormalized).filter(
-        EpvoDisciplineNormalized.approved_course_id.in_(course_ids or {-1})
+        or_(
+            EpvoDisciplineNormalized.approved_course_id.in_(course_ids or {-1}),
+            EpvoDisciplineNormalized.id.in_(set(epvo_index) or {-1}),
+        )
     ).all()
     for row in normalized_rows:
         if selected_groups.intersection(set(row.group_codes or [])) or selected_directions.intersection(set(row.direction_codes or [])):
-            scope_ids.add(int(row.approved_course_id))
+            course_id = linked_course_id(row, epvo_index)
+            if course_id:
+                scope_ids.add(int(course_id))
 
     latest_feedback = {}
     feedback_rows = db.query(MatchFeedback).filter(

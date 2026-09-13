@@ -2,22 +2,47 @@
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional, Dict
 from app.database import get_db
 from app.models.user import User
 from app.models.project import Project, ProjectVersion, LearningOutcome
 from app.services.auth import get_current_user
-from app.services.rbac import has_role
+from app.services.rbac import has_role, require_permission
 from app.config import settings
 from app.services.ai_contracts import validate_suggestions
 from app.services.pydantic_ai_adapter import run_suggestions as run_pydantic_ai_suggestions
 from app.services.language import normalize_language
 from app.services.llm_errors import LLM_ERRORS
+from app.services.program_profiles import PROGRAM_PROFILES, profile_for
+from app.services.access import require_project_access, require_project_object_access
 import json
 import logging
 
 router = APIRouter()
+
+
+class ProgramProfileResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    education_level: str = Field(pattern="^(bachelor|master|doctorate)$")
+    track: str = Field(pattern="^(standard|professional|scientific_pedagogical)$")
+    jurisdiction: str = Field(pattern="^(KZ|INTERNATIONAL)$")
+    regulatory_profile: str = Field(min_length=1, max_length=100)
+    credits: List[int] = Field(min_length=1)
+    semesters: List[int] = Field(min_length=1)
+
+
+class ProgramProfilesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profiles: List[ProgramProfileResponse]
+
+
+@router.get("/program-profiles", response_model=ProgramProfilesResponse)
+async def get_program_profiles(current_user: User = Depends(get_current_user)):
+    """Return the same supported-volume table used by backend validation."""
+    return {"profiles": PROGRAM_PROFILES}
 logger = logging.getLogger(__name__)
 
 
@@ -59,11 +84,18 @@ def _validate_curriculum_volume(constraints: Dict) -> None:
     tolerance = int(constraints.get("credit_tolerance") or 0)
     if years <= 0 or semesters <= 0 or credits <= 0 or max_per_semester <= 0:
         raise ValueError("Срок обучения, кредиты и семестровая нагрузка должны быть положительными")
-    if semesters != years * 2:
+    level = str(constraints.get("education_level") or "").lower()
+    # Postgraduate professional tracks may be 90 credits / 3 semesters; the
+    # old years*2 rule silently rejected a supported 1.5-year programme.
+    if level == "master" and semesters in {2, 3, 4} and credits in {60, 90, 120}:
+        expected_years = credits / 60
+        if abs(float(constraints.get("duration_years") or 0) - expected_years) > 0.01:
+            raise ValueError("Срок магистратуры не соответствует выбранному объёму кредитов")
+    elif semesters != years * 2:
         raise ValueError("Количество семестров должно соответствовать сроку обучения")
     if tolerance < 0 or tolerance > 10:
         raise ValueError("Допуск итоговых кредитов должен быть от 0 до 10")
-    expected_credits = years * 60
+    expected_credits = credits if level == "master" and credits in {60, 90, 120} else years * 60
     if abs(credits - expected_credits) > tolerance:
         raise ValueError(
             f"Объём программы {credits} кредитов не соответствует сроку {years} лет "
@@ -71,6 +103,8 @@ def _validate_curriculum_volume(constraints: Dict) -> None:
         )
     if credits > max_per_semester * semesters + tolerance:
         raise ValueError("Семестровая нагрузка не позволяет набрать заданное число кредитов")
+    if profile_for(constraints) is None:
+        raise ValueError("Выбранное сочетание уровня, трека, юрисдикции и объёма программы не поддерживается")
     for key in ("min_domain1_percent", "min_domain2_percent"):
         value = int(constraints.get(key) or 0)
         if not 0 <= value <= 100:
@@ -141,8 +175,7 @@ class ProjectResponse(BaseModel):
     status: Optional[str] = "draft"
     learning_outcomes: List[str] = Field(default_factory=list)
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectConstraintsUpdate(BaseModel):
@@ -279,7 +312,7 @@ Return ONLY JSON with exactly two arrays: goals (exactly 3 concise goals) and le
     return {**validated.model_dump(), "source": "deterministic_template", "ai_generated": False, "language": lang}
 
 
-@router.post("", response_model=ProjectResponse)
+@router.post("", response_model=ProjectResponse, dependencies=[Depends(require_permission("planner", "write"))])
 async def create_project(
     project_data: ProjectCreate,
     db: Session = Depends(get_db),
@@ -320,7 +353,7 @@ async def create_project(
     return project
 
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", dependencies=[Depends(require_project_object_access)])
 async def get_project(
     project_id: int,
     db: Session = Depends(get_db),
@@ -363,7 +396,7 @@ async def get_project(
     }
 
 
-@router.patch("/{project_id}/constraints")
+@router.patch("/{project_id}/constraints", dependencies=[Depends(require_project_object_access)])
 async def update_project_constraints(
     project_id: int,
     payload: ProjectConstraintsUpdate,
@@ -424,7 +457,7 @@ async def list_projects(
             "learning_outcomes": [lo.lo_code for lo in latest.learning_outcomes] if latest else []
         })
     return result
-@router.delete("/{project_id}")
+@router.delete("/{project_id}", dependencies=[Depends(require_project_object_access)])
 async def delete_project(
     project_id: int,
     db: Session = Depends(get_db),
@@ -455,7 +488,7 @@ class WeightUpdate(BaseModel):
     weight: float
 
 
-@router.post("/lo/weights")
+@router.post("/lo/weights", dependencies=[Depends(require_permission("planner", "write"))])
 async def update_lo_weights(
     updates: List[WeightUpdate],
     db: Session = Depends(get_db),

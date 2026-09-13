@@ -14,10 +14,12 @@ from app.models.embedding import MatchScore
 from app.models.syllabus import SyllabusDraft
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.services.access import require_plan_access, require_plan_object_access, require_syllabus_entity_access
 from app.services.content_localization import (
     course_localization_map,
     course_localization_payload,
 )
+from app.schemas.planner import SyllabusDraftRequest
 
 
 router = APIRouter()
@@ -31,6 +33,7 @@ async def generate_course_syllabus(
     mode: str = "academic",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _entity_access: User = Depends(require_syllabus_entity_access),
 ):
     """Generate an auditable syllabus draft whose hours equal credits × 30."""
     if weeks < 10 or weeks > 20:
@@ -173,7 +176,13 @@ async def generate_course_syllabus(
 
 
 @router.get("/syllabus/draft/{kind}/{entity_id}")
-async def get_syllabus_draft(kind: str, entity_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_syllabus_draft(
+    kind: str,
+    entity_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _entity_access: User = Depends(require_syllabus_entity_access),
+):
     draft = db.query(SyllabusDraft).filter(SyllabusDraft.kind == kind, SyllabusDraft.entity_id == entity_id, SyllabusDraft.created_by == current_user.id).order_by(SyllabusDraft.id.desc()).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Сохранённый черновик силлабуса не найден")
@@ -181,9 +190,16 @@ async def get_syllabus_draft(kind: str, entity_id: int, db: Session = Depends(ge
 
 
 @router.post("/syllabus/draft/{kind}/{entity_id}")
-async def save_syllabus_draft(kind: str, entity_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    content = payload.get("content") if isinstance(payload, dict) else None
-    rows = content.get("thematic_plan", []) if isinstance(content, dict) else []
+async def save_syllabus_draft(
+    kind: str,
+    entity_id: int,
+    payload: SyllabusDraftRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _entity_access: User = Depends(require_syllabus_entity_access),
+):
+    content = payload.content.model_dump()
+    rows = content.get("thematic_plan", [])
     if not rows:
         raise HTTPException(status_code=400, detail="Тематический план пуст")
     expected = int(content.get("credits", 0)) * int(content.get("hours_per_credit", 30))
@@ -205,11 +221,9 @@ async def save_syllabus_draft(kind: str, entity_id: int, payload: dict, db: Sess
 
 
 @router.post("/syllabus/export-docx")
-async def export_syllabus_docx(payload: dict, current_user: User = Depends(get_current_user)):
+async def export_syllabus_docx(payload: SyllabusDraftRequest, current_user: User = Depends(get_current_user)):
     from docx import Document
-    content = payload.get("content") if isinstance(payload, dict) else None
-    if not isinstance(content, dict) or not content.get("thematic_plan"):
-        raise HTTPException(status_code=400, detail="Содержание силлабуса пусто")
+    content = payload.content.model_dump()
     document = Document()
     document.add_heading("Рабочая программа дисциплины (Syllabus)", 0)
     document.add_heading(str(content.get("title", "Дисциплина")), level=1)
@@ -233,6 +247,7 @@ async def get_evidence_bundle(
     plan_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _plan_owner: User = Depends(require_plan_object_access),
 ):
     """Return the exact LO-to-course evidence used by a persisted plan."""
     import hashlib
@@ -240,9 +255,7 @@ async def get_evidence_bundle(
     from datetime import datetime, timezone
     from app.models.plan import Plan
 
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Учебный план не найден")
+    plan = require_plan_access(db, current_user, plan_id)
     course_ids = sorted({item.course_id for item in plan.items if item.course_id is not None})
     version = plan.project_version
     evidence = []

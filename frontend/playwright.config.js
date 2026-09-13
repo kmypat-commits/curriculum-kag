@@ -5,8 +5,7 @@ export default defineConfig({
   timeout: 30_000,
   retries: 1,
   use: {
-    baseURL: 'http://127.0.0.1:3001',
-    channel: 'chrome',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3001',
     ...devices['Desktop Chrome'],
     trace: 'retain-on-failure',
   },

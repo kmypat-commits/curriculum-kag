@@ -118,7 +118,6 @@ export default function EpvoComparison() {
     const [statusFilter, setStatusFilter] = useState('all')
     const [selectedPriorityIds, setSelectedPriorityIds] = useState([])
     const l = key => (labels[language] || labels.ru)[key] || key
-    const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const dash = '—'
 
     const repositoryStatusLabel = status => {
@@ -204,16 +203,16 @@ export default function EpvoComparison() {
                 </div>
                 <p style={{ color: '#667', marginTop: '-8px', marginBottom: 18, fontSize: 13 }}>{l('epvo_match_hint')}</p>
 
-                <div className="card" style={{ borderLeft: `5px solid ${data.epvo_quality_status === 'passed' ? '#2e7d32' : data.epvo_quality_status === 'borderline' ? '#e67e22' : '#c62828'}` }}>
+                <div className="card" style={{ borderTop: `2px solid ${data.epvo_quality_status === 'passed' ? '#2e7d32' : data.epvo_quality_status === 'borderline' ? '#e67e22' : '#c62828'}` }}>
                     <div className="section-head">
                         <h2>{l('quality_verdict')}</h2>
                         <span className={`status-pill ${data.epvo_quality_status === 'passed' ? 'status-active' : 'status-draft'}`}>{data.epvo_quality_score || 0}%</span>
                     </div>
                     <p style={{ marginTop: 0 }}>{data.epvo_quality_status === 'passed'
-                        ? localText('Соответствует ориентиру CEER 75%+', 'CEER 75%+ бағдарына сәйкес', 'Meets the CEER 75%+ reference level')
+                        ? l('ceer_passed')
                         : data.epvo_quality_status === 'borderline'
-                            ? localText('Близко к ориентиру CEER; нужна экспертная проверка', 'CEER бағдарына жақын; сараптамалық тексеру қажет', 'Close to the CEER reference level; expert review is required')
-                            : localText('Ниже ориентира CEER 70–75%', 'CEER 70–75% бағдарынан төмен', 'Below the CEER 70–75% reference level')}</p>
+                            ? l('ceer_borderline')
+                            : l('ceer_below')}</p>
                     <p style={{ color: '#667', fontSize: 13 }}>{l('quality_formula')}</p>
                 </div>
 
@@ -231,14 +230,10 @@ export default function EpvoComparison() {
                     <div className="section-head"><h2>{l('epvo_quality_notes')}</h2><span className="status-pill status-draft">{data.group_code || data.direction_code || t('all_domains')}</span></div>
                     {data.weak_spots?.map((item, index) => <p key={`w-${index}`}>⚠️ {item}</p>)}
                     {data.recommendations?.map((item, index) => <p key={`r-${index}`}>💡 {item}</p>)}
-                    <p style={{ color: '#667', fontSize: 13 }}>{localText(
-                        `${l('expert_support')}: ${data.expert_supported_matches}/${data.total_plan_matches} связей с LO поддержаны исторической экспертной разметкой CEER.`,
-                        `${l('expert_support')}: ${data.expert_supported_matches}/${data.total_plan_matches} LO байланысы CEER тарихи сараптамалық бағаларымен расталған.`,
-                        `${l('expert_support')}: ${data.expert_supported_matches}/${data.total_plan_matches} LO links are supported by historical CEER expert evidence.`
-                    )}</p>
+                    <p style={{ color: '#667', fontSize: 13 }}>{l('ceer_expert_evidence').replace('{support}', l('expert_support')).replace('{supported}', data.expert_supported_matches).replace('{total}', data.total_plan_matches)}</p>
                 </div>}
 
-                {notice && <div className="card" style={{ borderLeft: `5px solid ${notice.type === 'success' ? '#2e7d32' : '#c62828'}` }}>
+                {notice && <div className="card" style={{ borderTop: `2px solid ${notice.type === 'success' ? '#2e7d32' : '#c62828'}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span>{notice.text}</span>
                         {notice.type === 'success' && <Link to={`/projects/${id}/plan?epvoApplied=1`} className="btn btn-primary">{l('open_plan_builder')}</Link>}
@@ -287,8 +282,8 @@ export default function EpvoComparison() {
                 </div>}
 
                 {data.similar_programs?.length > 0 && <div className="card">
-                    <div className="section-head"><h2>{localText('Сравнение с аналогичными программами экспертной базы', 'Сараптамалық базадағы ұқсас бағдарламалармен салыстыру', 'Compare with similar expert-repository programmes')}</h2></div>
-                    <p style={{ color: '#667', fontSize: 13, marginTop: 0 }}>{localText('Показаны похожие программы выбранного направления CEER, их типовые дисциплины и результаты обучения.', 'Таңдалған CEER бағыты бойынша ұқсас бағдарламалар, типтік пәндер және оқу нәтижелері көрсетіледі.', 'This section shows similar programmes from the selected CEER scope, their typical courses and learning outcomes.')}</p>
+                    <div className="section-head"><h2>{l('similar_programs_title')}</h2></div>
+                    <p style={{ color: '#667', fontSize: 13, marginTop: 0 }}>{l('similar_programs_desc')}</p>
                     <div className="table-wrap"><table className="table"><thead><tr><th>{t('title')}</th><th>{t('credits')}</th><th>{l('disciplines')}</th><th>LO</th><th>{l('similarity')}</th></tr></thead><tbody>
                         {data.similar_programs.map(item => <tr key={item.source_id}><td><b>{item.title}</b><div style={{ fontSize: 12, color: '#667' }}>{item.goal}</div></td><td>{item.credits || dash}</td><td>{item.discipline_count}</td><td>{item.lo_count}</td><td>{Math.round((item.similarity || 0) * 100)}%</td></tr>)}
                     </tbody></table></div>

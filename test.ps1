@@ -20,6 +20,16 @@ if (Test-Path $sitePackages) {
     $paths += $sitePackages
 }
 $env:PYTHONPATH = ($paths -join [IO.Path]::PathSeparator)
+# Keep pytest's temporary directories on the project volume.  A previous
+# elevated run can leave the user profile temp root or .pytest_cache owned by
+# another account, which otherwise turns a valid test run into PermissionError.
+# Never reuse a temp root: acceptance may run under a different Windows
+# token than the interactive shell, leaving the previous root ACL-locked.
+$pytestRuntime = Join-Path $root (".runtime\pytest-" + $PID)
+New-Item -ItemType Directory -Path $pytestRuntime -Force | Out-Null
+$env:TEMP = $pytestRuntime
+$env:TMP = $pytestRuntime
+$env:PYTEST_DEBUG_TEMPROOT = $pytestRuntime
 
 Push-Location $backend
 try {

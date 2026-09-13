@@ -55,6 +55,7 @@ frontend/dist/
 *.sqlite
 *.db-wal
 *.db-shm
+*.db-journal
 
 # Large local artifacts
 backups/
@@ -79,6 +80,12 @@ Thumbs.db
 # Test coverage
 .coverage
 htmlcov/
+
+# Local browser/test reports
+test-results/
+frontend/test-results/
+playwright-report/
+frontend/playwright-report/
 
 # Alembic
 alembic/versions/*.pyc

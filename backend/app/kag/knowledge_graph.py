@@ -80,12 +80,35 @@ def get_graph_stats(db: Session) -> Dict:
 
 
 def _build_course_vectors(courses: List[Course], db: Session) -> Dict[int, np.ndarray]:
-    model_version = embedding_service.get_model_version(); result = {}
-    for course in courses:
-        rows = db.query(CourseChunk, Embedding).join(Embedding, Embedding.chunk_id == CourseChunk.id).filter(CourseChunk.course_id == course.id, Embedding.model_version == model_version).all()
-        vectors = []
-        for _, embedding in rows:
-            try: vectors.append(np.array(json.loads(embedding.vector) if isinstance(embedding.vector, str) else embedding.vector, dtype=np.float32))
-            except (TypeError, ValueError): continue
-        if vectors: result[course.id] = np.mean(vectors, axis=0).astype(np.float32)
-    return result
+    model_version = embedding_service.get_model_version()
+    course_ids = [int(course.id) for course in courses]
+    if not course_ids:
+        return {}
+
+    # One query for the whole selection.  The old per-course query was an
+    # N+1 hotspot during final verification and became very slow on the full
+    # EPVO catalogue.
+    rows = (
+        db.query(CourseChunk.course_id, Embedding.vector)
+        .join(Embedding, Embedding.chunk_id == CourseChunk.id)
+        .filter(
+            CourseChunk.course_id.in_(course_ids),
+            Embedding.model_version == model_version,
+        )
+        .all()
+    )
+    grouped: Dict[int, List[np.ndarray]] = {}
+    for course_id, raw_vector in rows:
+        try:
+            vector = np.array(
+                json.loads(raw_vector) if isinstance(raw_vector, str) else raw_vector,
+                dtype=np.float32,
+            )
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        grouped.setdefault(int(course_id), []).append(vector)
+    return {
+        course_id: np.mean(vectors, axis=0).astype(np.float32)
+        for course_id, vectors in grouped.items()
+        if vectors
+    }

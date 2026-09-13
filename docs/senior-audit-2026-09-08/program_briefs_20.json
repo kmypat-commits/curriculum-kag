@@ -1,0 +1,1128 @@
+{
+  "status": "prepared_not_executed",
+  "not_api_payload": true,
+  "scope_warning": "Resolve real level-appropriate EPVO codes; never substitute ICT for unsupported scopes.",
+  "source_sha256": "2e3f704e7d31ecb8d2dd159ff7d6ceafaa47544de30b05c66887b65bd11ad481",
+  "cases": [
+    {
+      "case_id": "P01",
+      "title": "Информационные системы здравоохранения",
+      "goal": "подготовить разработчика медицинских информационных систем, способного моделировать клинические процессы, интегрировать данные и оценивать качество цифрового решения совместно с медицинскими специалистами, без подмены клинической квалификации.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Моделировать маршрут пациента и требования к информационной системе, создавая согласованную процессную модель и спецификацию данных.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Реализовывать обмен медицинскими данными и проверять корректность их структуры и терминологии на тестовом стенде.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Проектировать хранение, разграничение доступа и аудит действий с медицинскими данными на основе модели угроз.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Оценивать качество данных и диагностировать ошибки медицинской аналитики на размеченном учебном наборе.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Разрабатывать и испытывать прототип рабочего места медицинского пользователя с измеримыми критериями удобства и безопасности.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, обычная траектория, KZ, 240 кредитов / 8 семестров; язык RU. Междисциплинарная: ICT + здравоохранение. Максимум новых модулей: 3.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 3,
+      "required_blocks": "клинические процессы/терминология; программирование; БД; интеграция; приватность; качество данных; человекоориентированное проектирование; проект с профильной практикой.",
+      "prerequisite_expectations": "БД → медицинская модель данных → интеграция → проект; основы статистики → медицинская аналитика.",
+      "unacceptable_substitutions": "план только из общего IT; клиническую диагностику как полномочие ICT-выпускника; ecology/safety как обязательную основу cybersecurity; bridge, заявляющий все LO без содержания.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P02",
+      "title": "Дәлме-дәл егіншілік және агродеректер",
+      "goal": "топырақ, өсімдік және метеорологиялық деректерді біріктіріп, су мен тыңайтқышты тиімді пайдалануға арналған дәлме-дәл егіншілік шешімдерін әзірлейтін маман даярлау.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Топырақ пен дақылдың күйін бағалап, далалық бақылаудың өлшенетін көрсеткіштері мен сынама алу жоспарын құрастыру.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Датчиктерден және қашықтан зондтаудан алынған деректерді тазалап, географиялық координаталар бойынша біріктіру.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Суару мен тыңайтқыш енгізудің баламаларын агрономиялық шектеулерді ескере отырып есептеу және салыстыру.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Өнімділікті болжау моделін тәуелсіз учаскелерде тексеріп, қателік пен белгісіздікті түсіндіру.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Шаруашылыққа арналған цифрлық ұсыныстың экономикалық және экологиялық нәтижесін далалық жоба арқылы бағалау.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык KK. Междисциплинарная: агрономия + ICT. Максимум новых модулей: 3.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "kk",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 3,
+      "required_blocks": "почвоведение; растениеводство; агрохимия; агрометеорология; геоданные; статистика; датчики; полевые испытания.",
+      "prerequisite_expectations": "почвоведение/агрохимия → точное внесение; статистика/GIS → дистанционный мониторинг → полевой проект.",
+      "unacceptable_substitutions": "ICT-план без агрономического ядра; «агро» только в названии bridge; ложную KK-локализацию, где карточки фактически остаются RU.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P03",
+      "title": "Cybersecurity and Digital Forensics",
+      "goal": "prepare cybersecurity practitioners who can secure networks and operating systems, investigate incidents using reproducible forensic procedures, and communicate defensible findings.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Configure and test network and operating-system security controls against an explicit threat model.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Identify software vulnerabilities in an authorised laboratory and verify the effectiveness of remediation.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Acquire and analyse digital evidence while maintaining a documented chain of custody and reproducibility.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Detect and investigate incidents using correlated logs, separating confirmed observations from hypotheses.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Produce an incident report and recovery plan with prioritised actions, evidence and residual risks.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык EN. Обычная программа: информационная безопасность. Максимум новых модулей: 0.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "en",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 0,
+      "required_blocks": "programming; operating systems; networks; cryptography; secure software; forensics; incident response; ethics and authorised lab work.",
+      "prerequisite_expectations": "сети/ОС → hardening → обнаружение инцидента → forensic investigation; программирование → secure coding.",
+      "unacceptable_substitutions": "generated bridge при cap=0; охрану труда вместо информационной безопасности; forensic-практику до базовых файловых систем/ОС.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P04",
+      "title": "Бухгалтерский учёт и аудит предприятий",
+      "goal": "подготовить специалиста, способного формировать финансовую отчётность, оценивать достоверность учётных данных и планировать аудиторские процедуры с применением цифровых инструментов.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Отражать хозяйственные операции и составлять согласованные финансовые отчёты по заданной учётной политике.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Рассчитывать себестоимость и анализировать отклонения затрат для обоснования управленческого решения.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Планировать аудиторскую проверку на основе оценки рисков и существенности, выбирая достаточные доказательства.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Выявлять несоответствия в учётных данных с помощью аналитических процедур и документировать результаты проверки.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Оценивать систему внутреннего контроля и предлагать проверяемые меры её улучшения с соблюдением профессиональной этики.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык RU. Обычная программа: учёт/аудит, не ICT. Максимум новых модулей: 0.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 0,
+      "required_blocks": "финансовый/управленческий учёт; отчётность; аудит; налогообложение в применимой юрисдикции; финанализ; внутренний контроль; практика.",
+      "prerequisite_expectations": "основы учёта → финансовая отчётность → аудит; статистика/финанализ → аудиторская аналитика.",
+      "unacceptable_substitutions": "принудительный ICT-scope; программирование вместо учётного ядра; «анализ данных» как замена аудиторским доказательствам.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P05",
+      "title": "Инклюзивті білім беру және оқу дизайны",
+      "goal": "білім алушылардың әртүрлі қажеттіліктерін ескеретін оқу ортасын жобалайтын, қолдау шараларының нәтижесін бағалайтын және отбасымен әрі мамандармен бірлесіп жұмыс істейтін педагог даярлау.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Білім алушының оқу кедергілерін педагогикалық бақылау арқылы анықтап, қолдау қажеттілігін дәлелмен сипаттау.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Оқу мақсатына сәйкес қолжетімді сабақ пен сараланған тапсырмаларды жобалау.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Қалыптастырушы бағалау нәтижелерін талдап, жеке қолдау жоспарын негіздеп түзету.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Цифрлық және баспа оқу материалдарының қолжетімділігін тексеріп, анықталған кедергілерді азайту.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Отбасымен және қолдау мамандарымен бірлескен жұмысты жоспарлап, педагогикалық практиканың нәтижесін этикалық түрде бағалау.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык KK. Обычная программа: педагогика и инклюзивное образование. Максимум новых модулей: 2.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "kk",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 2,
+      "required_blocks": "педагогика; возрастная психология; инклюзивная дидактика; assessment; доступные материалы; взаимодействие; педагогическая практика.",
+      "prerequisite_expectations": "психология/дидактика → дифференциация → индивидуальный план → практика и оценка.",
+      "unacceptable_substitutions": "программирование вместо педагогики; медицинскую постановку диагноза как педагогический LO; отсутствие практики и работы с семьёй.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P06",
+      "title": "Автоматизация промышленных процессов",
+      "goal": "подготовить инженера, проектирующего и испытывающего системы автоматизации технологических процессов с учётом динамики объекта, надёжности и промышленной безопасности.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Строить и проверять математическую модель динамики технологического объекта по экспериментальным данным.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Выбирать датчики и исполнительные устройства на основе диапазона измерений, погрешности и условий эксплуатации.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Разрабатывать алгоритмы управления и проверять устойчивость и качество регулирования на модели и стенде.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Реализовывать взаимодействие контроллера и операторской системы с диагностикой отказов и защитой доступа.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Проводить приёмочные испытания системы автоматизации и оформлять техническую документацию с оценкой рисков.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык RU. Междисциплинарная: автоматизация/электротехника + ICT. Максимум новых модулей: 3.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 3,
+      "required_blocks": "математика/физика; электротехника; измерения; теория управления; PLC; SCADA; промышленные сети; стендовые работы.",
+      "prerequisite_expectations": "дифференциальные уравнения → теория управления → регулятор; электротехника → измерения/PLC → интеграционный проект.",
+      "unacceptable_substitutions": "только веб/БД/менеджмент; отсутствие физики и стендов; «цифровой двойник» без модели объекта.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P07",
+      "title": "Управление водными ресурсами и экологический мониторинг",
+      "goal": "подготовить специалиста по оценке состояния водных объектов и обоснованию мер рационального водопользования на основе полевых, лабораторных и пространственных данных.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Выполнять расчёт водного баланса бассейна и объяснять вклад основных источников неопределённости.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Планировать отбор проб и оценивать качество воды по результатам лабораторных измерений.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Анализировать пространственные и временные изменения состояния водных объектов с использованием GIS и статистики.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Сравнивать водохозяйственные мероприятия по экологическим, техническим и экономическим ограничениям.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Разрабатывать программу мониторинга и обосновывать рекомендации для выбранного водосбора по результатам практики.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык RU. Обычная программа: водные ресурсы/экология. Максимум новых модулей: 1.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 1,
+      "required_blocks": "гидрология; гидравлика; химия воды; экология; полевые методы; GIS; статистика; водохозяйственное проектирование.",
+      "prerequisite_expectations": "химия/измерения → анализ воды; гидрология → водный баланс → управление бассейном.",
+      "unacceptable_substitutions": "анализ данных без гидрологии; агрономический профиль вместо водных ресурсов; отсутствие проб/полевой практики.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P08",
+      "title": "Translation and Software Localisation",
+      "goal": "prepare translators who can produce accurate specialised translations and localise digital products while managing terminology, cultural adaptation and measurable linguistic quality.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Translate specialised texts while preserving meaning, register and domain terminology, justifying major translation decisions.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Build and maintain a bilingual terminology resource using traceable source evidence and consistent entry rules.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Localise a software interface and test linguistic, formatting and locale-dependent behaviour in context.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Evaluate human and machine-assisted translations using an explicit error taxonomy and produce an actionable revision report.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Deliver a localisation project with documented requirements, quality checks, version control and client communication.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "bachelor, KZ, 240/8; язык EN. Обычная программа: переводческое дело/языкознание. Максимум новых модулей: 1.",
+      "education_level": "bachelor",
+      "track": "standard",
+      "jurisdiction": "KZ",
+      "target_language": "en",
+      "credits": 240,
+      "semesters": 8,
+      "max_generated_modules": 1,
+      "required_blocks": "практические языки; лингвистика; теория/практика перевода; терминология; CAT-tools; localisation QA; профессиональная практика.",
+      "prerequisite_expectations": "язык/теория перевода → специализированный перевод → localisation project; терминология → контроль качества.",
+      "unacceptable_substitutions": "Literature/Hospitality автоматически как ICT; компьютерные науки вместо языковой подготовки; локализация без перевода в контексте.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P09",
+      "title": "Аналитика городского транспорта",
+      "goal": "подготовить исследователя транспортных систем, способного моделировать спрос и движение, проверять влияние управленческих решений и обосновывать улучшения мобильности на данных города.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Формулировать исследовательскую задачу городской мобильности и проектировать сбор репрезентативных транспортных данных.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Оценивать модели транспортного спроса и маршрутного выбора на независимой выборке с анализом смещений.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Калибровать имитационную модель движения и проверять устойчивость выводов к исходным предположениям.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Сравнивать сценарии транспортной политики по времени поездки, доступности, безопасности и экологическим эффектам.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Проводить воспроизводимое исследование транспортного вмешательства и защищать результаты с обоснованными ограничениями.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, scientific_pedagogical, KZ, 120/4; язык RU. Междисциплинарная: транспортное планирование + анализ данных. Максимум новых модулей: 2.",
+      "education_level": "master",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 120,
+      "semesters": 4,
+      "max_generated_modules": 2,
+      "required_blocks": "теория транспортных потоков; спрос/маршруты; GIS; статистика/causal evaluation; simulation; городское планирование; исследование.",
+      "prerequisite_expectations": "статистика/транспортные модели → калибровка → сценарии → диссертационное исследование.",
+      "unacceptable_substitutions": "три однотипных курса research methods; AI в образовании вместо транспорта; только общий IT и проектный менеджмент.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P10",
+      "title": "Trustworthy AI for Healthcare Data",
+      "goal": "train researchers who can develop and externally evaluate healthcare AI using appropriate clinical endpoints, robust validation and transparent limitations rather than unqualified accuracy claims.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Define a clinically meaningful prediction task and an ethically justified data and evaluation protocol with domain specialists.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Construct leakage-resistant development and external-validation datasets while documenting missingness and sampling bias.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Compare predictive models using discrimination, calibration, uncertainty and subgroup performance with confidence intervals.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Assess dataset shift and failure modes and design a monitoring plan for a proposed clinical decision-support workflow.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Produce a reproducible research package and defend the evidence, limitations and human oversight requirements of the proposed system.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, scientific_pedagogical, KZ, 120/4; язык EN. Междисциплинарная: data science + здравоохранение. Максимум новых модулей: 3.",
+      "education_level": "master",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "en",
+      "credits": 120,
+      "semesters": 4,
+      "max_generated_modules": 3,
+      "required_blocks": "биостатистика; клинические данные/endpoints; ML; validation/calibration; ethics; uncertainty; reproducible research; clinical workflow.",
+      "prerequisite_expectations": "статистика/ML → external validation → calibration/shift → исследовательский проект.",
+      "unacceptable_substitutions": "только высокий accuracy; клиническое deployment без оценки; базовый Python вместо магистерской глубины; bridge-only clinical foundation.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P11",
+      "title": "Оқу аналитикасы және білім беру зерттеулері",
+      "goal": "оқу үдерісінің деректерін педагогикалық теориямен байланыстырып, білім беру шешімдерінің тиімділігін әділ әрі негізді бағалайтын зерттеуші даярлау.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Педагогикалық мәселені өлшенетін зерттеу сұрағына айналдырып, оқу нәтижесі мен белсенділік көрсеткішін ажырату.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "LMS және бағалау деректерін біріктіріп, олардың сапасын, құпиялығын және іріктеу шектеулерін құжаттау.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Оқу жетістігін талдау моделін тәуелсіз деректерде тексеріп, топтар арасындағы қателіктерді салыстыру.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Білім беру араласуының әсерін эксперименттік немесе квазиэксперименттік дизайнмен бағалау.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Педагогтарға арналған түсінікті аналитикалық есеп әзірлеп, ұсыныстың дәлелін және қолдану шектеулерін қорғау.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, scientific_pedagogical, KZ, 120/4; язык KK. Междисциплинарная: педагогика + аналитика данных. Максимум новых модулей: 2.",
+      "education_level": "master",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "kk",
+      "credits": 120,
+      "semesters": 4,
+      "max_generated_modules": 2,
+      "required_blocks": "теория обучения; educational measurement; статистика; causal/experimental design; LMS-data; ethics; исследования.",
+      "prerequisite_expectations": "педагогическая теория/измерения → дизайн исследования → оценка вмешательства → рекомендации.",
+      "unacceptable_substitutions": "число кликов как доказательство обучения; IT без педагогики; автоматическое ранжирование студентов без валидности и fairness-анализа.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P12",
+      "title": "Цифровое государственное управление",
+      "goal": "подготовить специалиста-исследователя, способного проектировать и оценивать цифровую государственную услугу с точки зрения общественной ценности, доступности, подотчётности и организационной реализуемости.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Анализировать общественную проблему и обосновывать цели цифрового вмешательства с картой заинтересованных сторон.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Моделировать процесс предоставления государственной услуги и выявлять административные и цифровые барьеры.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Разрабатывать требования к обмену данными, приватности и подотчётности участников межведомственного процесса.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Оценивать результаты услуги по доступности, времени, затратам и распределению эффектов между группами населения.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Подготавливать исследовательски обоснованный план внедрения и оценки услуги с механизмами обратной связи и управления рисками.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, scientific_pedagogical, KZ, 120/4; язык RU. Междисциплинарная: государственное управление + цифровые сервисы. Максимум новых модулей: 1.",
+      "education_level": "master",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 120,
+      "semesters": 4,
+      "max_generated_modules": 1,
+      "required_blocks": "публичная политика; госуправление; service design; digital governance; data governance; evaluation; методы социальных исследований.",
+      "prerequisite_expectations": "публичная политика → анализ процесса → проект услуги → оценка эффекта.",
+      "unacceptable_substitutions": "generic project management/программирование вместо публичной политики; отсутствие доступности и организационного анализа.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P13",
+      "title": "Управление финансовыми рисками и аналитика",
+      "goal": "подготовить практического риск-аналитика, способного оценивать финансовые риски организации, проверять модели и обосновывать управленческие действия на основе сценариев и ограничений данных.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Идентифицировать кредитный, рыночный и ликвидный риск и формировать согласованную систему показателей для организации.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Строить и проверять модель выбранного риска с корректным разделением данных и диагностикой ошибок.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Проводить стресс-тестирование и интерпретировать чувствительность результатов к сценарным предположениям.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Оценивать ограничения и управленческие последствия риск-модели, предлагая контроль и процедуры пересмотра.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Разрабатывать прикладной проект риск-решения с воспроизводимыми расчётами и защитой рекомендаций перед профессиональной аудиторией.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, professional, KZ, 60/2; язык RU. Обычная программа: финансы/риск-менеджмент. Максимум новых модулей: 1.",
+      "education_level": "master",
+      "track": "professional",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 60,
+      "semesters": 2,
+      "max_generated_modules": 1,
+      "required_blocks": "финансовые инструменты; виды рисков; эконометрика; model validation; stress testing; governance; прикладная практика/проект.",
+      "prerequisite_expectations": "финансы/вероятности как входная база → модели риска → stress/backtesting → управленческий проект.",
+      "unacceptable_substitutions": "четыре семестра при 60/2; научно-педагогический track вместо профильного; общий курс ML вместо риска.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P14",
+      "title": "Resilient Supply Chain Management",
+      "goal": "prepare supply-chain managers who can redesign sourcing, inventory and distribution decisions under demand uncertainty and disruption while demonstrating operational and economic feasibility.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Map a supply chain and diagnose bottlenecks using service, inventory, lead-time and cost evidence.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Estimate demand uncertainty and compare inventory policies under explicit service-level constraints.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Optimise a distribution or sourcing decision and validate its assumptions with operational data.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Evaluate disruption scenarios and design a resilience plan with quantified trade-offs and implementation responsibilities.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Deliver a company-oriented improvement project with reproducible analysis, stakeholder validation and a measurement plan.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, professional, KZ, 90/3; язык EN. Обычная программа: логистика/управление цепями поставок. Максимум новых модулей: 2.",
+      "education_level": "master",
+      "track": "professional",
+      "jurisdiction": "KZ",
+      "target_language": "en",
+      "credits": 90,
+      "semesters": 3,
+      "max_generated_modules": 2,
+      "required_blocks": "operations/logistics; forecasting; inventory; optimisation; procurement; disruption risk; enterprise project.",
+      "prerequisite_expectations": "demand/inventory → network optimisation → disruption scenarios → прикладной проект.",
+      "unacceptable_substitutions": "120/4 вместо 90/3; generic IT без inventory/logistics; проект без реальных операционных ограничений.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P15",
+      "title": "Интеграция возобновляемой энергетики",
+      "goal": "подготовить исследователя, оценивающего интеграцию переменной возобновляемой генерации и накопителей в энергосистему на основе физических моделей, неопределённости и критериев надёжности.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Строить и верифицировать модель участка энергосистемы с переменной генерацией и ограничениями сети.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Оценивать неопределённость прогноза выработки и её влияние на баланс мощности и резервирование.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Исследовать стратегии управления накопителем по техническим, экономическим и ресурсным критериям.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Сравнивать сценарии интеграции генерации по устойчивости, качеству электроэнергии и надёжности снабжения.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Проводить воспроизводимое моделирование и защищать исследовательские выводы с анализом чувствительности и границ применимости.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, scientific_pedagogical, KZ, 120/4; язык RU. Обычная программа: электроэнергетика. Максимум новых модулей: 2.",
+      "education_level": "master",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 120,
+      "semesters": 4,
+      "max_generated_modules": 2,
+      "required_blocks": "энергосистемы; преобразовательная техника; режимы/устойчивость; накопители; optimisation; forecasting; simulation/research.",
+      "prerequisite_expectations": "электрические сети/управление → моделирование ВИЭ → накопители/сценарии → исследование.",
+      "unacceptable_substitutions": "ESG-менеджмент вместо инженерного ядра; ML без физических ограничений; отсутствие режимов/устойчивости.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P16",
+      "title": "Корпусная лингвистика казахского языка",
+      "goal": "подготовить исследователя казахского языка, способного создавать репрезентативные размеченные корпуса, проверять лингвистические гипотезы и оценивать вычислительные методы с учётом структуры языка.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Формулировать лингвистическую гипотезу и обосновывать состав корпуса, схему выборки и ограничения репрезентативности.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Разрабатывать схему морфологической или синтаксической разметки и оценивать согласованность аннотаторов.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Применять корпусные и статистические методы для проверки гипотезы с корректной интерпретацией неопределённости.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Оценивать качество инструмента обработки казахского текста по типам ошибок и лингвистически значимым подгруппам.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Создавать воспроизводимый исследовательский ресурс с документацией, условиями использования и научным отчётом.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "master, scientific_pedagogical, KZ, 120/4; язык RU с казахоязычным исследовательским материалом. Междисциплинарная: лингвистика + обработка текстов. Максимум новых модулей: 1.",
+      "education_level": "master",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 120,
+      "semesters": 4,
+      "max_generated_modules": 1,
+      "required_blocks": "казахское языкознание; морфология/синтаксис; corpus design; annotation; статистика; NLP evaluation; research ethics/licensing.",
+      "prerequisite_expectations": "лингвистическая теория → схема разметки → corpus study → оценка модели/публикуемый ресурс.",
+      "unacceptable_substitutions": "ICT без морфологии/синтаксиса; «big data» вместо корпуса; использование низкоресурсного языка только в заголовке.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P17",
+      "title": "Robust and Reproducible Medical AI Research",
+      "goal": "develop an independent researcher able to make an original, reproducible contribution to the robustness and evaluation of medical AI across institutions and populations.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Identify a defensible research gap through a critical synthesis of competing methods and clinical evaluation evidence.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Formulate an original methodological contribution with explicit assumptions, falsifiable claims and a comparison protocol.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Design multi-site evaluation that controls leakage, dataset shift and uncertainty while documenting ethical and data-access constraints.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Analyse failure mechanisms and reproduce or challenge the findings of competing approaches using transparent experiments.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Defend a coherent dissertation and reproducible research outputs that distinguish original contributions from engineering implementation.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "doctorate, scientific_pedagogical, KZ, 180/6; язык EN. Междисциплинарная: AI research + biomedical research. Максимум новых модулей: 2.",
+      "education_level": "doctorate",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "en",
+      "credits": 180,
+      "semesters": 6,
+      "max_generated_modules": 2,
+      "required_blocks": "advanced learning theory/statistics; external evaluation; robustness; research design; biomedical ethics; научные семинары; самостоятельное исследование.",
+      "prerequisite_expectations": "literature gap → hypothesis/method → controlled evaluation → dissertation; базовое программирование — admission prerequisite, не замена докторской подготовки.",
+      "unacceptable_substitutions": "бакалаврский AI-план на 180 кредитов; отсутствие новизны/диссертационного исследования; несколько синонимов research methods вместо научной работы.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P18",
+      "title": "Климатқа бейімделген агрожүйелерді зерттеу",
+      "goal": "климат өзгерісі жағдайында агрожүйелердің тұрақтылығын арттыруға арналған жаңа ғылыми тәсілді әзірлеп, оны далалық және модельдік дәлелдермен негіздейтін дербес зерттеуші даярлау.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Агрожүйе мен климат байланысындағы ғылыми олқылықты анықтап, тексерілетін зерттеу гипотезасын тұжырымдау.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Көпжылдық далалық зерттеу дизайнын құрып, факторлар, бақылау және өлшеу белгісіздігін негіздеу.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Климаттық сценарийлер мен агрожүйе моделін біріктіріп, модельдің сәйкестігін тәуелсіз деректерде бағалау.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Бейімделу шараларының өнімділікке, суға және топыраққа әсерін салыстырып, себептік тұжырымдардың шектеулерін көрсету.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Жаңа ғылыми нәтижені қайталанатын деректер мен әдістер арқылы қорғап, диссертациялық үлестің шекарасын айқындау.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "doctorate, scientific_pedagogical, KZ, 180/6; язык KK. Междисциплинарная: аграрные науки + климатическое моделирование. Максимум новых модулей: 2.",
+      "education_level": "doctorate",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "kk",
+      "credits": 180,
+      "semesters": 6,
+      "max_generated_modules": 2,
+      "required_blocks": "агроэкология; климат/сценарии; экспериментальный дизайн; mechanistic models; uncertainty; длительное научное исследование.",
+      "prerequisite_expectations": "агроэкологическая теория → эксперимент → модель/валидация → оригинальный результат.",
+      "unacceptable_substitutions": "IoT/agro-dashboard вместо аграрной науки; отсутствие независимой валидации; базовый crop monitoring вместо PhD-глубины.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P19",
+      "title": "Причинный анализ образовательных вмешательств",
+      "goal": "подготовить самостоятельного исследователя эффективности образовательных вмешательств, способного предложить оригинальный метод или объяснение эффекта с валидным измерением обучения и обоснованной причинной идентификацией.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Выделять научную проблему в теории обучения и формулировать оригинальную проверяемую гипотезу вмешательства.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Обосновывать валидность и сопоставимость измерений образовательного результата между группами и периодами.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Проектировать стратегию причинной идентификации и анализировать угрозы внутренней и внешней валидности.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Оценивать неоднородность эффектов и устойчивость вывода с воспроизводимыми анализами и прозрачными ограничениями.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Защищать диссертационный вклад, соединяющий теоретическое объяснение, эмпирические доказательства и этически допустимые рекомендации.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "doctorate, scientific_pedagogical, KZ, 180/6; язык RU. Обычная программа: науки об образовании с количественными методами. Максимум новых модулей: 1.",
+      "education_level": "doctorate",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 180,
+      "semesters": 6,
+      "max_generated_modules": 1,
+      "required_blocks": "educational theory; psychometrics; causal inference; experiment/quasi-experiment; advanced statistics; ethics; dissertation research.",
+      "prerequisite_expectations": "теория/измерения → identification → empirical study → sensitivity/replication → вклад.",
+      "unacceptable_substitutions": "correlation/MAU как эффект обучения; только ML forecasting; план без psychometrics и theory; неподтверждённое обещание улучшения успеваемости.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    },
+    {
+      "case_id": "P20",
+      "title": "Безопасность распределённых критических систем",
+      "goal": "подготовить исследователя, создающего и проверяющего новые методы обеспечения безопасности распределённых систем при частичных отказах, конкурентном выполнении и активном противодействии.",
+      "learning_outcomes": [
+        {
+          "code": "LO1",
+          "text": "Формализовать модель системы, доверия и противника и выделять научно значимый класс неразрешённых угроз.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO2",
+          "text": "Разрабатывать оригинальный протокол или метод анализа с явно сформулированными свойствами безопасности и живости.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO3",
+          "text": "Проверять заявленные свойства формальными средствами и контролируемыми экспериментами с отказами и атаками.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO4",
+          "text": "Сравнивать метод с сильными базовыми подходами по безопасности, производительности и устойчивости к нарушению предположений.",
+          "weight": 1.0,
+          "critical": true
+        },
+        {
+          "code": "LO5",
+          "text": "Представлять воспроизводимый исследовательский артефакт и защищать пределы доказанного результата в составе диссертации.",
+          "weight": 1.0,
+          "critical": true
+        }
+      ],
+      "profile_verbatim": "doctorate, scientific_pedagogical, KZ, 180/6; язык RU. Обычная программа: computer science/информационная безопасность. Максимум новых модулей: 2.",
+      "education_level": "doctorate",
+      "track": "scientific_pedagogical",
+      "jurisdiction": "KZ",
+      "target_language": "ru",
+      "credits": 180,
+      "semesters": 6,
+      "max_generated_modules": 2,
+      "required_blocks": "distributed algorithms; concurrency; cryptographic protocols; formal methods; fault injection; reproducibility; research seminars/dissertation.",
+      "prerequisite_expectations": "распределённые алгоритмы/формальные методы → модель угроз → новый протокол → proofs/experiments → диссертация.",
+      "unacceptable_substitutions": "только pentest и администрирование; безопасность без модели противника; benchmarking вместо научного вклада; basic networking как основная PhD-подготовка.",
+      "requested_variants": [
+        "A",
+        "B",
+        "C"
+      ],
+      "execution_status": "not_run",
+      "catalog_scope_status": "resolve_from_catalog_before_run",
+      "expert_review_status": "not_requested"
+    }
+  ]
+}

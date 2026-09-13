@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "ruleset_version": "KZ-GOSO-2026.05",
+  "jurisdiction": "KZ",
+  "effective_date": "2026-05-04",
+  "source": {
+    "title": "Приказ Министра науки и высшего образования Республики Казахстан от 20 июля 2022 года № 2",
+    "registration_number": "28916",
+    "url": "https://adilet.zan.kz/rus/docs/V2200028916",
+    "amendment": "04.05.2026"
+  },
+  "supported_profiles": [
+    {"education_level": "bachelor", "track": "standard", "regulatory_profile": "KZ_GOSO_2026"},
+    {"education_level": "master", "track": "scientific_pedagogical", "regulatory_profile": "KZ_GOSO_2026"},
+    {"education_level": "master", "track": "professional", "regulatory_profile": "KZ_GOSO_2026"},
+    {"education_level": "doctorate", "track": "scientific_pedagogical", "regulatory_profile": "KZ_GOSO_2026"},
+    {"education_level": "doctorate", "track": "professional", "regulatory_profile": "KZ_GOSO_2026"}
+  ],
+  "rules": [
+    {"rule_id": "KZ-GOSO-LEVEL", "description": "Применять нормативный блок только для юрисдикции KZ."},
+    {"rule_id": "KZ-GOSO-VOLUME", "description": "Объём обязательных компонентов определяется уровнем и треком программы."},
+    {"rule_id": "KZ-GOSO-PREREQUISITES", "description": "Нормативные prerequisites допускаются только при строгом порядке семестров."},
+    {"rule_id": "KZ-GOSO-PROTECTED", "description": "Обязательные нормативные компоненты нельзя удалить как elective."}
+  ]
+}

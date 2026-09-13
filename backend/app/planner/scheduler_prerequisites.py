@@ -14,7 +14,17 @@ def prerequisite_concepts(title: str | None) -> set[str]:
         "database": ("баз данных", "database", "sql"),
         "operating_systems": ("операционн систем", "системное программ", "operating system"),
         "networks": ("компьютерн сет", "вычислительных систем и сет", "network"),
-        "security": ("безопас", "кибер", "security"),
+        # Occupational/environmental safety and information security are not
+        # interchangeable prerequisites. A broad "безопас" rule previously
+        # fabricated paths from safety-of-life courses to cyber courses.
+        "security": (
+            "кибер", "информационн безопас", "безопасност компьютер",
+            "cybersecurity", "information security", "computer security",
+        ),
+        "occupational_safety": (
+            "безопасность жизнедеятельности", "охрана труда", "техника безопас",
+            "occupational safety", "health and safety",
+        ),
         "data_analysis": ("анализ данн", "больших данных", "big data", "аналитик"),
         "artificial_intelligence": (
             "искусственн интеллект", "машинн обуч", "нейросет",

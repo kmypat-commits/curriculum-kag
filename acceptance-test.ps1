@@ -103,6 +103,7 @@ if ($QualityCohortCount -gt 0) {
             --count $QualityCohortCount `
             --output (Join-Path $runtime "quality-cohort-acceptance.json") `
             --timeout 900 `
+            --cohort breadth `
             --resume
     } "Fresh quality cohort ($QualityCohortCount programmes)"
 }

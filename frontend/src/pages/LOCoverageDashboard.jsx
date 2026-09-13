@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage as useI18n } from '../contexts/LanguageContext'
@@ -12,7 +12,6 @@ export default function LOCoverageDashboard() {
     const { id } = useParams()
     const { t, language } = useI18n()
     const { notify } = useNotifications()
-    const localText = (ru, kk, en) => ({ ru, kk, en })[language] || ru
     const [project, setProject] = useState(null)
     const [coverage, setCoverage] = useState(null)
     const [planVariants, setPlanVariants] = useState([])
@@ -38,6 +37,7 @@ export default function LOCoverageDashboard() {
     const [bridgeError, setBridgeError] = useState(null)
     const [promotingBridge, setPromotingBridge] = useState({})
     const [workflowNotice, setWorkflowNotice] = useState(null)
+    const bridgeSectionRef = useRef(null)
 
     // Feature 3 — LO Achievability
     const [achievability, setAchievability] = useState(null)
@@ -71,7 +71,7 @@ export default function LOCoverageDashboard() {
             }
         } catch (err) {
             console.error('Error fetching project:', err)
-            setError(localText('Не удалось загрузить данные программы', 'Бағдарлама деректерін жүктеу мүмкін болмады', 'Could not load programme data'))
+            setError(t('load_program_error'))
         } finally {
             setLoading(false)
         }
@@ -88,7 +88,7 @@ export default function LOCoverageDashboard() {
             setLoSources(sourceRes.data)
         } catch (err) {
             console.error('Error fetching coverage:', err)
-            setError(formatApiError(err, localText('Не удалось загрузить анализ', 'Талдауды жүктеу мүмкін болмады', 'Could not load analytics')))
+            setError(formatApiError(err, t('load_analytics_error')))
         } finally {
             setCoverageLoading(false)
         }
@@ -177,8 +177,8 @@ export default function LOCoverageDashboard() {
             setBridgeModules(res.data.generated_modules || [])
             setWorkflowNotice({
                 type: 'warning',
-                title: forceEnrichment ? 'Дополнительный модуль создан' : t('bridge_generated_title'),
-                text: forceEnrichment ? 'Это необязательный модуль углубления. Добавляйте его в репозиторий только после экспертной проверки.' : t('bridge_generated_text')
+                title: forceEnrichment ? t('bridge_enrichment_title') : t('bridge_generated_title'),
+                text: forceEnrichment ? t('bridge_enrichment_text') : t('bridge_generated_text')
             })
         } catch (err) {
             setBridgeError(formatApiError(err, t('bridge_suggestions')))
@@ -247,15 +247,11 @@ export default function LOCoverageDashboard() {
     const uncoveredLoCount = planCoverage
         ? Math.max(0, (planCoverage.total_los || 0) - (planCoverage.covered_los || 0))
         : (coverage?.gaps?.gap_count || 0)
-    const enrichmentLabel = language === 'kk' ? 'Қосымша тереңдетілген модуль құру' : language === 'en' ? 'Create optional enrichment module' : 'Создать дополнительный модуль'
+    const enrichmentLabel = t('optional_enrichment_label')
     const bridgeButtonLabel = uncoveredLoCount > 0 ? `✨ ${t('generate_bridge')}` : `✨ ${enrichmentLabel}`
     const bridgeHelperText = uncoveredLoCount > 0
         ? t('bridge_description')
-        : language === 'kk'
-            ? 'Ашық LO жоқ, сондықтан жүйе міндетті түзету емес, қосымша тереңдетілген bridge-модуль ұсынады.'
-            : language === 'en'
-                ? 'There are no uncovered LOs, so the system will create an optional enrichment bridge module rather than a required gap fix.'
-                : 'Непокрытых LO нет, поэтому система создаст не обязательное исправление, а дополнительный bridge-модуль для усиления программы.'
+        : t('optional_enrichment_helper')
 
     const verdictColor = {
         'Ready': { bg: '#d4edda', color: '#155724', icon: '✅' },
@@ -307,7 +303,7 @@ export default function LOCoverageDashboard() {
                         className="card"
                         style={{
                             marginBottom: '24px',
-                            borderLeft: `5px solid ${workflowNotice.type === 'success' ? '#2e7d32' : workflowNotice.type === 'warning' ? '#e67e22' : '#1565c0'}`,
+                            borderTop: `2px solid ${workflowNotice.type === 'success' ? '#2e7d32' : workflowNotice.type === 'warning' ? '#e67e22' : '#1565c0'}`,
                             background: workflowNotice.type === 'success' ? '#f0fff4' : workflowNotice.type === 'warning' ? '#fff8e1' : '#eef7ff'
                         }}
                     >
@@ -333,12 +329,12 @@ export default function LOCoverageDashboard() {
                 )}
 
                 {/* Analytics Summary */}
-                <div className="card" style={{ marginBottom: '24px' }}>
+                <div ref={bridgeSectionRef} className="card" style={{ marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
                         <div>
-                            <h2 style={{ margin: 0 }}>{language === 'ru' ? 'Какие РО нужно усилить' : language === 'kk' ? 'Қай ОН күшейту керек' : 'Which outcomes need strengthening'}</h2>
+                            <h2 style={{ margin: 0 }}>{t('coverage_strength_title')}</h2>
                             <div style={{ marginTop: 5, color: '#667', fontSize: 13 }}>
-                                {language === 'ru' ? 'Сравнивайте A/B/C: полоса показывает силу покрытия, а ниже — реальные дисциплины и bridge-источники.' : language === 'kk' ? 'A/B/C салыстырыңыз: жолақ қамту күшін, төменде нақты пәндер мен bridge көздерін көрсетеді.' : 'Compare A/B/C: bars show coverage strength; real courses and bridge sources are listed below.'}
+                                {t('coverage_strength_desc')}
                             </div>
                         </div>
                         <select className="form-control" value={selectedVariant} onChange={event => changeVariant(event.target.value)} style={{ width: 210 }}>
@@ -347,12 +343,12 @@ export default function LOCoverageDashboard() {
                     </div>
                     {coverageLoading && (
                         <div style={{ marginTop: 12, color: '#667', fontSize: 13 }}>
-                            {language === 'ru' ? 'Обновляю покрытие и источники LO…' : language === 'kk' ? 'LO қамтуы мен көздерін жаңартып жатырмын…' : 'Refreshing LO coverage and sources…'}
+                            {t('refreshing_coverage')}
                         </div>
                     )}
                     {loSources?.elapsed_seconds !== undefined && !coverageLoading && (
                         <div style={{ marginTop: 12, color: '#667', fontSize: 13 }}>
-                            {language === 'ru' ? `Источники покрытия рассчитаны за ${loSources.elapsed_seconds}s.` : language === 'kk' ? `Қамту көздері ${loSources.elapsed_seconds}s ішінде есептелді.` : `Coverage sources calculated in ${loSources.elapsed_seconds}s.`}
+                            {t('coverage_sources_done').replace('{seconds}', loSources.elapsed_seconds)}
                         </div>
                     )}
                     <div style={{ display: 'flex', gap: '40px', marginTop: '20px' }}>
@@ -392,24 +388,24 @@ export default function LOCoverageDashboard() {
                 </div>
 
                 {coverage?.matches?.prediction?.source === 'epvo_sbert_ai' && (
-                    <div className="card" style={{ marginBottom: '24px', borderLeft: '5px solid #7b1fa2', background: '#f8f3ff' }}>
+                    <div className="card" style={{ marginBottom: '24px', borderTop: '2px solid #7b1fa2', background: '#f8f3ff' }}>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                             <span style={{ background: '#7b1fa2', color: 'white', borderRadius: '999px', padding: '5px 10px', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                {language === 'ru' ? 'Прогноз ИИ' : language === 'kk' ? 'ЖИ болжамы' : 'AI prediction'}
+                                {t('ai_prediction_label')}
                             </span>
                             <div>
                                 <strong>
-                                    {language === 'ru' ? 'Связи дисциплин и результатов обучения предложены моделью ЕПВО' : language === 'kk' ? 'Пәндер мен оқу нәтижелерінің байланыстарын ЕПВО моделі ұсынды' : 'Course–outcome links are suggested by the EPVO model'}
+                                    {t('ai_prediction_title')}
                                 </strong>
                                 <p style={{ margin: '6px 0 0', color: '#555', lineHeight: 1.5 }}>
-                                    {language === 'ru' ? 'Это рекомендация, а не решение эксперта. Перед утверждением программы подтвердите или исправьте связи.' : language === 'kk' ? 'Бұл сарапшы шешімі емес, ұсыныс. Бағдарламаны бекітпес бұрын байланыстарды растаңыз немесе түзетіңіз.' : 'This is a recommendation, not an expert decision. Confirm or correct the links before approval.'}
+                                    {t('ai_prediction_disclaimer')}
                                 </p>
                             </div>
                         </div>
                     </div>
                 )}
 
-                <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid #366092', background: '#f8fbff' }}>
+                <div className="card" style={{ marginBottom: '24px', borderTop: '2px solid #366092', background: '#f8fbff' }}>
                     <h3 style={{ marginTop: 0 }}>{t('page_effect')}</h3>
                     <ol style={{ margin: '8px 0 0 20px', color: '#444', lineHeight: 1.7 }}>
                         <li>{t('graph_effect')}</li>
@@ -420,7 +416,7 @@ export default function LOCoverageDashboard() {
                 </div>
 
                 {/* Knowledge Graph Section */}
-                <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid #7b1fa2' }}>
+                <div className="card" style={{ marginBottom: '24px', borderTop: '2px solid #7b1fa2' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <h2 style={{ margin: 0, color: '#7b1fa2' }}>🧠 {t('knowledge_graph')}</h2>
                         <button
@@ -436,13 +432,9 @@ export default function LOCoverageDashboard() {
                         {t('graph_description')}
                     </p>
                     <div style={{ padding: 14, borderRadius: 10, background: '#f8f3ff', border: '1px solid #e3d5f4', marginBottom: 14, color: '#49365e', fontSize: 13, lineHeight: 1.55 }}>
-                        <strong>{language === 'ru' ? 'Для чего это нужно простыми словами' : language === 'kk' ? 'Қарапайым тілмен не үшін керек' : 'What this does, in plain language'}</strong>
+                        <strong>{t('graph_plain_title')}</strong>
                         <div style={{ marginTop: 6 }}>
-                            {language === 'ru'
-                                ? 'Граф связывает дисциплины, пререквизиты и РО. После нажатия система заново пересчитает связи для поиска, объяснений и рекомендаций; существующий учебный план не изменится автоматически.'
-                                : language === 'kk'
-                                    ? 'Граф пәндерді, пререквизиттерді және ОН байланыстырады. Батырмадан кейін жүйе іздеу, түсіндіру және ұсыныстар үшін байланыстарды қайта есептейді; оқу жоспары автоматты түрде өзгермейді.'
-                                    : 'The graph connects courses, prerequisites, and outcomes. Clicking rebuild recalculates links for search, explanations, and recommendations; it does not automatically change the curriculum.'}
+                            {t('graph_plain_desc')}
                         </div>
                         <Link to={`/projects/${id}/graph`} className="btn btn-secondary" style={{ display: 'inline-block', marginTop: 10, textDecoration: 'none' }}>
                             {t('open_prerequisite_graph')} · {t('variant')} {selectedVariant}
@@ -498,7 +490,6 @@ export default function LOCoverageDashboard() {
                         <h2 style={{ margin: 0 }}>🌉 {t('bridge_suggestions')}</h2>
                         <button
                             onClick={() => handleGenerateBridge(!(uncoveredLoCount > 0))}
-                            data-bridge-generate="true"
                             disabled={generatingBridge}
                             className="btn btn-primary"
                             style={{ background: '#1a7a4a', borderColor: '#1a7a4a' }}
@@ -639,7 +630,6 @@ export default function LOCoverageDashboard() {
                                     height: '8px', borderRadius: '4px',
                                     background: achievability.score >= 70 ? '#28a745' : achievability.score >= 40 ? '#ffc107' : '#dc3545',
                                     width: `${achievability.score}%`,
-                                    transition: 'width 0.6s ease'
                                 }} />
                             </div>
 
@@ -695,8 +685,7 @@ export default function LOCoverageDashboard() {
                                             <button
                                                 onClick={async () => {
                                                     await handleGenerateBridge()
-                                                    const bridgeButton = document.querySelector('[data-bridge-generate="true"]')
-                                                    bridgeButton?.closest('.card')?.scrollIntoView({ behavior: 'smooth' })
+                                                    bridgeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                                                 }}
                                                 disabled={generatingBridge || !(uncoveredLoCount > 0)}
                                                 className="btn btn-primary"
@@ -729,7 +718,7 @@ export default function LOCoverageDashboard() {
                 {/* LO List with Priorities */}
                 <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h2 style={{ margin: 0 }}>{language === 'ru' ? 'Анализ результатов обучения' : language === 'kk' ? 'Оқу нәтижелерін талдау' : 'Learning outcomes analysis'}</h2>
+                        <h2 style={{ margin: 0 }}>{t('learning_outcomes_analysis')}</h2>
                         <button
                             onClick={handleSaveWeights}
                             className="btn btn-primary"
@@ -755,10 +744,10 @@ export default function LOCoverageDashboard() {
                             const currentWeight = loWeights[lo.id] || 1.0
                             const sourceRow = (loSources?.items || []).find(item => item.lo_code === lo.lo_code)
                             const statusLabel = sourceRow?.status === 'real_confirmed'
-                                ? (language === 'ru' ? 'закрыто реальными дисциплинами' : language === 'kk' ? 'нақты пәндермен жабылған' : 'covered by real courses')
+                                ? t('covered_by_real_courses')
                                 : sourceRow?.status === 'bridge_supported'
-                                    ? (language === 'ru' ? 'только bridge — лучше усилить' : language === 'kk' ? 'тек bridge — күшейту керек' : 'bridge only — strengthen')
-                                    : (language === 'ru' ? 'нужно усилить' : language === 'kk' ? 'күшейту керек' : 'needs strengthening')
+                                    ? t('bridge_only_strengthen')
+                                    : t('needs_strengthening')
 
                             return (
                                 <div key={lo.id} style={{
@@ -795,24 +784,20 @@ export default function LOCoverageDashboard() {
                                     <div style={{ display: 'grid', gap: 6, padding: '10px 12px', borderRadius: 8, background: '#f7fafc', border: '1px solid #e1e8ef', fontSize: 13 }}>
                                         {sourceRow?.coverage_explanation && (
                                             <div style={{ color: '#344054', marginBottom: 4 }}>
-                                                <strong>{language === 'ru' ? 'Как читать процент' : language === 'kk' ? 'Пайызды қалай оқу керек' : 'How to read the score'}:</strong> {sourceRow.coverage_explanation}
+                                                <strong>{t('read_score')}:</strong> {sourceRow.coverage_explanation}
                                             </div>
                                         )}
                                         {(sourceRow?.real_sources || []).length > 0 ? sourceRow.real_sources.slice(0, 5).map(source => (
                                             <div key={source.course_id} style={{ color: '#285d47' }}>
                                                 ✓ {source.title} · {Math.round((source.score || 0) * 100)}% {source.source === 'goso_regulatory' ? 'ГОСО' : 'ИИ'} · {Math.round((source.expert_score || 0) * 100)}% ЕПВО
                                             </div>
-                                        )) : <div style={{ color: '#a33' }}>{language === 'ru' ? 'Нет подтверждённой реальной дисциплины — эту РО нужно усилить.' : language === 'kk' ? 'Расталған нақты пән жоқ — осы ОН күшейту керек.' : 'No confirmed real course — strengthen this outcome.'}</div>}
+                                        )) : <div style={{ color: '#a33' }}>{t('no_confirmed_real_course')}</div>}
                                         {(sourceRow?.bridge_sources || []).map(source => (
                                             <div key={source.bridge_id} style={{ color: '#8a5a00' }}>◇ bridge в плане, {t('semester')} {source.semester}: {source.title}</div>
                                         ))}
                                         {sourceRow?.status !== 'real_confirmed' && (
                                             <div style={{ color: '#7a4f00', marginTop: 4 }}>
-                                                {language === 'ru'
-                                                    ? 'Что делать: добавить/заменить дисциплину из ЕПВО с сильной связью к этой РО или подтвердить связь экспертом.'
-                                                    : language === 'kk'
-                                                        ? 'Не істеу керек: осы ОН-ға күшті байланысы бар ЕПВО пәнін қосу/ауыстыру немесе байланысты сарапшымен растау.'
-                                                        : 'Action: add/replace with an EPVO course strongly linked to this LO, or confirm the link by expert review.'}
+                                                {t('lo_action_hint')}
                                             </div>
                                         )}
                                     </div>
@@ -820,7 +805,7 @@ export default function LOCoverageDashboard() {
                                     {/* Priority Slider */}
                                     <div style={{ background: '#f8f9fa', padding: '10px 15px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '20px' }}>
                                         <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#666', minWidth: '150px' }}>
-                                            Priority: {currentWeight.toFixed(1)}x
+                                            {t('priority')}: {currentWeight.toFixed(1)}x
                                         </div>
                                         <input
                                             type="range"

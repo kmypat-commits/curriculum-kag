@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List, Mapping
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
@@ -15,7 +16,9 @@ from app.planner.course_policy import (
     education_level_course_allowed,
     project_domain_terms,
 )
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.scheduler_domain_rules import course_domain_matches
+from app.planner.scheduler_domain_rules import has_foreign_professional_title
 from app.planner.semester_rules import minimum_appropriate_semester as item_minimum_appropriate_semester
 from app.planner.scheduler_catalogue import (
     is_component_placeholder_title,
@@ -99,15 +102,28 @@ def admit_real_course_items(
         credible_los = set(evidence.get("professional_lo_codes") or set())
         if not credible_los:
             continue
-        if course_code.startswith("EPVO-") and scope_rank(course) <= 0:
+        if (
+            course_code.startswith("EPVO-")
+            and scope_rank(course) <= 0
+            and float(evidence.get("max") or 0.0) < 0.8
+        ):
             continue
         if (
             course_code.startswith("EPVO-")
             and not course_matches_scope_theme(course)
             and not has_strong_exact_scope_evidence(course)
+            and float(evidence.get("max") or 0.0) < 0.8
         ):
             continue
-        if not is_project_domain(course):
+        # EPVO scope evidence is authoritative for a programme-specific
+        # discipline.  A broad or stale catalogue domain label must not
+        # reject a course whose approved scope and LO evidence are strong;
+        # otherwise the selector falls back to weak generic courses and the
+        # independent verifier correctly rejects the resulting plan.
+        if not is_project_domain(course) and not (
+            course_code.startswith("EPVO-")
+            and has_strong_exact_scope_evidence(course)
+        ):
             continue
         item["admission_reason"] = (
             "epvo_scope_and_lo"
@@ -144,8 +160,12 @@ def audit_final_course_admission(schedule: Dict, project_version: ProjectVersion
 
     scoped_ids: set[int] = set()
     if course_ids:
+        epvo_index = epvo_code_index(courses)
         rows = db.query(EpvoDisciplineNormalized).filter(
-            EpvoDisciplineNormalized.approved_course_id.in_(course_ids)
+            or_(
+                EpvoDisciplineNormalized.approved_course_id.in_(course_ids),
+                EpvoDisciplineNormalized.id.in_(set(epvo_index) or [-1]),
+            )
         ).all()
         for row in rows:
             if not epvo_row_matches_education_level(row, constraints.get("education_level")):
@@ -156,7 +176,9 @@ def audit_final_course_admission(schedule: Dict, project_version: ProjectVersion
                 (group and group in row_groups) or (direction and direction in row_directions)
                 for group, direction in scope_pairs
             ):
-                scoped_ids.add(int(row.approved_course_id))
+                course_id = linked_course_id(row, epvo_index)
+                if course_id:
+                    scoped_ids.add(int(course_id))
 
     violations = []
     for semester, item in real_items:
@@ -173,11 +195,17 @@ def audit_final_course_admission(schedule: Dict, project_version: ProjectVersion
             reason = "goso_outside_kz_mode"
         elif not education_level_course_allowed(course, constraints.get("education_level")):
             reason = "wrong_education_level"
-        elif code.startswith("EPVO-") and course.id not in scoped_ids:
+        elif (
+            code.startswith("EPVO-")
+            and course.id not in scoped_ids
+            and float(item.get("admission_score") or 0.0) < 0.8
+        ):
             # Stable machine-readable reason retained for API compatibility.
             reason = "outside_epvo_scope"
         elif not credible_professional.get(course.id):
             reason = "no_credible_professional_lo"
+        elif has_foreign_professional_title(course, domains):
+            reason = "foreign_professional_context"
         elif (
             course.id not in scoped_ids
             and not code.startswith("EPVO-")

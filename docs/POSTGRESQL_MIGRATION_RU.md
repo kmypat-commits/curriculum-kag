@@ -152,3 +152,20 @@ python backend\scripts\audit_control_programs_api.py `
 2. вернуть старый `DATABASE_URL` на SQLite;
 3. проверить backup SQLite;
 4. оставить PostgreSQL как экспериментальный стенд до диагностики.
+
+## Безопасная обработка FK-orphan
+
+Если preflight обнаруживает FK-orphan строки, мигратор останавливается до записи
+в PostgreSQL. Сначала сформируйте и вручную утвердите manifest:
+
+```powershell
+python backend\scripts\build_sqlite_fk_discard_manifest.py `
+  --db backend\curriculum_kag.db `
+  --output .runtime\sqlite-fk-discard-manifest.json
+```
+
+Затем передайте его явно через `--orphan-manifest`. Manifest должен совпадать
+с SHA-256 исходной SQLite-базы и точным распределением нарушений по дочерним
+таблицам; он обязан иметь `policy.mode=review_required` и
+`destructive_action_performed=false`. Записи, требующие repair/review, блокируют
+cutover и не могут быть отброшены автоматически.

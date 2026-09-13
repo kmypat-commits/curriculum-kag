@@ -9,11 +9,12 @@ from app.models.course import Course
 from app.models.project import ProjectVersion
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.services.rbac import require_permission
 
 router = APIRouter()
 
 
-@router.post("/{project_version_id}/course-exclusions")
+@router.post("/{project_version_id}/course-exclusions", dependencies=[Depends(require_permission("planner", "write"))])
 async def update_course_exclusion(
     project_version_id: int,
     course_id: int = Body(...),
@@ -54,7 +55,7 @@ async def update_course_exclusion(
     }
 
 
-@router.post("/{project_version_id}/confirm-suspicious-course")
+@router.post("/{project_version_id}/confirm-suspicious-course", dependencies=[Depends(require_permission("planner", "write"))])
 async def confirm_suspicious_course(
     project_version_id: int,
     course_id: int = Body(...),

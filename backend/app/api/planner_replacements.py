@@ -39,6 +39,7 @@ from app.services.content_localization import (
 )
 from app.services.epvo_repository import epvo_row_matches_education_level
 from app.services.plan_reporting import academic_classification as _academic_classification
+from app.schemas.planner import BridgeReplacementCandidate, BridgeReplacementSelection
 from app.api.planner_replacement_courses import course_replacement_preview as _course_replacement_preview
 from app.api.planner_course_flags import router as course_flags_router
 
@@ -539,7 +540,7 @@ Bridge: {bridge.title}
 async def bridge_ai_replacement_apply(
     project_version_id: int,
     bridge_item_id: int = Body(...),
-    candidate: dict = Body(...),
+    candidate: BridgeReplacementCandidate = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -555,8 +556,8 @@ async def bridge_ai_replacement_apply(
     if not item or not item.bridge_module_id:
         raise HTTPException(status_code=404, detail="Bridge-модуль плана не найден")
     bridge = db.query(BridgeModule).filter(BridgeModule.id == item.bridge_module_id).first()
-    title = str(candidate.get("title_ru") or "").strip()
-    description = str(candidate.get("description_ru") or "").strip()
+    title = candidate.title_ru.strip()
+    description = candidate.description_ru.strip()
     if len(title) < 4 or len(description) < 20:
         raise HTTPException(status_code=400, detail="Для подтверждения нужны название и содержательное описание дисциплины")
     credits = int(item.credits or 5)
@@ -575,7 +576,7 @@ async def bridge_ai_replacement_apply(
     )
     db.add(course)
     db.flush()
-    target_codes = set(candidate.get("target_los") or (bridge.target_los if bridge else []) or [])
+    target_codes = set(candidate.target_los or (bridge.target_los if bridge else []) or [])
     los = db.query(LearningOutcome).filter(
         LearningOutcome.project_version_id == project_version_id,
         LearningOutcome.lo_code.in_(target_codes or {"__none__"}),
@@ -632,7 +633,7 @@ async def bridge_ai_replacement_apply(
 async def bridge_replacement_apply_all(
     project_version_id: int,
     variant: str = Body("A"),
-    selected_replacements: list[dict] | None = Body(default=None),
+    selected_replacements: list[BridgeReplacementSelection] | None = Body(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -669,10 +670,8 @@ async def bridge_replacement_apply_all(
         ).all()
     }
     requested = {
-        int(row.get("bridge_item_id")): int(row.get("course_id"))
+        row.bridge_item_id: row.course_id
         for row in (selected_replacements or [])
-        if str(row.get("bridge_item_id") or "").isdigit()
-        and str(row.get("course_id") or "").isdigit()
     }
     if selected_replacements is not None and not requested:
         raise HTTPException(status_code=400, detail="Выберите минимум одну замену")

@@ -7,7 +7,7 @@ if (-not (Test-Path $pidFile)) {
 }
 
 $saved = Get-Content $pidFile -Raw | ConvertFrom-Json
-foreach ($name in @("frontend", "backend")) {
+foreach ($name in @("frontend", "backend", "plannerWorker")) {
     $processId = $saved.$name
     if (-not $processId) { continue }
 
@@ -25,6 +25,14 @@ foreach ($name in @("frontend", "backend")) {
     else {
         Write-Warning "Skipped PID ${processId}: it no longer belongs to this project."
     }
+}
+
+# A launcher stop intentionally interrupts any build. Persist cancellation so
+# the next start cannot inherit a false `running` lease and block new users.
+$python = Join-Path $PSScriptRoot "backend\venv\Scripts\python.exe"
+$recovery = Join-Path $PSScriptRoot "backend\scripts\recover_interrupted_builds.py"
+if ((Test-Path $python) -and (Test-Path $recovery)) {
+    & $python $recovery 2>$null
 }
 
 Remove-Item $pidFile -Force

@@ -151,7 +151,18 @@ def rebalance_domain_quotas(
     # satisfy both domain quotas.  The previous 20-second cap returned a
     # valid-looking but underfilled secondary domain before the search had
     # examined its bounded candidate frontier.
-    repair_budget_seconds = 45.0
+    # This helper is invoked more than once during one variant build.  A
+    # per-call 45-second budget multiplied across late repair passes made B/C
+    # spend several minutes in best-effort swaps. Keep the strict verifier,
+    # but cap each search pass so generation has a predictable upper bound.
+    # This function can be invoked by several late scheduler passes. A
+    # per-invocation budget of 15s multiplied across those passes made one
+    # programme spend 10+ minutes in best-effort swaps. Keep the strict
+    # verifier, but bound each pass tightly so the worker remains responsive.
+    repair_budget_seconds = 4.0
+
+    def budget_exceeded() -> bool:
+        return time.perf_counter() - repair_started >= repair_budget_seconds
 
     for domain_index in (0, 1):
         guard = 0
@@ -160,21 +171,32 @@ def rebalance_domain_quotas(
         # available, not at an arbitrary fixed count.
         guard_limit = max(20, len(normalized) * 2)
         while credits_by_domain(normalized)[domain_index] < required[domain_index] and guard < guard_limit:
-            if time.perf_counter() - repair_started >= repair_budget_seconds:
+            if budget_exceeded():
                 return normalized
             guard += 1
             current = credits_by_domain(normalized)
             ids = selected_ids()
             titles = {_title_key(item.get("title")) for item in normalized if item.get("title")}
-            candidates = [
-                course for course in domain_quota_candidates(domain_index)
-                if course.id not in ids
-                and _title_key(course.title) not in titles
-                and all(pre_id in ids for pre_id in prereq_ids_by_course.get(course.id, []))
-            ][:80]
+            candidates = []
+            for course in domain_quota_candidates(domain_index):
+                if budget_exceeded():
+                    return normalized
+                if (
+                    course.id not in ids
+                    and _title_key(course.title) not in titles
+                    and all(
+                        pre_id in ids
+                        for pre_id in prereq_ids_by_course.get(course.id, [])
+                    )
+                ):
+                    candidates.append(course)
+                    if len(candidates) >= 80:
+                        break
             swapped = False
             protected = protected_ids(normalized)
             for candidate in candidates:
+                if budget_exceeded():
+                    return normalized
                 candidate_credits = int(candidate.credits or 5)
                 replaceable = []
                 for index, item in enumerate(normalized):
@@ -238,9 +260,22 @@ def rebalance_domain_quotas(
                         and replace_domain != domain_index
                     ):
                         replaceable_all.append((index, item, course))
+                replaceable_all.sort(key=lambda row: (
+                    course_role_rank(row[2]),
+                    priority_rank(row[2]),
+                    int(row[1].get("recommended_semester") or 99),
+                ))
+                # The 1..3-course exchange is another combinatorial branch.
+                # Keep the strongest removable frontier before expanding it;
+                # quality_preserved remains the final acceptance gate.
+                replaceable_all = replaceable_all[:12]
                 replacement_groups: Dict[int, List[tuple]] = {}
                 for size in (1, 2, 3):
+                    if budget_exceeded():
+                        return normalized
                     for group in combinations(replaceable_all, size):
+                        if budget_exceeded():
+                            return normalized
                         group_credits = sum(int(row[1].get("credits") or 0) for row in group)
                         removed = [
                             sum(
@@ -256,7 +291,11 @@ def rebalance_domain_quotas(
                             if index != domain_index
                         ):
                             replacement_groups.setdefault(group_credits, []).append(group)
-                candidate_groups = [*( (course,) for course in candidates )]
+                # Single-candidate exchanges also call the full quality gate;
+                # do not let a broad repository pool multiply that expensive
+                # check after the evidence-ranked frontier has been formed.
+                bounded_single_candidates = candidates[:40]
+                candidate_groups = [*( (course,) for course in bounded_single_candidates )]
                 # Keep the exact exchange search bounded. The candidate
                 # list is already ranked by LO/expert/scope evidence; a
                 # 16-item frontier captures the high-quality options
@@ -266,6 +305,8 @@ def rebalance_domain_quotas(
                 candidate_groups.extend(combinations(bounded_candidates, 2))
                 candidate_groups.extend(combinations(bounded_candidates, 3))
                 for candidate_group in candidate_groups:
+                    if budget_exceeded():
+                        return normalized
                     group_credits = sum(int(course.credits or 5) for course in candidate_group)
                     replacements = replacement_groups.get(group_credits)
                     if not replacements:
@@ -429,10 +470,20 @@ def rebalance_domain_quotas(
                     priority_rank(row[2]),
                     int(row[1].get("recommended_semester") or 99),
                 ))
-                replaceable_all = replaceable_all[:16]
+                # This branch is an exact-credit fallback.  Trying all
+                # 1..4-sized groups from 16 rows caused thousands of costly
+                # quality-preservation checks per domain and stalled builds
+                # at variant start.  The rows are already ordered by role,
+                # priority and semester stability, so ten is a bounded,
+                # auditable frontier without changing the selected policy.
+                replaceable_all = replaceable_all[:10]
                 replacement_groups = {}
                 for size in (1, 2, 3, 4):
+                    if budget_exceeded():
+                        return normalized
                     for group in combinations(replaceable_all, size):
+                        if budget_exceeded():
+                            return normalized
                         group_credits = sum(int(row[1].get("credits") or 0) for row in group)
                         other_domain = project_domain_index(group[0][2])
                         if (
@@ -441,6 +492,8 @@ def rebalance_domain_quotas(
                         ):
                             replacement_groups.setdefault(group_credits, group)
                 for candidate_bundle, bundle_credits, target_credits in bundle_candidates:
+                    if budget_exceeded():
+                        return normalized
                     replacement_group = replacement_groups.get(bundle_credits)
                     if not replacement_group:
                         continue

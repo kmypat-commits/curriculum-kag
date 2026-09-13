@@ -19,6 +19,21 @@ from app.planner.semester_rules import (
 )
 
 
+def _semantic_latest(item: Dict, num_semesters: int) -> int:
+    """Return the hard semantic upper bound used by every load repair.
+
+    A late repair must not be able to move an introductory course to the
+    final semester merely because an intermediate candidate dict lost its
+    EPVO metadata.  The lexical foundation rule is deliberately independent
+    from optional ``_scoped_epvo_semester`` annotations.
+    """
+    return min(
+        num_semesters,
+        int(item.get("latest_semester") or num_semesters),
+        _foundation_max_semester(item.get("title"), num_semesters),
+    )
+
+
 
 def _relocate_bounded_bridges(schedule: Dict[int, List[Dict]], num_semesters: int, nominal_load: int, db: Session) -> Dict[int, List[Dict]]:
     """Move CORE/SECONDARY bridge modules back to their intended study window."""
@@ -59,6 +74,60 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
     lower = nominal_load - 3
     upper = nominal_load + 3
 
+    # Bridge modules have an explicit 3--7 credit envelope and are the only
+    # safe units whose credits may be flexed without changing a real course.
+    # Use that envelope first when a protected/regulatory block makes whole
+    # course moves impossible (for example 34 credits in semester 2).  The
+    # transfer is conservative: total programme credits stay unchanged and
+    # both semesters remain inside the same 27--33 envelope.
+    for _ in range(40):
+        loads = _schedule_loads(schedule)
+        donors = sorted((s for s, load in loads.items() if load > upper), key=lambda s: loads[s], reverse=True)
+        receivers = sorted((s for s, load in loads.items() if load < upper), key=lambda s: loads[s])
+        transferred = False
+        for donor in donors:
+            donor_bridges = [
+                item for item in schedule[donor]
+                if item.get("bridge_module_id") is not None and int(item.get("credits") or 0) > 3
+            ]
+            for target in receivers:
+                target_bridges = [
+                    item for item in schedule[target]
+                    if item.get("bridge_module_id") is not None and int(item.get("credits") or 0) < 7
+                ]
+                donor_room = loads[donor] - upper
+                target_room = upper - loads[target]
+                for source in sorted(donor_bridges, key=lambda item: int(item.get("credits") or 0), reverse=True):
+                    if not target_bridges:
+                        break
+                    reducible = int(source.get("credits") or 0) - 3
+                    amount = min(donor_room, target_room, reducible)
+                    if amount <= 0:
+                        continue
+                    remaining = amount
+                    for destination in sorted(
+                        target_bridges,
+                        key=lambda item: 7 - int(item.get("credits") or 0),
+                        reverse=True,
+                    ):
+                        room = 7 - int(destination.get("credits") or 0)
+                        change = min(room, remaining)
+                        destination["credits"] = int(destination.get("credits") or 0) + change
+                        remaining -= change
+                        if remaining <= 0:
+                            break
+                    moved = amount - remaining
+                    if moved > 0:
+                        source["credits"] = int(source.get("credits") or 0) - moved
+                        transferred = True
+                        break
+                if transferred:
+                    break
+            if transferred:
+                break
+        if not transferred:
+            break
+
     for _ in range(40):
         current_loads = _schedule_loads(schedule)
         overloaded = [s for s, load in current_loads.items() if load > upper]
@@ -84,7 +153,7 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     if target < _item_minimum_appropriate_semester(item, num_semesters):
                         continue
                     latest = int(item.get("latest_semester") or num_semesters)
-                    if target > latest:
+                    if target > _semantic_latest(item, num_semesters):
                         continue
                     parent_semesters = [course_semesters.get(pid, 0) for pid in item.get("prerequisites") or []]
                     if parent_semesters and max(parent_semesters) >= target:
@@ -128,7 +197,7 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     if target < _item_minimum_appropriate_semester(item, num_semesters):
                         continue
                     latest = int(item.get("latest_semester") or num_semesters)
-                    if target > latest:
+                    if target > _semantic_latest(item, num_semesters):
                         continue
                     parent_semesters = [course_semesters.get(pid, 0) for pid in item.get("prerequisites") or []]
                     if parent_semesters and max(parent_semesters) >= target:
@@ -163,12 +232,13 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
         def can_place(item: Dict, target: int, overrides: Dict[int, int]) -> bool:
             if item.get("regulatory_required"):
                 return False
-            if item.get("_scoped_epvo_semester") and item.get("recommended_semester"):
-                if abs(target - int(item["recommended_semester"])) > 1:
-                    return False
+            # EPVO semester is a preference, not a hard placement constraint.
+            # In the bounded swap path it must not block a legal load repair;
+            # prerequisite, semantic minimum/latest and dependency checks below
+            # remain authoritative.
             if target < _item_minimum_appropriate_semester(item, num_semesters):
                 return False
-            if target > int(item.get("latest_semester") or num_semesters):
+            if target > _semantic_latest(item, num_semesters):
                 return False
             cid = item.get("course_id")
             parent_semesters = [
@@ -250,7 +320,7 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     continue
                 if target < _item_minimum_appropriate_semester(item, num_semesters):
                     continue
-                if target > int(item.get("latest_semester") or num_semesters):
+                if target > _semantic_latest(item, num_semesters):
                     continue
                 parents = [course_semesters.get(pid, 0) for pid in item.get("prerequisites") or []]
                 if parents and max(parents) >= target:
@@ -289,12 +359,9 @@ def _strict_rebalance_max_load(schedule: Dict[int, List[Dict]], num_semesters: i
             for item in sorted(list(schedule[donor]), key=lambda row: int(row.get("credits") or 0)):
                 if item.get("regulatory_required"):
                     continue
-                if item.get("_scoped_epvo_semester") and item.get("recommended_semester"):
-                    recommended = int(item["recommended_semester"])
-                    # Keep evidence-backed courses in their ±1 window while
-                    # strict max-load repair looks for flexible candidates.
-                    if abs(donor - recommended) <= 1:
-                        continue
+                # This is the final hard-load guard.  Scope evidence influences
+                # ranking earlier, but must not make a valid relocation
+                # impossible when a semester exceeds the contractual maximum.
                 credits = int(item.get("credits") or 0)
                 if credits <= 0:
                     continue

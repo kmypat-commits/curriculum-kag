@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { useLanguage } from './LanguageContext'
 
 const NotificationContext = createContext(null)
 
 export function NotificationProvider({ children }) {
+    const { t } = useLanguage()
     const [items, setItems] = useState([])
     const notify = useCallback((message, type = 'error') => {
         const id = `${Date.now()}-${Math.random()}`
@@ -14,7 +16,7 @@ export function NotificationProvider({ children }) {
         {children}
         <div className="app-toast-stack" role="status" aria-live="polite">
             {items.map(item => <div key={item.id} className={`app-toast app-toast-${item.type}`}>
-                <span>{item.message}</span><button type="button" onClick={() => dismiss(item.id)} aria-label="Закрыть">×</button>
+                <span>{item.message}</span><button type="button" onClick={() => dismiss(item.id)} aria-label={t('close')}>×</button>
             </div>)}
         </div>
     </NotificationContext.Provider>

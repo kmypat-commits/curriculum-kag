@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from itertools import combinations
-from typing import Dict, List
+from typing import Callable, Dict, List
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.course import Course, course_prerequisites
@@ -17,6 +17,7 @@ from app.planner.course_policy import (
     education_level_course_allowed as _education_level_course_allowed,
 )
 from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.scheduler_catalogue import unique_items_by_title as _unique_items_by_title
 from app.planner.scheduler_domain_rules import (
     has_foreign_professional_title as _has_foreign_professional_title,
@@ -36,6 +37,7 @@ def _repair_final_domain_quotas(
     candidate_pool: List[Dict],
     project_version: ProjectVersion,
     db: Session,
+    is_admissible: Callable[[Course], bool] | None = None,
 ) -> Dict[int, List[Dict]]:
     """Restore domain quotas after late bridge/LO repairs.
 
@@ -69,11 +71,15 @@ def _repair_final_domain_quotas(
     # Quota repair needs the complete programme-scored repository, otherwise a
     # real secondary-domain discipline can be invisible despite its EPVO
     # direction and a credible LO link.
+    # Keep the selected/evidence pool complete, but do not re-read every
+    # MatchScore row for a late repair pass. The broad repository fallback is
+    # ranked by score and bounded; this preserves the strongest alternatives
+    # while preventing a full-catalogue EPVO traversal per variant.
     candidate_ids |= {
         int(course_id)
         for (course_id,) in db.query(MatchScore.course_id).filter(
             MatchScore.project_version_id == project_version.id,
-        ).distinct().all()
+        ).order_by(MatchScore.score.desc()).limit(800).all()
     }
     scope_pairs = [
         (
@@ -86,17 +92,26 @@ def _repair_final_domain_quotas(
         ),
     ]
 
+    candidate_courses = {
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
+    }
+    epvo_index = epvo_code_index(candidate_courses)
     scope_weights: Dict[int, list[int]] = {}
     for row in db.query(EpvoDisciplineNormalized).filter(
-        EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or {-1})
+        or_(
+            EpvoDisciplineNormalized.approved_course_id.in_(candidate_ids or {-1}),
+            EpvoDisciplineNormalized.id.in_(set(epvo_index) or {-1}),
+        )
     ).all():
-        if not row.approved_course_id or not epvo_row_matches_education_level(
+        course_id = linked_course_id(row, epvo_index)
+        if not course_id or not epvo_row_matches_education_level(
             row, constraints.get("education_level")
         ):
             continue
         groups = {str(value or "") for value in (row.group_codes or [])}
         directions = {str(value or "") for value in (row.direction_codes or [])}
-        weights = scope_weights.setdefault(int(row.approved_course_id), [0, 0])
+        weights = scope_weights.setdefault(int(course_id), [0, 0])
         for index, (group, direction) in enumerate(scope_pairs):
             weights[index] = max(
                 weights[index],
@@ -130,10 +145,6 @@ def _repair_final_domain_quotas(
     credible_candidates = _credible_professional_lo_by_course(
         project_version, candidate_ids, db
     )
-    candidate_courses = {
-        course.id: course
-        for course in db.query(Course).filter(Course.id.in_(candidate_ids or {-1})).all()
-    }
     max_score_by_course = {
         int(course_id): float(max_score or 0.0)
         for course_id, max_score in db.query(
@@ -176,6 +187,7 @@ def _repair_final_domain_quotas(
             "recommended_semester": course.recommended_semester,
             "prerequisites": prerequisite_map.get(course.id, []),
             "type": course.cycle_component or "elective",
+            "admission_los": sorted(credible_candidates.get(course.id) or []),
             "admission_score": round(max_score_by_course.get(course.id, 0.0), 4),
             "selection_method": "final_domain_scope_candidate",
         })
@@ -185,6 +197,10 @@ def _repair_final_domain_quotas(
             item.get("course_id") is not None
             and max(domain_shares(item)) > 0.0
             and int(item["course_id"]) in credible_candidates
+            and (
+                is_admissible is None
+                or is_admissible(candidate_courses.get(int(item["course_id"])))
+            )
         )
     ]
     candidates.sort(
@@ -196,8 +212,23 @@ def _repair_final_domain_quotas(
         reverse=True,
     )
 
+    verification_cache: dict[str, dict] = {}
+
+    def verify_cached(trial: Dict[int, List[Dict]]) -> dict:
+        """Avoid recomputing identical trial schedules during quota repair."""
+        key = repr(tuple(
+            (int(semester), tuple(
+                (item.get("course_id"), item.get("bridge_module_id"), int(item.get("credits") or 0))
+                for item in items
+            ))
+            for semester, items in sorted(trial.items())
+        ))
+        if key not in verification_cache:
+            verification_cache[key] = verify_curriculum_plan(trial, project_version, db)
+        return verification_cache[key]
+
     for _ in range(max(8, len(candidates))):
-        current = verify_curriculum_plan(normalized, project_version, db)
+        current = verify_cached(normalized)
         current_deficit = domain_deficit(current)
         if current_deficit <= 1e-9:
             break
@@ -272,9 +303,10 @@ def _repair_final_domain_quotas(
                     int(constraints.get("max_credits_per_semester", 30) or 30),
                     db,
                 )
-                checked = verify_curriculum_plan(trial, project_version, db)
+                checked = verify_cached(trial)
                 if (
                     non_domain_hard_count(checked) <= non_domain_hard_count(current)
+                    and not checked.get("lo_without_real_course")
                     and domain_deficit(checked) + 1e-9 < current_deficit
                 ):
                     normalized = trial
@@ -308,6 +340,19 @@ def _repair_final_domain_quotas(
                     for index in missing_domains
                 )
             ]
+            # Group repair is a bounded search.  The candidate pool can contain
+            # hundreds of semantically replaceable rows; expanding all 1/2-row
+            # combinations makes this late correctness pass exponential while
+            # adding no useful frontier after the best rows are ranked.  Keep
+            # the strongest replacement options and let the verifier decide.
+            replaceable.sort(
+                key=lambda row: (
+                    0 if row[2].get("bridge_module_id") is not None else 1,
+                    float(row[2].get("admission_score") or 0.0),
+                    -row[0],
+                )
+            )
+            replaceable = replaceable[:12]
             replacement_groups: Dict[int, List[tuple]] = {}
             for size in (1, 2):
                 for group in combinations(replaceable, size):
@@ -346,9 +391,10 @@ def _repair_final_domain_quotas(
                         int(constraints.get("max_credits_per_semester", 30) or 30),
                         db,
                     )
-                    checked = verify_curriculum_plan(trial, project_version, db)
+                    checked = verify_cached(trial)
                     if (
                         non_domain_hard_count(checked) <= non_domain_hard_count(current)
+                        and not checked.get("lo_without_real_course")
                         and domain_deficit(checked) + 1e-9 < current_deficit
                     ):
                         normalized = trial

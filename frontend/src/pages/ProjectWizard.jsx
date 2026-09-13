@@ -9,7 +9,6 @@ export default function ProjectWizard() {
     const { user } = useAuth()
     const { t, language } = useLanguage()
     const navigate = useNavigate()
-    const localText = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
     const [step, setStep] = useState(1)
     const [goalSuggestions, setGoalSuggestions] = useState([])
     const [loSuggestions, setLoSuggestions] = useState([])
@@ -18,8 +17,15 @@ export default function ProjectWizard() {
     const [secondaryDirections, setSecondaryDirections] = useState([])
     const [secondaryGroups, setSecondaryGroups] = useState([])
     const [educationAreas, setEducationAreas] = useState([])
+    const [programProfiles, setProgramProfiles] = useState([])
     const [submitError, setSubmitError] = useState('')
     const [submitting, setSubmitting] = useState(false)
+
+    useEffect(() => {
+        axios.get('/api/projects/program-profiles')
+            .then(response => setProgramProfiles(response.data?.profiles || []))
+            .catch(() => setProgramProfiles([]))
+    }, [])
     const [formData, setFormData] = useState({
         name: '',
         goal: '',
@@ -29,6 +35,7 @@ export default function ProjectWizard() {
             jurisdiction: 'KZ',
             education_level: 'bachelor',
             master_track: 'scientific_pedagogical',
+            doctorate_track: 'scientific_pedagogical',
             education_area: '',
             direction_code: '',
             group_code: '',
@@ -96,6 +103,32 @@ export default function ProjectWizard() {
                 secondary_education_area: '', secondary_direction_code: '', secondary_group_code: '',
             },
             domains: ['', ''],
+        }))
+    }
+
+    const changeMasterTrack = (track) => {
+        const volumes = programProfiles
+            .filter(profile => profile.education_level === 'master'
+                && profile.jurisdiction === formData.constraints.jurisdiction
+                && profile.track === track)
+            .flatMap(profile => profile.credits || [])
+        const credits = volumes.includes(formData.constraints.total_credits) ? formData.constraints.total_credits : (volumes[0] || 120)
+        setFormData(current => ({
+            ...current,
+            constraints: { ...current.constraints, master_track: track, total_credits: credits, total_semesters: credits / 30, duration_years: credits / 60 },
+        }))
+    }
+
+    const changeDoctorateTrack = (track) => {
+        const volumes = programProfiles
+            .filter(profile => profile.education_level === 'doctorate'
+                && profile.jurisdiction === formData.constraints.jurisdiction
+                && profile.track === track)
+            .flatMap(profile => profile.credits || [])
+        const credits = volumes.includes(formData.constraints.total_credits) ? formData.constraints.total_credits : (volumes[0] || 180)
+        setFormData(current => ({
+            ...current,
+            constraints: { ...current.constraints, doctorate_track: track, total_credits: credits, total_semesters: credits / 30, duration_years: credits / 60 },
         }))
     }
 
@@ -244,6 +277,25 @@ export default function ProjectWizard() {
         }
     }
 
+    const selectedTrack = formData.constraints.education_level === 'doctorate'
+        ? formData.constraints.doctorate_track
+        : formData.constraints.master_track
+    const profileVolumes = programProfiles
+        .filter(profile => profile.education_level === formData.constraints.education_level
+            && profile.jurisdiction === formData.constraints.jurisdiction
+            && profile.track === (selectedTrack || 'scientific_pedagogical'))
+        .flatMap(profile => profile.credits || [])
+        .filter((value, index, values) => values.indexOf(value) === index)
+
+    useEffect(() => {
+        if (profileVolumes.length === 0 || profileVolumes.includes(formData.constraints.total_credits)) return
+        const credits = profileVolumes[0]
+        setFormData(current => ({
+            ...current,
+            constraints: { ...current.constraints, total_credits: credits, total_semesters: credits / 30, duration_years: credits / 60 },
+        }))
+    }, [formData.constraints.education_level, formData.constraints.jurisdiction, selectedTrack, formData.constraints.total_credits, profileVolumes.join(',')])
+
     return (
         <div className="workspace-page wizard-page" style={{ minHeight: '100vh', background: '#f5f7fa' }}>
             <header className="workspace-header" style={{
@@ -308,7 +360,7 @@ export default function ProjectWizard() {
                             </div>
                             <div style={{ margin: '-4px 0 18px' }}>
                                 <button type="button" className="btn btn-secondary" onClick={suggestGoals} disabled={!formData.name.trim()}>
-                                    ✨ {language === 'ru' ? 'Предложить 3 цели с AI' : language === 'kk' ? 'AI арқылы 3 мақсат ұсыну' : 'Suggest 3 goals with AI'}
+                                    ✨ {t('suggest_three_goals')}
                                 </button>
                                 {!formData.name.trim() && <div style={{ color: '#777', fontSize: '13px', marginTop: '6px' }}>{t('enter_name_first')}</div>}
                             </div>
@@ -321,15 +373,12 @@ export default function ProjectWizard() {
                                 </div>)}
                             </div>}
                             <h3>{t('direction_code')}</h3>
-                            <p style={{ color: '#666', fontSize: 13 }}>{localText(
-                                'Направления и группы ЕПВО определяют, из каких дисциплин система будет строить программу.',
-                                'ЕПВО бағыттары мен топтары жүйе бағдарламаны қандай пәндерден құратынын анықтайды.',
-                                'EPVO fields and programme groups define which courses the system may use to build the curriculum.'
-                            )}</p>
+                            <p style={{ color: '#666', fontSize: 13 }}>{t('epvo_scope_hint')}</p>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
-                                <div className="form-group"><label className="form-label">{localText('Страна и стандарт', 'Ел және стандарт', 'Country and standard')} *</label><select className="form-control" value={formData.constraints.jurisdiction} onChange={e => handleConstraintChange('jurisdiction', e.target.value)}><option value="KZ">{localText('Республика Казахстан — ГОСО', 'Қазақстан Республикасы — МЖМБС', 'Republic of Kazakhstan — State standard')}</option><option value="INTERNATIONAL">{localText('Международная программа', 'Халықаралық бағдарлама', 'International programme')}</option></select></div>
+                                <div className="form-group"><label className="form-label">{t('country_standard')} *</label><select className="form-control" value={formData.constraints.jurisdiction} onChange={e => handleConstraintChange('jurisdiction', e.target.value)}><option value="KZ">{t('kz_goso')}</option><option value="INTERNATIONAL">{t('international_program')}</option></select></div>
                                 <div className="form-group"><label className="form-label">{t('education_level')} *</label><select className="form-control" value={formData.constraints.education_level} onChange={e => changeEducationLevel(e.target.value)}><option value="bachelor">{t('bachelor')}</option><option value="master">{t('master')}</option><option value="doctorate">{t('doctorate')}</option></select></div>
-                                {formData.constraints.education_level === 'master' && <div className="form-group"><label className="form-label">{localText('Направление магистратуры', 'Магистратура бағыты', 'Master track')} *</label><select className="form-control" value={formData.constraints.master_track} onChange={e => handleConstraintChange('master_track', e.target.value)}><option value="scientific_pedagogical">{localText('Научно-педагогическая — 120 кредитов', 'Ғылыми-педагогикалық — 120 кредит', 'Scientific and pedagogical — 120 credits')}</option><option value="professional">{localText('Профильная', 'Бейіндік', 'Professional')}</option></select></div>}
+                                {formData.constraints.education_level === 'master' && <div className="form-group"><label className="form-label">{t('master_track')} *</label><select className="form-control" value={formData.constraints.master_track} onChange={e => changeMasterTrack(e.target.value)}><option value="scientific_pedagogical">{t('master_scientific')}</option><option value="professional">{t('master_professional')}</option></select></div>}
+                                {formData.constraints.education_level === 'doctorate' && <div className="form-group"><label className="form-label">{t('doctorate_track')} *</label><select className="form-control" value={formData.constraints.doctorate_track} onChange={e => changeDoctorateTrack(e.target.value)}><option value="scientific_pedagogical">{t('doctorate_scientific')}</option><option value="professional">{t('doctorate_professional')}</option></select></div>}
                                 <div className="form-group"><label className="form-label">{t('program_type')} *</label><select className="form-control" value={formData.constraints.program_type} onChange={e => setFormData(current => ({ ...current, constraints: { ...current.constraints, program_type: e.target.value, secondary_education_area: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.constraints.secondary_education_area : '', secondary_direction_code: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.constraints.secondary_direction_code : '', secondary_group_code: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.constraints.secondary_group_code : '' }, domains: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.domains : [current.domains[0], ''] }))}><option value="standard">{t('standard_program')}</option><option value="interdisciplinary">{t('interdisciplinary_program')}</option><option value="joint">{t('joint_program')}</option></select></div>
                                 <div className="form-group"><label className="form-label">{t('education_area')} 1 *</label><select className="form-control" value={formData.constraints.education_area} onChange={e => setFormData(current => ({ ...current, constraints: { ...current.constraints, education_area: e.target.value, direction_code: '', group_code: '' }, domains: ['', current.domains[1]] }))}><option value="">{t('select_education_area')}</option>{educationAreas.map(item => <option key={item.code} value={item.code}>{item.code} — {item.title}</option>)}</select></div>
                                 <div className="form-group"><label className="form-label">{t('direction_code')} 1 *</label><select className="form-control" value={formData.constraints.direction_code} disabled={!formData.constraints.education_area} onChange={e => chooseDirection(false, e.target.value)}><option value="">{t('select_direction')}</option>{directions.map(item => <option key={item.code} value={item.code}>{item.code} — {item.title}</option>)}</select></div>
@@ -353,7 +402,7 @@ export default function ProjectWizard() {
                             <p style={{ color: '#666', marginBottom: '20px' }}>
                                 {t('add_lo_description')}
                             </p>
-                            <div style={{ marginBottom: '18px' }}><button type="button" className="btn btn-secondary" onClick={suggestLOs}>✨ {language === 'ru' ? 'Предложить результаты обучения с AI' : language === 'kk' ? 'AI арқылы оқу нәтижелерін ұсыну' : 'Suggest learning outcomes with AI'}</button></div>
+                            <div style={{ marginBottom: '18px' }}><button type="button" className="btn btn-secondary" onClick={suggestLOs}>✨ {t('suggest_learning_outcomes')}</button></div>
                             {loSuggestions.length > 0 && <div style={{ background: '#f6f9fc', border: '1px solid #d9e3ef', borderRadius: '8px', padding: '14px', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '10px' }}><strong>{t('suggested_learning_outcomes')}</strong><button type="button" className="btn btn-primary" onClick={addAllSuggestedLOs}>{t('add_all')}</button></div>
                                 {loSuggestions.map((suggestion, index) => {
@@ -393,6 +442,8 @@ export default function ProjectWizard() {
                             <h2>{t('constraints')}</h2>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                                 <div className="form-group"><label className="form-label">{t('education_level')} *</label><select className="form-control" value={formData.constraints.education_level} onChange={e => changeEducationLevel(e.target.value)}><option value="bachelor">{t('bachelor')}</option><option value="master">{t('master')}</option><option value="doctorate">{t('doctorate')}</option></select></div>
+                                {formData.constraints.education_level === 'master' && <div className="form-group"><label className="form-label">{t('master_track')} *</label><select className="form-control" value={formData.constraints.master_track} onChange={e => changeMasterTrack(e.target.value)}><option value="scientific_pedagogical">{t('master_scientific')}</option><option value="professional">{t('master_professional')}</option></select></div>}
+                                {formData.constraints.education_level === 'doctorate' && <div className="form-group"><label className="form-label">{t('doctorate_track')} *</label><select className="form-control" value={formData.constraints.doctorate_track} onChange={e => changeDoctorateTrack(e.target.value)}><option value="scientific_pedagogical">{t('doctorate_scientific')}</option><option value="professional">{t('doctorate_professional')}</option></select></div>}
                                 <div className="form-group"><label className="form-label">{t('program_type')} *</label><select className="form-control" value={formData.constraints.program_type} onChange={e => setFormData(current => ({ ...current, constraints: { ...current.constraints, program_type: e.target.value, secondary_education_area: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.constraints.secondary_education_area : '', secondary_direction_code: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.constraints.secondary_direction_code : '', secondary_group_code: ['interdisciplinary', 'joint'].includes(e.target.value) ? current.constraints.secondary_group_code : '' } }))}><option value="standard">{t('standard_program')}</option><option value="interdisciplinary">{t('interdisciplinary_program')}</option><option value="joint">{t('joint_program')}</option></select></div>
                                 <div className="form-group"><label className="form-label">{t('education_area')} *</label><select className="form-control" value={formData.constraints.education_area} onChange={e => setFormData(current => ({ ...current, constraints: { ...current.constraints, education_area: e.target.value, direction_code: '', group_code: '' } }))}><option value="">{t('select_education_area')}</option>{educationAreas.map(item => <option key={item.code} value={item.code}>{item.code} — {item.title}</option>)}</select></div>
                                 <div className="form-group"><label className="form-label">{t('direction_code')} *</label><select className="form-control" value={formData.constraints.direction_code} disabled={!formData.constraints.education_area} onChange={e => setFormData(current => ({ ...current, constraints: { ...current.constraints, direction_code: e.target.value, group_code: '' } }))}><option value="">{t('select_direction')}</option>{directions.map(item => <option key={item.code} value={item.code}>{item.code} — {item.title}</option>)}</select></div>
@@ -420,7 +471,9 @@ export default function ProjectWizard() {
                                         min="1"
                                         max="6"
                                         value={Math.max(1, Math.round(formData.constraints.total_semesters / 2))}
+                                        readOnly={profileVolumes.length > 0}
                                         onChange={(e) => {
+                                            if (profileVolumes.length > 0) return
                                             const years = Math.max(1, parseInt(e.target.value) || 1)
                                             setFormData({
                                                 ...formData,
@@ -441,15 +494,39 @@ export default function ProjectWizard() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">{t('total_credits')}</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        value={formData.constraints.total_credits}
-                                        onChange={(e) => handleConstraintChange('total_credits', parseInt(e.target.value))}
-                                    />
+                                    {profileVolumes.length > 0 ? (
+                                        <select
+                                            className="form-control"
+                                            value={formData.constraints.total_credits}
+                                            onChange={(e) => {
+                                                const credits = parseInt(e.target.value)
+                                                setFormData(current => ({
+                                                    ...current,
+                                                    constraints: {
+                                                        ...current.constraints,
+                                                        total_credits: credits,
+                                                        total_semesters: credits / 30,
+                                                        duration_years: credits / 60
+                                                    }
+                                                }))
+                                            }}
+                                        >
+                                            {profileVolumes.map(credits => <option key={credits} value={credits}>{credits}</option>)}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            value={formData.constraints.total_credits}
+                                            onChange={(e) => handleConstraintChange('total_credits', parseInt(e.target.value))}
+                                        />
+                                    )}
                                     <div style={{ color: '#667085', fontSize: '12px', marginTop: '5px' }}>
                                         {t('program_credit_target_hint').replace('{credits}', formData.constraints.total_credits).replace('{tolerance}', formData.constraints.credit_tolerance ?? 3)}
                                     </div>
+                                    {profileVolumes.length > 0 && <div style={{ color: '#667085', fontSize: '12px', marginTop: '4px' }}>
+                                        {t('supported_profile_volumes')}{profileVolumes.join(', ')}
+                                    </div>}
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">{t('credit_tolerance')}</label>

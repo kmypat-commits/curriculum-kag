@@ -155,11 +155,16 @@ def epvo_input_signature(version: ProjectVersion, db: Session) -> str:
     return _digest(rows)
 
 
-def scoring_input_signature(version: ProjectVersion, db: Session) -> str:
+def scoring_input_signature(
+    version: ProjectVersion,
+    db: Session,
+    epvo_signature: str | None = None,
+) -> str:
+    """Fingerprint scoring inputs, reusing a just-computed EPVO signature."""
     constraints = version.project.constraints_json or {}
     rows: list[Any] = [
         ["cache_version", SCORING_CACHE_VERSION],
-        ["epvo_signature", epvo_input_signature(version, db)],
+        ["epvo_signature", epvo_signature or epvo_input_signature(version, db)],
         ["project", version.project.domain1, version.project.domain2, constraints.get("education_level")],
         _table_stamp(db, Course),
         _table_stamp(db, CourseChunk),

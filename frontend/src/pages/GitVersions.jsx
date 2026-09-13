@@ -6,6 +6,7 @@ import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { formatApiError } from '../utils/errors'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localizedCopy } from '../utils/i18n'
 
 const statusLabels = {
     M: 'изменён',
@@ -47,17 +48,17 @@ function formatDate(value, language = 'ru') {
     }
 }
 
-function diffTitle(mode, commit) {
-    if (!commit) return 'Изменения'
+function diffTitle(mode, commit, l) {
+    if (!commit) return l('Изменения', 'Өзгерістер', 'Changes')
     return mode === 'compare'
-        ? `Сравнение ${commit.short_hash} с текущей версией`
-        : `Изменения коммита ${commit.short_hash}`
+        ? `${l('Сравнение', 'Салыстыру', 'Compare')} ${commit.short_hash} ${l('с текущей версией', 'ағымдағы нұсқамен', 'with current version')}`
+        : `${l('Изменения коммита', 'Коммит өзгерістері', 'Commit changes')} ${commit.short_hash}`
 }
 
 export default function GitVersions() {
     const { user, logout } = useAuth()
     const { language } = useLanguage()
-    const l = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
+    const l = (...args) => localizedCopy(language, ...args)
     const navigate = useNavigate()
     const [overview, setOverview] = useState(null)
     const [loading, setLoading] = useState(true)
@@ -99,7 +100,7 @@ export default function GitVersions() {
                 ? `/api/git/commits/${commit.hash}/compare-current`
                 : `/api/git/commits/${commit.hash}/diff`
             const response = await axios.get(endpoint)
-            setDiff(response.data.diff || 'Изменений нет.')
+            setDiff(response.data.diff || l('Изменений нет.', 'Өзгерістер жоқ.', 'No changes.'))
             setDiffTruncated(Boolean(response.data.truncated))
         } catch (err) {
             setDiff(formatApiError(err, l('Не удалось получить изменения', 'Өзгерістерді алу мүмкін болмады', 'Could not load diff')))
@@ -111,12 +112,12 @@ export default function GitVersions() {
     const createBranch = async (commit) => {
         const name = branchName.trim()
         if (!name) {
-            setBranchMessage('Введите имя ветки.')
+            setBranchMessage(l('Введите имя ветки.', 'Тармақ атауын енгізіңіз.', 'Enter a branch name.'))
             return
         }
         try {
             const response = await axios.post(`/api/git/commits/${commit.hash}/branches`, { branch_name: name })
-            setBranchMessage(`Ветка создана: ${response.data.branch}`)
+            setBranchMessage(`${l('Ветка создана', 'Тармақ жасалды', 'Branch created')}: ${response.data.branch}`)
             setBranchName('')
             loadOverview()
         } catch (err) {
@@ -208,7 +209,7 @@ export default function GitVersions() {
 
                         {selectedCommit ? (
                             <section className="card">
-                                <div className="section-head"><h2>{diffTitle(diffMode, selectedCommit)}</h2><code>{selectedCommit.hash}</code></div>
+                                <div className="section-head"><h2>{diffTitle(diffMode, selectedCommit, l)}</h2><code>{selectedCommit.hash}</code></div>
                                 {diffMode === 'branch' ? (
                                     <div style={{ display: 'grid', gap: 12, maxWidth: 620 }}>
                                         <label>

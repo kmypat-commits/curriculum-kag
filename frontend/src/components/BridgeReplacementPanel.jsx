@@ -13,7 +13,6 @@ export default function BridgeReplacementPanel({
     loadBridgePreview,
     loadingAiBridge,
     loadingBridgePreview,
-    localText,
     localizedCourseField,
     replacingAllBridges,
     replacingBridge,
@@ -28,16 +27,12 @@ export default function BridgeReplacementPanel({
 
             {(currentPlan.metrics.num_bridge_modules || 0) > 0 && (
             <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082', color: '#6d4c41' }}>
-            <strong>{localText('Bridge-модули требуют экспертного решения', 'Bridge-модульдер сараптамалық шешімді қажет етеді', 'Bridge modules require expert review')}: {currentPlan.metrics.num_bridge_modules}</strong>
+            <strong>{t('bridge_review')}: {currentPlan.metrics.num_bridge_modules}</strong>
             <div style={{ fontSize: 12, marginTop: 4 }}>
-            {localText(
-            'Это значит, что реальных дисциплин ЕПВО не хватило для части LO или нагрузки. Лучше перенастроить ЕПВО-направление или заменить bridge реальными дисциплинами.',
-            'Бұл кейбір LO немесе жүктеме үшін нақты ЕПВО пәндері жеткіліксіз екенін білдіреді. ЕПВО бағытын қайта баптау немесе bridge орнына нақты пәндерді таңдау ұсынылады.',
-            'This means real EPVO courses were insufficient for some LOs or workload. Reconfigure the EPVO scope or replace bridges with real courses.'
-            )}
+            {t('bridge_review_desc')}
             </div>
             <button className="btn btn-secondary" onClick={loadBridgePreview} disabled={loadingBridgePreview} style={{ marginTop: 8 }}>
-            {loadingBridgePreview ? localText('Поиск…', 'Іздеу…', 'Searching…') : localText('Найти реальные дисциплины вместо bridge', 'Bridge орнына нақты пәндерді табу', 'Find real courses instead of bridges')}
+            {loadingBridgePreview ? t('search_replacements') : t('find_real_courses')}
             </button>
             {bridgePreview?.variant === activeVariant && (
             Object.keys(selectedBridgeReplacements).length > 0
@@ -52,10 +47,10 @@ export default function BridgeReplacementPanel({
             style={{ marginTop: 8, marginLeft: 8 }}
             >
             {replacingAllBridges
-            ? localText('Замена…', 'Ауыстыру…', 'Replacing…')
+            ? t('replacing')
             : Object.keys(selectedBridgeReplacements).length
-            ? localText(`Подтвердить выбранные: ${Object.keys(selectedBridgeReplacements).length}`, `Таңдалғандарды растау: ${Object.keys(selectedBridgeReplacements).length}`, `Confirm selected: ${Object.keys(selectedBridgeReplacements).length}`)
-            : localText('Заменить все подходящие bridge', 'Барлық қолайлы bridge-модульдерді ауыстыру', 'Replace all suitable bridges')}
+            ? `${t('confirm_replacement')}: ${Object.keys(selectedBridgeReplacements).length}`
+            : t('replace_all_bridges')}
             </button>
             )}
             {bridgePreview?.variant === activeVariant && (bridgePreview.suggestions || []).some(row => (row.candidates || []).some(c => c.quality_level === 'medium' || c.medium_candidate)) && (
@@ -65,19 +60,15 @@ export default function BridgeReplacementPanel({
             disabled={replacingAllBridges || Boolean(replacingBridge)}
             style={{ marginTop: 8, marginLeft: 8, borderColor: '#c17b00', color: '#8a5a00' }}
             >
-            {localText('Выбрать все средние замены', 'Барлық орташа ауыстыруларды таңдау', 'Select all medium replacements')}
+            {t('select_medium')}
             </button>
             )}
             {bridgePreview?.variant === activeVariant && (
             <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
             {bridgePreview.summary && (
             <div style={{ padding: '8px 10px', borderRadius: 8, background: '#fff3cd', border: '1px solid #ffecb5', color: '#6d4c00', fontSize: 12 }}>
-            <strong>{localText('Итог поиска замен', 'Ауыстыру іздеу қорытындысы', 'Replacement search summary')}:</strong>{' '}
-            {localText(
-            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредитов · сильных: ${bridgePreview.summary.with_strong_candidate} · средних: ${bridgePreview.summary.with_medium_candidate || 0} · без сильной: ${bridgePreview.summary.without_strong_candidate}.`,
-            `${bridgePreview.summary.bridge_count} bridge · ${bridgePreview.summary.bridge_credits} кредит · күшті: ${bridgePreview.summary.with_strong_candidate} · орташа: ${bridgePreview.summary.with_medium_candidate || 0} · күштісіз: ${bridgePreview.summary.without_strong_candidate}.`,
-            `${bridgePreview.summary.bridge_count} bridges · ${bridgePreview.summary.bridge_credits} credits · strong: ${bridgePreview.summary.with_strong_candidate} · medium: ${bridgePreview.summary.with_medium_candidate || 0} · without strong: ${bridgePreview.summary.without_strong_candidate}.`
-            )}
+            <strong>{t('replacement_summary')}:</strong>{' '}
+            {t('replacement_summary_text').replace('{count}', bridgePreview.summary.bridge_count).replace('{credits}', bridgePreview.summary.bridge_credits).replace('{strong}', bridgePreview.summary.with_strong_candidate).replace('{medium}', bridgePreview.summary.with_medium_candidate || 0).replace('{without}', bridgePreview.summary.without_strong_candidate)}
             <div style={{ marginTop: 4 }}>
             {bridgePreview.summary.diagnosis}
             </div>
@@ -85,7 +76,7 @@ export default function BridgeReplacementPanel({
             )}
             {bridgePreview.elapsed_seconds !== undefined && (
             <div style={{ fontSize: 12, color: '#6d4c41' }}>
-            {localText(`Поиск замен выполнен за ${bridgePreview.elapsed_seconds}s.`, `Ауыстыруларды іздеу ${bridgePreview.elapsed_seconds}s ішінде орындалды.`, `Replacement search completed in ${bridgePreview.elapsed_seconds}s.`)}
+            {t('replacement_search_done').replace('{seconds}', bridgePreview.elapsed_seconds)}
             </div>
             )}
             {(bridgePreview.suggestions || []).map(row => {
@@ -106,7 +97,7 @@ export default function BridgeReplacementPanel({
             onChange={() => setSelectedBridgeReplacements(current => ({ ...current, [row.bridge_item_id]: c.course_id }))}
             />
             <strong>→ {localizedCourseField(c.title_translations, c.title)}</strong>
-            </label> · {c.credits} {t('credits')} · {c.quality_level === 'strong' ? localText('сильная', 'күшті', 'strong') : localText('средняя, нужно подтвердить', 'орташа, растау керек', 'medium, needs confirmation')} · AI {Math.round((c.model_score || 0) * 100)}% · EPVO {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
+            </label> · {c.credits} {t('credits')} · {c.quality_level === 'strong' ? t('strong_quality') : t('medium_quality')} · {t('ai_short')} {Math.round((c.model_score || 0) * 100)}% · {t('epvo_short')} {Math.round((c.expert_score || 0) * 100)}% · LO {Math.round((c.coverage_ratio || 0) * 100)}%
             <div style={{ marginTop: 3, color: '#5d6470', lineHeight: 1.35 }}>{c.description}</div>
             </span>
             <button
@@ -116,14 +107,14 @@ export default function BridgeReplacementPanel({
             onClick={() => applyBridgeReplacement(row.bridge_item_id, c.course_id)}
             >
             {replacingBridge === `${row.bridge_item_id}:${c.course_id}`
-            ? localText('Добавление…', 'Қосу…', 'Adding…')
-            : localText('Подтвердить замену', 'Ауыстыруды растау', 'Confirm replacement')}
+            ? t('adding')
+            : t('confirm_replacement')}
             </button>
             </div>
             ))}
             </div>
             ) : (
-            <div style={{ marginTop: 4, color: '#8a5a00' }}>{localText('Сильной замены пока нет. Автозамена требует подтверждение ЕПВО ≥ 50%, покрытие ≥ 75% профессиональных LO, близкие кредиты и область выбранного направления.', 'Әзірше күшті ауыстыру жоқ. Автоауыстыру үшін ЕПВО растауы ≥ 50%, кәсіби ОН қамтуы ≥ 75%, жақын кредиттер және таңдалған бағыт қажет.', 'No strong replacement yet. Automatic replacement requires EPVO evidence ≥ 50%, coverage of ≥ 75% of professional LOs, similar credits, and the selected programme scope.')}</div>
+            <div style={{ marginTop: 4, color: '#8a5a00' }}>{t('no_strong_replacement')}</div>
             )}
             <button
             className="btn btn-secondary"
@@ -132,8 +123,8 @@ export default function BridgeReplacementPanel({
             onClick={() => loadAiBridgeCandidates(row.bridge_item_id)}
             >
             {loadingAiBridge === row.bridge_item_id
-            ? localText('ИИ подбирает 3 варианта…', 'ЖИ 3 нұсқа таңдауда…', 'AI is generating 3 options…')
-            : localText('Подобрать 3 дисциплины через ИИ', 'ЖИ арқылы 3 пән ұсыну', 'Generate 3 courses with AI')}
+            ? t('ai_generating')
+            : t('generate_ai_courses')}
             </button>
             {aiBridgeCandidates[row.bridge_item_id] && (
             <div style={{ marginTop: 8, display: 'grid', gap: 7 }}>
@@ -149,13 +140,13 @@ export default function BridgeReplacementPanel({
             onClick={() => confirmAiBridgeCandidate(row.bridge_item_id, candidate)}
             >
             {confirmingAiBridge === `${row.bridge_item_id}:${candidate.candidate_id}`
-            ? localText('Подтверждение…', 'Растау…', 'Confirming…')
-            : localText('Подтвердить и заменить bridge', 'Растау және bridge ауыстыру', 'Confirm and replace bridge')}
+            ? t('confirming')
+            : t('confirm_replace_bridge')}
             </button>
             </div>
             ))}
             <div style={{ fontSize: 11, color: '#7a6570' }}>
-            {localText('Это предложение ИИ. В план оно попадёт только после вашего подтверждения.', 'Бұл ЖИ ұсынысы. Жоспарға тек сіз растағаннан кейін енгізіледі.', 'This is an AI proposal. It enters the plan only after your confirmation.')}
+            {t('ai_proposal')}
             </div>
             </div>
             )}
@@ -167,8 +158,8 @@ export default function BridgeReplacementPanel({
             {requiresRegeneration && (
             <button className="btn btn-primary" onClick={handleBuild} disabled={building} style={{ marginTop: 10 }}>
             {building
-            ? localText('Перестроение…', 'Қайта құру…', 'Rebuilding…')
-            : localText('Перегенерировать A/B/C с изменениями', 'Өзгерістермен A/B/C қайта құру', 'Regenerate A/B/C with changes')}
+            ? t('rebuilding')
+            : t('regenerate_changes')}
             </button>
             )}
             </div>

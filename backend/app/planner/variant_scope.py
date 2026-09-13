@@ -19,7 +19,8 @@ from app.config import settings
 from app.models.course import Course
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
-from app.planner.domain_evidence import domain_credit_shares
+from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.services.epvo_repository import epvo_row_relevance_score
 
 
@@ -79,9 +80,16 @@ def build_epvo_scope_index(
         cast(EpvoDisciplineNormalized.direction_codes, String).like(f'%"{code}"%')
         for code in direction_codes
     ]
+    # Keep both sides of the legacy EPVO mapping.  Some imports attached the
+    # approved course to a duplicate normalized row, while Course.course_id
+    # references the canonical EPVO row containing the group/direction codes.
+    epvo_course_index = epvo_code_index(courses)
+    epvo_ids = set(epvo_course_index)
     matched_rows = db.query(EpvoDisciplineNormalized).filter(
-        EpvoDisciplineNormalized.approved_course_id.isnot(None),
-        EpvoDisciplineNormalized.approved_course_id.in_(list(aggregates) or [-1]),
+        or_(
+            EpvoDisciplineNormalized.approved_course_id.in_(list(aggregates) or [-1]),
+            EpvoDisciplineNormalized.id.in_(epvo_ids or [-1]),
+        ),
         or_(*scope_conditions),
     ).all()
     total_semesters = int(constraints.get("total_semesters") or 8)
@@ -97,7 +105,10 @@ def build_epvo_scope_index(
             continue
         source_count = len(row.source_programs or [])
         relevance_value = epvo_row_relevance_score(row, version)
-        programme_evidence = aggregates.get(int(row.approved_course_id), {})
+        course_id = linked_course_id(row, epvo_course_index) or 0
+        if not course_id:
+            continue
+        programme_evidence = aggregates.get(course_id, {})
         strong_program_evidence = (
             float(programme_evidence.get("max") or 0.0) >= float(settings.COVERAGE_THRESHOLD)
             or float(programme_evidence.get("expert") or 0.0) >= 0.5
@@ -106,7 +117,6 @@ def build_epvo_scope_index(
         # title relevance fallback is applied only to direction-level matches.
         if relevance_value < 0.52 and rank_value < 3 and not strong_program_evidence:
             continue
-        course_id = int(row.approved_course_id)
         result.level_scope_allowed_ids.add(course_id)
         typical_semester = int(row.typical_semester or 0)
         if 1 <= typical_semester <= total_semesters:
@@ -124,6 +134,15 @@ def build_epvo_scope_index(
         )
         mapped_course = courses.get(course_id)
         if mapped_course:
+            # Strong semantic LO evidence can be valid even when a normalized
+            # EPVO row has no usable group/direction code. In that case retain
+            # the explicit catalogue domain label so quota accounting does not
+            # silently assign the course to neither project domain.
+            if not primary_scope and not secondary_scope:
+                if domain_label_matches(mapped_course.domain, [version.project.domain1]):
+                    primary_scope = 1
+                elif domain_label_matches(mapped_course.domain, [version.project.domain2]):
+                    secondary_scope = 1
             result.scope_by_course[mapped_course.id] = max(
                 result.scope_by_course.get(mapped_course.id, 0), rank_value
             )
@@ -140,6 +159,25 @@ def build_epvo_scope_index(
                 result.priority_by_title[key] = max(
                     result.priority_by_title.get(key, 0), priority_value
                 )
+
+    # Some approved rows have no usable group/direction code after import,
+    # but retain a canonical domain label and strong programme-specific LO
+    # evidence. Keep those courses visible to quota optimization; otherwise
+    # domain1 can appear empty even though the catalogue contains valid rows.
+    for course_id, course in courses.items():
+        if course_id in result.domain_evidence_by_course:
+            continue
+        if not str(course.course_id or "").startswith("EPVO-"):
+            continue
+        evidence = aggregates.get(course_id, {})
+        if not evidence.get("professional_lo_codes") or float(evidence.get("max") or 0.0) < float(settings.COVERAGE_THRESHOLD):
+            continue
+        primary = domain_label_matches(course.domain, [version.project.domain1])
+        secondary = domain_label_matches(course.domain, [version.project.domain2])
+        if not primary and not secondary:
+            continue
+        result.level_scope_allowed_ids.add(course_id)
+        result.domain_evidence_by_course[course_id] = [1 if primary else 0, 1 if secondary else 0]
 
     for course_id, (primary_score, secondary_score) in result.domain_evidence_by_course.items():
         if primary_score or secondary_score:

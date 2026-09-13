@@ -10,6 +10,28 @@ from app.kag.embedding_service import embedding_service
 from app.kag.indexing import index_all_courses
 from app.models.embedding import Embedding
 from app.config import settings
+from app.planner.domain_evidence import domain_label_matches
+
+
+_DOMAIN_FAMILY_TERMS = (
+    (("health", "medicine", "medical", "здрав", "медицин", "клинич"),
+     ("health", "medicine", "medical", "здрав", "медицин", "клинич", "пациент", "биомедицин", "анатом", "фармак")),
+    (("agri", "agro", "сельск", "аграр", "агроном", "ауыл"),
+     ("agri", "agro", "сельск", "аграр", "агроном", "почв", "растен", "урожа", "егін")),
+    (("information", "communication", "информац", "коммуникац", "ict", "computer", "цифр"),
+     ("information", "communication", "информац", "коммуникац", "ict", "computer", "цифр", "данн", "алгорит", "программ")),
+)
+
+
+def _domain_family_overlap(domain: str, text: str) -> bool:
+    """Return true only when the course domain and LO share a known family."""
+    domain_value = str(domain or "").casefold()
+    text_value = str(text or "").casefold()
+    return any(
+        any(marker in domain_value for marker in domain_markers)
+        and any(marker in text_value for marker in lo_markers)
+        for domain_markers, lo_markers in _DOMAIN_FAMILY_TERMS
+    )
 from app.kag.epvo_two_stage import epvo_two_stage_ranker
 from app.services.content_localization import (
     course_localization_map,
@@ -97,9 +119,13 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
             for program_source_id, source_key, payload_json in raw_rows
         })
         db.info["epvo_raw_lo_text_cache_loaded"] = True
-    links = db.query(EpvoDisciplineLoLink).filter(
-        EpvoDisciplineLoLink.discipline_id == discipline_id,
-    ).limit(EPVO_EXPERT_LINK_LIMIT).all()
+    prefetched = db.info.get("epvo_expert_links_cache")
+    if prefetched is not None and discipline_id in prefetched:
+        links = prefetched[discipline_id]
+    else:
+        links = db.query(EpvoDisciplineLoLink).filter(
+            EpvoDisciplineLoLink.discipline_id == discipline_id,
+        ).limit(EPVO_EXPERT_LINK_LIMIT).all()
     for link in links:
         raw_key = (link.program_source_id, link.lo_source_key)
         if raw_key not in raw_cache:
@@ -242,6 +268,12 @@ def calculate_match_score(
         domain_tokens = _extract_keywords(course.domain.replace("_", " "), top_n=5)
         if any(tok in lo_lower for tok in domain_tokens):
             domain_boost = 0.15
+        elif _domain_family_overlap(course.domain, lo_lower):
+            # Legacy EPVO rows use labels such as ``Medicine`` or
+            # ``Здравоохранение`` while programme LOs use clinical terms.
+            # Treat the explicit family match as bounded evidence, not as a
+            # substitute for LO relevance or the final admission gate.
+            domain_boost = 0.15
 
     # 4. Simple word-overlap fallback
     lo_words = set(lo_lower.split())
@@ -312,8 +344,7 @@ def calculate_match_score(
 def _domain_matches(course: Course, domain_filter: List[str]) -> bool:
     if not domain_filter:
         return True
-    domain = (course.domain or "").lower().strip()
-    return bool(domain) and any(d in domain or domain in d for d in domain_filter if d)
+    return domain_label_matches(course.domain, domain_filter)
 
 
 def _lightweight_candidate_courses(
@@ -353,6 +384,19 @@ def _lightweight_candidate_courses(
     # nlargest avoids materializing and sorting the entire EPVO catalogue.
     ranked = heapq.nlargest(limit, courses, key=rank)
     return [{"course_id": course.id, "retrieval_score": float(rank(course)[0])} for course in ranked[:limit]]
+
+
+def publish_match_scores(db: Session, project_version_id: int, match_scores: list[MatchScore]) -> None:
+    """Atomically replace a version's evidence after a successful computation."""
+    try:
+        db.query(MatchScore).filter(
+            MatchScore.project_version_id == project_version_id
+        ).delete()
+        db.add_all(match_scores)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def compute_all_matches(project_version_id: int, db: Session, progress_callback: object | None = None) -> Dict:
@@ -458,19 +502,39 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
         if active_count == 0 or active_count != total_count:
             index_all_courses(db)
 
-    # Delete stale match scores for this version
-    db.query(MatchScore).filter(
-        MatchScore.project_version_id == project_version_id
-    ).delete()
-    db.commit()
-
     total_matches = 0
+    # Do not delete the last known evidence before an expensive recomputation
+    # has succeeded. A model/database failure during any LO used to leave
+    # otherwise valid saved plans without their MatchScore provenance.
+    pending_match_scores: list[MatchScore] = []
     lo_coverage: Dict[str, Dict] = {}
     feedback_by_pair = {}
     for feedback in db.query(MatchFeedback).filter(
         MatchFeedback.project_version_id == project_version_id
     ).order_by(MatchFeedback.created_at.desc()).all():
         feedback_by_pair.setdefault((feedback.course_id, feedback.lo_id), feedback)
+
+    # Expert evidence used to issue one Link query per candidate/LO pair.
+    # That is effectively an N+1 query multiplied by the number of outcomes
+    # and was the dominant latency on medium catalogues.  Keep the same
+    # per-discipline limit and ordering, but load the immutable link rows once
+    # for this build session.
+    epvo_discipline_ids = sorted({
+        discipline_id
+        for discipline_id in (_epvo_id_from_course(course) for course in project_courses)
+        if discipline_id is not None
+    })
+    if epvo_discipline_ids:
+        prefetched_links = db.query(EpvoDisciplineLoLink).filter(
+            EpvoDisciplineLoLink.discipline_id.in_(epvo_discipline_ids)
+        ).order_by(EpvoDisciplineLoLink.discipline_id, EpvoDisciplineLoLink.id).all()
+        db.info["epvo_expert_links_cache"] = {
+            discipline_id: [] for discipline_id in epvo_discipline_ids
+        }
+        for link in prefetched_links:
+            bucket = db.info["epvo_expert_links_cache"].setdefault(link.discipline_id, [])
+            if len(bucket) < EPVO_EXPERT_LINK_LIMIT:
+                bucket.append(link)
 
     def apply_feedback_score(course_id: int, lo_id: int, score: float, evidence: Dict) -> float:
         feedback = feedback_by_pair.get((course_id, lo_id))
@@ -512,7 +576,12 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             top_courses = _lightweight_candidate_courses(
                 lo,
                 project_courses,
-                limit=max(settings.TOP_K_RETRIEVAL, 80),
+                # Keep the broad lexical frontier bounded.  The previous
+                # hard floor of 80 multiplied SBERT work for every LO and
+                # made large-catalogue builds spend most of their time in
+                # scoring.  Domain-specific additions below still preserve
+                # representation of each selected scope.
+                limit=max(settings.TOP_K_RETRIEVAL, 40),
                 localizations=localizations,
             )
             # Guarantee representation of every selected EPVO scope. Without
@@ -548,6 +617,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
         ]
         if progress_callback:
             progress_callback({"stage": "candidate_texts_ready", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(candidate_texts)})
+            progress_callback({"stage": "embedding_start", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(candidate_texts)})
         embedding_started = time.perf_counter()
         candidate_embeddings = embedding_service.encode_batch(candidate_texts)
         if progress_callback:
@@ -579,6 +649,17 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
         if progress_callback:
             progress_callback({"stage": "lo_candidates_scored", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(pending_matches)})
 
+        # The lexical/semantic pass already scores the complete bounded
+        # frontier.  Re-ranking every scoped candidate again multiplied model
+        # work for interdisciplinary LOs; keep the strongest initial scores
+        # for the expensive second stage and retain the first-stage score for
+        # the remaining candidates.
+        rerank_limit = max(40, int(settings.TOP_K_RETRIEVAL))
+        rerank_pool = sorted(
+            pending_matches,
+            key=lambda pair: float(pair[1].get("score") or 0.0),
+            reverse=True,
+        )[:rerank_limit]
         reranked = epvo_two_stage_ranker.rerank(lo.lo_text, [
             {
                 "course_id": course.id,
@@ -587,7 +668,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 "classifier_similarity": float((result["evidence"] or {}).get("semantic_score") or 0),
                 "expert_score": float((result["evidence"] or {}).get("epvo_expert_score") or 0),
             }
-            for course, result in pending_matches
+            for course, result in rerank_pool
         ])
 
         for course, match_result in pending_matches:
@@ -610,7 +691,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 score=adjusted_score,
                 evidence_json=match_result["evidence"],
             )
-            db.add(match_score)
+            pending_match_scores.append(match_score)
             total_matches += 1
             lo_scores.append(adjusted_score)
 
@@ -635,7 +716,10 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 "matches": total_matches,
             })
 
-    db.commit()
+    # Publishing the replacement is intentionally the final mutation of this
+    # computation. If any prior stage raises, the caller rolls back and the
+    # previous evidence remains queryable.
+    publish_match_scores(db, project_version_id, pending_match_scores)
 
     return {
         "total_matches": total_matches,

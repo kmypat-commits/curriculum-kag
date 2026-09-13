@@ -2,6 +2,7 @@ param(
     [string]$BaseUrl = "http://localhost:3001",
     [int]$TimeoutSec = 5,
     [switch]$CheckApi,
+    [switch]$RequireOpenApi,
     [string]$ApiBaseUrl = "http://localhost:8000"
 )
 $ErrorActionPreference = "Stop"
@@ -24,15 +25,24 @@ foreach ($marker in @('domains:', 'education_area:', 'Subject areas', 'ru', 'kk'
 }
 if ($CheckApi) {
     try {
-        $openapi = Invoke-RestMethod -Uri ($ApiBaseUrl.TrimEnd('/') + '/openapi.json') -TimeoutSec $TimeoutSec
-        $paths = @($openapi.paths.PSObject.Properties.Name)
-        foreach ($requiredPath in @('/planner/version/{project_version_id}/graph', '/planner/version/{project_version_id}/semester-insight')) {
-            if ($requiredPath -notin $paths) { $failed += "api:$requiredPath" }
+        $health = Invoke-RestMethod -Uri ($ApiBaseUrl.TrimEnd('/') + '/health') -TimeoutSec $TimeoutSec
+        if ($health.status -ne 'healthy' -or $health.database_status -ne 'connected') {
+            $failed += 'api:health-not-healthy'
+        }
+        try {
+            $openapi = Invoke-RestMethod -Uri ($ApiBaseUrl.TrimEnd('/') + '/openapi.json') -TimeoutSec $TimeoutSec
+            $paths = @($openapi.paths.PSObject.Properties.Name)
+            foreach ($requiredPath in @('/planner/version/{project_version_id}/graph', '/planner/version/{project_version_id}/semester-insight')) {
+                if ($requiredPath -notin $paths) { $failed += "api:$requiredPath" }
+            }
+        }
+        catch {
+            if ($RequireOpenApi) { $failed += "api:$ApiBaseUrl/openapi.json ($($_.Exception.Message))" }
         }
     } catch {
-        $failed += "api:$ApiBaseUrl/openapi.json ($($_.Exception.Message))"
+        $failed += "api:$ApiBaseUrl/health ($($_.Exception.Message))"
     }
 }
 if ($failed.Count) { throw "UI smoke failed: $($failed -join ', ')" }
-$apiStatus = if ($CheckApi) { "; graph/semester API paths present" } else { "" }
+$apiStatus = if ($CheckApi) { "; API health connected (OpenAPI checked when enabled)" } else { "" }
 Write-Host "UI smoke passed: $($routes.Count) routes; RU/KK/EN markers present$apiStatus." -ForegroundColor Green

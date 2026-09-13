@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import LanguageSelector from '../components/LanguageSelector'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { formatApiError } from '../utils/errors'
+import { localizedCopy } from '../utils/i18n'
 
 const pct = value => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%`
 const num = value => Number(value || 0).toLocaleString()
@@ -18,15 +19,18 @@ export default function ResearchDashboard() {
     const [gnnStatus, setGnnStatus] = useState(null)
     const [lstmStatus, setLstmStatus] = useState(null)
     const [articleReport, setArticleReport] = useState(null)
+    const [observability, setObservability] = useState(null)
     const [startingGnn, setStartingGnn] = useState(false)
     const [startingLstm, setStartingLstm] = useState(false)
+    const [cancellingGnn, setCancellingGnn] = useState(false)
+    const [cancellingLstm, setCancellingLstm] = useState(false)
     const [error, setError] = useState(null)
 
-    const l = (ru, kk, en) => language === 'kk' ? kk : language === 'en' ? en : ru
+    const l = (...args) => localizedCopy(language, ...args)
 
     const loadAll = async () => {
         try {
-            const [passportRes, feedbackRes, baselineRes, manifestRes, statusRes, lstmStatusRes, articleReportRes] = await Promise.allSettled([
+            const [passportRes, feedbackRes, baselineRes, manifestRes, statusRes, lstmStatusRes, articleReportRes, observabilityRes] = await Promise.allSettled([
                 axios.get('/api/epvo/dataset-passport'),
                 axios.get('/api/epvo/expert-feedback?limit=20'),
                 axios.get('/api/epvo/reproducible-baseline'),
@@ -34,6 +38,7 @@ export default function ResearchDashboard() {
                 axios.get('/api/epvo/lstm-gnn-smoke/status'),
                 axios.get('/api/epvo/lstm-smoke/status'),
                 axios.get('/api/epvo/article-experiment-report'),
+                axios.get('/api/planner/observability/summary'),
             ])
             if (passportRes.status === 'fulfilled') setData(passportRes.value.data)
             else setError(formatApiError(passportRes.reason, t('error')))
@@ -43,6 +48,7 @@ export default function ResearchDashboard() {
             setGnnStatus(statusRes.status === 'fulfilled' ? statusRes.value.data : null)
             setLstmStatus(lstmStatusRes.status === 'fulfilled' ? lstmStatusRes.value.data : null)
             setArticleReport(articleReportRes.status === 'fulfilled' ? articleReportRes.value.data : null)
+            setObservability(observabilityRes.status === 'fulfilled' ? observabilityRes.value.data : null)
         } catch (err) {
             setError(formatApiError(err, t('error')))
         }
@@ -124,11 +130,35 @@ export default function ResearchDashboard() {
         setLstmStatus(response.data)
     }
 
+    const cancelGnnSmoke = async () => {
+        setCancellingGnn(true)
+        try {
+            const response = await axios.post('/api/epvo/lstm-gnn-smoke/cancel')
+            setGnnStatus(response.data)
+        } catch (err) {
+            setError(formatApiError(err, t('error')))
+        } finally {
+            setCancellingGnn(false)
+        }
+    }
+
+    const cancelLstmSmoke = async () => {
+        setCancellingLstm(true)
+        try {
+            const response = await axios.post('/api/epvo/lstm-smoke/cancel')
+            setLstmStatus(response.data)
+        } catch (err) {
+            setError(formatApiError(err, t('error')))
+        } finally {
+            setCancellingLstm(false)
+        }
+    }
+
     if (error) {
         return (
             <div className="workspace-page">
                 <header className="workspace-header"><div className="container"><Link to="/">← {t('back')}</Link><h1>{t('research_dashboard')}</h1></div></header>
-                <main className="container workspace-main"><div className="card" style={{ borderLeft: '5px solid #c62828' }}>{error}</div></main>
+                <main className="container workspace-main"><div className="card" style={{ border: '1px solid #e9b3b3', background: '#fff7f7' }}>{error}</div></main>
             </div>
         )
     }
@@ -153,15 +183,31 @@ export default function ResearchDashboard() {
                 </div>
             </header>
             <main className="container workspace-main">
-                <section className="card" style={{ borderLeft: '4px solid #2f80ed' }}>
-                    <h2 style={{ marginTop: 0 }}>Коротко о качестве системы</h2>
+                <section className="card" style={{ borderTop: '2px solid #2f80ed' }}>
+                    <h2 style={{ marginTop: 0 }}>{l('Коротко о качестве системы', 'Жүйе сапасы туралы қысқаша', 'System quality at a glance')}</h2>
                     <div className="quick-grid">
-                        <div><b>Данные</b><br />Система использует нормализованные программы и дисциплины ЕПВО, а не случайный список предметов.</div>
-                        <div><b>Что проверяется</b><br />Связь дисциплины с результатом обучения, порядок пререквизитов, кредиты и нагрузка по семестрам.</div>
-                        <div><b>Как понимать оценку</b><br />Модель предлагает связь, но эксперт может подтвердить, ослабить или отклонить её. Решение остаётся за экспертом.</div>
+                        <div><b>{l('Данные', 'Деректер', 'Data')}</b><br />{l('Система использует нормализованные программы и дисциплины ЕПВО, а не случайный список предметов.', 'Жүйе кездейсоқ пәндер тізімін емес, нормаланған бағдарламалар мен ЕПВО пәндерін пайдаланады.', 'The system uses normalized programs and EPVO courses, not an arbitrary subject list.')}</div>
+                        <div><b>{l('Что проверяется', 'Не тексеріледі', 'What is checked')}</b><br />{l('Связь дисциплины с результатом обучения, порядок пререквизитов, кредиты и нагрузка по семестрам.', 'Пәннің оқу нәтижесімен байланысы, пререквизиттер реті, кредиттер және семестрлік жүктеме.', 'Course-to-outcome links, prerequisite order, credits, and semester workload.')}</div>
+                        <div><b>{l('Как понимать оценку', 'Бағаны қалай түсінуге болады', 'How to read the score')}</b><br />{l('Модель предлагает связь, но эксперт может подтвердить, ослабить или отклонить её. Решение остаётся за экспертом.', 'Модель байланыс ұсынады, бірақ сарапшы оны растай, әлсірете немесе қабылдамай тастай алады. Соңғы шешім сарапшыда.', 'The model suggests a link, but an expert can confirm, weaken, or reject it. The decision remains with the expert.')}</div>
                     </div>
-                    <p className="page-subtitle" style={{ marginBottom: 0 }}>Подробные метрики нужны для исследования; для работы с ОП достаточно смотреть качество плана и экспертные подтверждения.</p>
+                    <p className="page-subtitle" style={{ marginBottom: 0 }}>{l('Подробные метрики нужны для исследования; для работы с ОП достаточно смотреть качество плана и экспертные подтверждения.', 'Толық метрикалар зерттеу үшін қажет; ОП-мен жұмыс істеу үшін жоспар сапасы мен сарапшы растауларын қарау жеткілікті.', 'Detailed metrics support research; for program work, review plan quality and expert confirmations.')}</p>
                 </section>
+                {observability && (
+                    <section className="card" aria-label={l('Наблюдаемость планировщика', 'Жоспарлағыш бақылауы', 'Planner observability')}>
+                        <div className="section-head">
+                            <h2>{l('Наблюдаемость планировщика', 'Жоспарлағыш бақылауы', 'Planner observability')}</h2>
+                            <span className={observability.p95_within_budget === false ? 'status-pill status-draft' : 'status-pill status-active'}>
+                                {observability.p95_within_budget === false ? l('P95 выше бюджета', 'P95 бюджеттен жоғары', 'P95 over budget') : l('Сигналы доступны', 'Сигналдар қолжетімді', 'Signals available')}
+                            </span>
+                        </div>
+                        <div className="quick-grid">
+                            <div><b>{l('Состояния jobs', 'Job күйлері', 'Job states')}</b><br />{Object.entries(observability.build_states || {}).map(([state, count]) => `${state}: ${count}`).join(' · ') || '—'}</div>
+                            <div><b>{l('Ошибки и timeout', 'Қателер және timeout', 'Failures and timeouts')}</b><br />{observability.failed_or_timed_out ?? 0}</div>
+                            <div><b>{l('Активные leases', 'Белсенді lease', 'Active leases')}</b><br />{observability.active_leases ?? 0}</div>
+                            <div><b>p95</b><br />{observability.duration_ms?.p95 == null ? '—' : `${observability.duration_ms.p95} ms`} / {observability.p95_budget_ms} ms</div>
+                        </div>
+                    </section>
+                )}
                 <div className="stat-grid">
                     <div className="stat-card"><div className="stat-value">{num(n.raw_programs)}</div><div className="stat-label">{t('epvo_programs')}</div></div>
                     <div className="stat-card"><div className="stat-value">{num(n.normalized_disciplines)}</div><div className="stat-label">{t('normalized_courses')}</div></div>
@@ -289,10 +335,16 @@ export default function ResearchDashboard() {
                         <button className="btn btn-primary" onClick={startGnnSmoke} disabled={startingGnn || gnnStatus?.state === 'running'}>
                             {startingGnn ? l('Запуск…', 'Іске қосу…', 'Starting…') : l('Запустить GNN smoke', 'GNN smoke іске қосу', 'Run GNN smoke')}
                         </button>
+                        {gnnStatus?.state === 'running' && <button className="btn btn-secondary" onClick={cancelGnnSmoke} disabled={cancellingGnn}>
+                            {cancellingGnn ? l('Отмена…', 'Бас тартылуда…', 'Cancelling…') : l('Остановить GNN', 'GNN тоқтату', 'Cancel GNN')}
+                        </button>}
                         <button className="btn btn-secondary" onClick={refreshGnnStatus}>{l('Обновить статус', 'Күйді жаңарту', 'Refresh status')}</button>
                         <button className="btn btn-primary" onClick={startLstmSmoke} disabled={startingLstm || lstmStatus?.state === 'running'}>
                             {startingLstm ? l('Запуск…', 'Іске қосу…', 'Starting…') : l('Запустить LSTM smoke', 'LSTM smoke іске қосу', 'Run LSTM smoke')}
                         </button>
+                        {lstmStatus?.state === 'running' && <button className="btn btn-secondary" onClick={cancelLstmSmoke} disabled={cancellingLstm}>
+                            {cancellingLstm ? l('Отмена…', 'Бас тартылуда…', 'Cancelling…') : l('Остановить LSTM', 'LSTM тоқтату', 'Cancel LSTM')}
+                        </button>}
                         <button className="btn btn-secondary" onClick={refreshLstmStatus}>{l('Обновить LSTM', 'LSTM жаңарту', 'Refresh LSTM')}</button>
                     </div>
                     {gnnStatus?.message && <p className="page-subtitle" style={{ fontSize: 13 }}>{gnnStatus.message}</p>}

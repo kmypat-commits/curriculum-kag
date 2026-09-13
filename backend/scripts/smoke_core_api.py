@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from urllib.error import HTTPError, URLError
@@ -52,9 +53,16 @@ def main() -> int:
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
 
-    login_body = urlencode({"username": "admin@curriculum-kag.local", "password": "admin123"}).encode("utf-8")
+    email = os.getenv("CURRICULUM_LOCAL_EMAIL")
+    password = os.getenv("CURRICULUM_LOCAL_PASSWORD")
+    if not email or not password:
+        raise RuntimeError(
+            "Set CURRICULUM_LOCAL_EMAIL and CURRICULUM_LOCAL_PASSWORD; "
+            "smoke tests never use demo credentials."
+        )
+    login_body = urlencode({"username": email, "password": password}).encode("utf-8")
     login_request = Request(
-        f"{base}/auth/login",
+        f"{base}/auth/token",
         data=login_body,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST",

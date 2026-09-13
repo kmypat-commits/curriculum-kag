@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Dict, List
 
 from sqlalchemy import func
@@ -40,6 +41,7 @@ def _repair_final_admission_misplacements(
         for semester, items in schedule.items()
     }
     constraints = project_version.project.constraints_json or {}
+    repair_deadline = time.perf_counter() + 8.0
     num_semesters = int(constraints.get("total_semesters", len(normalized)) or len(normalized))
     seed_candidate_ids = {
         int(item["course_id"]) for item in candidate_pool
@@ -136,11 +138,16 @@ def _repair_final_admission_misplacements(
     candidate_pool = _unique_items_by_title(expanded_pool)
 
     for _ in range(6):
+        if time.perf_counter() >= repair_deadline:
+            break
         admission = _audit_final_course_admission(normalized, project_version, db)
         misplaced = next(
             (
                 row for row in admission["violations"]
-                if row.get("reason") == "too_early_for_complexity"
+                if row.get("reason") in {
+                    "too_early_for_complexity",
+                    "foreign_professional_context",
+                }
             ),
             None,
         )
@@ -164,7 +171,12 @@ def _repair_final_admission_misplacements(
                 "semester_misplacements"
             ) or []
         )
-        minimum_target = int(misplaced.get("minimum_semester") or semester + 1)
+        foreign_context = misplaced.get("reason") == "foreign_professional_context"
+        minimum_target = (
+            semester
+            if foreign_context
+            else int(misplaced.get("minimum_semester") or semester + 1)
+        )
         loads = {
             value: sum(int(item.get("credits") or 0) for item in items)
             for value, items in normalized.items()
@@ -173,7 +185,13 @@ def _repair_final_admission_misplacements(
         upper_load = int(constraints.get("max_credits_per_semester", 30) or 30) + 3
         relocated = False
         for target_semester in range(minimum_target, num_semesters + 1):
+            if time.perf_counter() >= repair_deadline:
+                break
+            if foreign_context:
+                break
             for target_index, displaced in enumerate(normalized[target_semester]):
+                if time.perf_counter() >= repair_deadline:
+                    break
                 if (
                     displaced.get("course_id") is None
                     or displaced.get("regulatory_required")
@@ -276,6 +294,7 @@ def _repair_final_admission_misplacements(
             ) <= 2
             and (
                 not old_domain
+                or foreign_context
                 or old_family == domain_family(item.get("domain"))
             )
         ]
@@ -286,6 +305,8 @@ def _repair_final_admission_misplacements(
         ))
         repaired = False
         for alternative in alternatives:
+            if time.perf_counter() >= repair_deadline:
+                break
             course = courses.get(int(alternative["course_id"]))
             if not course or semester < _minimum_appropriate_semester(
                 alternative, course, num_semesters
@@ -321,7 +342,11 @@ def _repair_final_admission_misplacements(
             if (
                 int(checked.get("hard_violation_count") or 0)
                 > int(current_check.get("hard_violation_count") or 0)
-                or checked_misplacements >= current_misplacements
+                or (
+                    checked_misplacements >= current_misplacements
+                    if not foreign_context
+                    else checked_misplacements > current_misplacements
+                )
                 or not _audit_final_course_admission(trial, project_version, db)["passed"]
             ):
                 continue

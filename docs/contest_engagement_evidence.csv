@@ -1,0 +1,16 @@
+metric,value,unit,period,status,definition_or_source
+Approved discipline cards,21525,records,as of submission,confirmed,Knowledge base aggregate
+Normalized discipline-learning-outcome links,932483,links,as of submission,confirmed,Knowledge graph aggregate
+Programs in AI evaluation,114,programs,completed evaluation,confirmed,Research evaluation report
+Evaluation test pairs,6000,pairs,completed evaluation,confirmed,Research evaluation set
+Supported education levels,3,levels,as of submission,confirmed,Bachelor master doctoral
+Supported languages,3,languages,as of submission,confirmed,Russian Kazakh English
+MAU,,users,pilot period,not measured,Collect from product analytics after pilot launch
+DAU,,users,pilot period,not measured,Collect from product analytics after pilot launch
+Average session duration,,minutes,pilot period,not measured,Collect from product analytics after pilot launch
+Course completion rate,,percent,pilot period,not measured,No production learner cohort yet
+Learning hours,,hours,pilot period,not measured,No production learner cohort yet
+Expert recommendation acceptance rate,,percent,pilot period,planned,Measure during institutional pilot
+Program preparation time before system,,minutes,pilot baseline,planned,Collect baseline interviews and timed tasks
+Program preparation time with system,,minutes,pilot period,planned,Collect timed pilot tasks
+Before-after improvement,,percent,pilot comparison,planned,Calculate only after paired baseline data exists

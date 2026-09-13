@@ -61,4 +61,6 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1 -Database sqlite
 ```
 
 Для PostgreSQL повторите обычный запуск после старта Docker Desktop. Проверка
-состояния базы доступна через `http://127.0.0.1:8000/health`.
+восстановления Docker Desktop без потери перенесённого VHDX описана в
+[`docs/DOCKER_INSTALL_RECOVERY_RU.md`](docs/DOCKER_INSTALL_RECOVERY_RU.md).
+Проверка состояния базы доступна через `http://127.0.0.1:8000/health`.

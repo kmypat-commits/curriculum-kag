@@ -7,7 +7,8 @@ independently.
 
 from __future__ import annotations
 
-from typing import Mapping
+from functools import partial
+from typing import Callable, Mapping
 
 from app.models.course import Course
 from app.planner.course_policy import course_role_rank
@@ -46,6 +47,33 @@ def project_domain_share(
     if shares is not None:
         return shares[domain_index]
     return 1.0 if project_domain_index_fn(course) == domain_index else 0.0
+
+
+def build_domain_policy_callbacks(
+    *,
+    project_domains: list[str],
+    epvo_domain_index: Mapping[int, int],
+    epvo_domain_shares: Mapping[int, tuple[float, float]],
+) -> tuple[Callable[[Course], int | None], Callable[[Course | None, int], float]]:
+    """Bind domain evidence after the scoped EPVO index has been loaded.
+
+    The planner first determines the programme scope, then receives normalized
+    per-course domain evidence from that scope.  Constructing these callbacks
+    before that step captures empty dictionaries and silently makes legitimate
+    secondary-domain courses look unrelated.  Keeping the factory here makes
+    the lifecycle explicit and testable.
+    """
+    domain_index = partial(
+        project_domain_index,
+        project_domains=project_domains,
+        epvo_domain_index=epvo_domain_index,
+    )
+    domain_share = partial(
+        project_domain_share,
+        epvo_domain_shares=epvo_domain_shares,
+        project_domain_index_fn=domain_index,
+    )
+    return domain_index, domain_share
 
 
 def scope_rank(
@@ -162,6 +190,22 @@ def strong_exact_scope_evidence(
     evidence = aggregates.get(course.id, {})
     return (
         not foreign_scope_conflict(course, domain_text)
-        and scope_rank_fn(course) >= 3
         and bool(evidence.get("professional_lo_codes"))
+        and (
+            scope_rank_fn(course) >= 3
+            or float(evidence.get("max") or 0.0) >= 0.8
+        )
+    )
+
+
+def frontier_admissible(
+    course: Course,
+    *,
+    is_project_domain,
+    strong_exact_scope_evidence,
+) -> bool:
+    """Keep strongly scoped EPVO rows available to the optimizer."""
+    return bool(is_project_domain(course)) or (
+        str(course.course_id or "").startswith("EPVO-")
+        and bool(strong_exact_scope_evidence(course))
     )

@@ -1,12 +1,15 @@
 ﻿from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy import func, text
-from fastapi import Response
+from fastapi import Response, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, ConfigDict, Field
 import re
 import csv
 import io
+import os
 import subprocess
 import sys
+import signal
 
 from app.database import get_db
 from app.models.epvo import EpvoDirection, EpvoDisciplineLoLink, EpvoDisciplineNormalized, EpvoGroup, RawEpvoLearningOutcome, RawEpvoProgram
@@ -17,12 +20,21 @@ from app.models.course import Course, CourseLocalization
 from app.models.embedding import MatchScore
 from app.models.embedding import MatchFeedback
 from app.services.auth import get_current_user
+from app.services.rbac import require_permission
+from app.services.access import require_project_access, require_project_object_access
 from app.services.epvo_repository import (
     epvo_row_is_relevant,
     epvo_row_relevance_score,
     epvo_row_matches_education_level,
 )
 from app.services.language import epvo_payload_suffix, normalize_language
+from app.schemas.planner import ApplyPriorityRequest
+from app.api.epvo_process_control import (
+    cancel_external_smoke,
+    external_process_alive,
+    reconcile_external_smoke_status,
+)
+from app.api.epvo_metrics import best_model_from_baseline, metric_delta
 import json
 from pathlib import Path
 import time
@@ -42,6 +54,67 @@ _COMPARE_SCOPE_LIMIT = 600
 _COMPARE_TYPICAL_LIMIT = 40
 _COMPARE_PROGRAM_LIMIT = 6
 _COMPARE_LO_LIMIT = 150
+_EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS = 6 * 60 * 60
+
+
+def _external_process_alive(pid: object) -> bool:
+    return external_process_alive(pid)
+
+
+def _reconcile_external_smoke_status(status: dict, status_file: Path, metrics_path: Path) -> dict:
+    # Keep the local predicate injectable for the existing route contract.
+    if status.get("state") == "running" and not metrics_path.exists() and _external_process_alive(status.get("pid")):
+        started_at = status.get("started_at")
+        try:
+            started = time.mktime(time.strptime(str(started_at), "%Y-%m-%dT%H:%M:%SZ"))
+            if time.time() - started <= _EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS:
+                return status
+        except (TypeError, ValueError, OverflowError):
+            return status
+    return reconcile_external_smoke_status(status, status_file, metrics_path)
+
+
+def _cancel_external_smoke(status_file: Path, metrics_path: Path, expected_script: str) -> dict:
+    # Validate command identity before lifecycle reconciliation can classify a
+    # dead PID; cancellation must never operate on an unrelated process.
+    if status_file.exists():
+        try:
+            raw_status = json.loads(status_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="Smoke status file is unreadable") from exc
+        if raw_status.get("state") == "running":
+            command_text = " ".join(str(part) for part in (raw_status.get("command") or []))
+            if expected_script not in command_text:
+                raise HTTPException(status_code=409, detail="Smoke PID identity cannot be verified")
+    return cancel_external_smoke(
+        status_file,
+        metrics_path,
+        expected_script,
+        is_alive=_external_process_alive,
+        reconcile_status=_reconcile_external_smoke_status,
+    )
+
+ # Process lifecycle implementation lives in epvo_process_control.py.
+
+
+class GnnSmokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
+    force: bool = False
+    program_limit: int = Field(default=80, ge=1, le=500)
+    epochs: int = Field(default=10, ge=1, le=50)
+
+
+class LstmSmokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
+    force: bool = False
+    program_limit: int = Field(default=40, ge=1, le=300)
+    epochs: int = Field(default=3, ge=1, le=20)
+    train_batch_size: int = Field(default=16, ge=1, le=128)
+    max_seq_len: int = Field(default=12, ge=1, le=128)
 
 
 def _course_from_epvo(row: EpvoDisciplineNormalized, project: Project, db: Session | None = None) -> Course:
@@ -216,33 +289,14 @@ def _payload_goal(payload: dict, language: str) -> str:
     return payload.get(f"eduGoalName{suffix}") or payload.get("eduGoalNameRu") or payload.get("eduGoalNameEn") or ""
 
 
-def _metric_delta(candidate: dict | None, baseline: dict | None) -> dict:
-    candidate = candidate or {}
-    baseline = baseline or {}
-    keys = ("roc_auc", "pr_auc", "f1")
-    deltas = {
-        key: round(float(candidate.get(key) or 0) - float(baseline.get(key) or 0), 6)
-        for key in keys
-    }
-    beats = all(deltas[key] > 0 for key in ("roc_auc", "pr_auc")) and deltas["f1"] >= 0
-    return {
-        "deltas": deltas,
-        "beats_baseline": beats,
-        "decision": "candidate_can_be_integrated" if beats else "keep_as_experiment",
-        "guardrail": "Integrate only if ROC-AUC and PR-AUC improve and F1 does not decrease on the frozen split.",
-    }
+_metric_delta = metric_delta
 
 
 def _best_model_from_baseline() -> dict:
-    if not BASELINE_REPORT_FILE.exists():
-        return {}
-    try:
-        return json.loads(BASELINE_REPORT_FILE.read_text(encoding="utf-8")).get("best_model") or {}
-    except (OSError, ValueError):
-        return {}
+    return best_model_from_baseline(BASELINE_REPORT_FILE)
 
 
-@router.get("/education-areas")
+@router.get("/education-areas", dependencies=[Depends(require_permission("epvo", "read"))])
 async def education_areas(education_level: str = Query("bachelor"), language: str = Query("ru"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     prefix = {"bachelor": "6B", "master": "7M", "doctorate": "8D"}.get(education_level, "")
     codes = sorted({row[0] for row in db.query(EpvoDirection.education_level).filter(EpvoDirection.code.like(f"{prefix}%")).all() if row[0]})
@@ -250,7 +304,7 @@ async def education_areas(education_level: str = Query("bachelor"), language: st
     return [{"code": code, "title": AREA_NAMES.get(str(code)[-2:], {}).get(lang) or code} for code in codes]
 
 
-@router.get("/directions")
+@router.get("/directions", dependencies=[Depends(require_permission("epvo", "read"))])
 async def directions(education_level: str = Query(""), education_area: str = Query(""), language: str = Query("ru"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(EpvoDirection)
     prefix = {"bachelor": "6B", "master": "7M", "doctorate": "8D"}.get(education_level, "")
@@ -262,13 +316,13 @@ async def directions(education_level: str = Query(""), education_area: str = Que
     return [{"code": row.code, "title": localized(row, language), "education_level": row.education_level} for row in rows]
 
 
-@router.get("/groups")
+@router.get("/groups", dependencies=[Depends(require_permission("epvo", "read"))])
 async def groups(direction_code: str, language: str = Query("ru"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     rows = db.query(EpvoGroup).filter(EpvoGroup.direction_code == direction_code).order_by(EpvoGroup.code).all()
     return [{"code": row.code, "title": localized(row, language), "direction_code": row.direction_code} for row in rows]
 
 
-@router.get("/stats")
+@router.get("/stats", dependencies=[Depends(require_permission("epvo", "read"))])
 async def stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return {
         "raw_programs": db.query(RawEpvoProgram).count(),
@@ -279,7 +333,7 @@ async def stats(db: Session = Depends(get_db), current_user: User = Depends(get_
     }
 
 
-@router.get("/dataset-passport")
+@router.get("/dataset-passport", dependencies=[Depends(require_permission("epvo", "read"))])
 async def dataset_passport(current_user: User = Depends(get_current_user)):
     if not PASSPORT_FILE.exists():
         from fastapi import HTTPException
@@ -287,7 +341,7 @@ async def dataset_passport(current_user: User = Depends(get_current_user)):
     return json.loads(PASSPORT_FILE.read_text(encoding="utf-8"))
 
 
-@router.get("/dataset-passport/export.csv")
+@router.get("/dataset-passport/export.csv", dependencies=[Depends(require_permission("epvo", "read"))])
 async def dataset_passport_csv(current_user: User = Depends(get_current_user)):
     if not PASSPORT_FILE.exists():
         from fastapi import HTTPException
@@ -314,7 +368,7 @@ async def dataset_passport_csv(current_user: User = Depends(get_current_user)):
     )
 
 
-@router.get("/expert-feedback")
+@router.get("/expert-feedback", dependencies=[Depends(require_permission("epvo", "read"))])
 async def expert_feedback_summary(
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -361,7 +415,7 @@ async def expert_feedback_summary(
     return {"total": sum(verdict_counts.values()), "verdict_counts": verdict_counts, "score_counts": score_counts, "recent": recent}
 
 
-@router.get("/reproducible-baseline")
+@router.get("/reproducible-baseline", dependencies=[Depends(require_permission("epvo", "read"))])
 async def reproducible_baseline(current_user: User = Depends(get_current_user)):
     if not BASELINE_REPORT_FILE.exists():
         from fastapi import HTTPException
@@ -369,7 +423,7 @@ async def reproducible_baseline(current_user: User = Depends(get_current_user)):
     return json.loads(BASELINE_REPORT_FILE.read_text(encoding="utf-8"))
 
 
-@router.get("/lstm-gnn-manifest")
+@router.get("/lstm-gnn-manifest", dependencies=[Depends(require_permission("epvo", "read"))])
 async def lstm_gnn_manifest(current_user: User = Depends(get_current_user)):
     if not LSTM_GNN_MANIFEST_FILE.exists():
         from fastapi import HTTPException
@@ -377,7 +431,7 @@ async def lstm_gnn_manifest(current_user: User = Depends(get_current_user)):
     return json.loads(LSTM_GNN_MANIFEST_FILE.read_text(encoding="utf-8"))
 
 
-@router.get("/article-experiment-report")
+@router.get("/article-experiment-report", dependencies=[Depends(require_permission("epvo", "read"))])
 async def article_experiment_report(current_user: User = Depends(get_current_user)):
     path = ARTICLE_REPORT_DIR / "article-experiment-report.json"
     if not path.exists():
@@ -386,7 +440,7 @@ async def article_experiment_report(current_user: User = Depends(get_current_use
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-@router.get("/article-experiment-report.md")
+@router.get("/article-experiment-report.md", dependencies=[Depends(require_permission("epvo", "read"))])
 async def article_experiment_report_markdown(current_user: User = Depends(get_current_user)):
     path = ARTICLE_REPORT_DIR / "article-experiment-report.md"
     if not path.exists():
@@ -399,7 +453,7 @@ async def article_experiment_report_markdown(current_user: User = Depends(get_cu
     )
 
 
-@router.get("/lstm-gnn-smoke/status")
+@router.get("/lstm-gnn-smoke/status", dependencies=[Depends(require_permission("epvo", "read"))])
 async def lstm_gnn_smoke_status(current_user: User = Depends(get_current_user)):
     LSTM_GNN_RUN_DIR.mkdir(parents=True, exist_ok=True)
     metrics_path = LSTM_GNN_RUN_DIR / "gnn-smoke" / "metrics.json"
@@ -407,6 +461,7 @@ async def lstm_gnn_smoke_status(current_user: User = Depends(get_current_user)):
         "state": "idle",
         "message": "GNN smoke run has not been started.",
     }
+    status = _reconcile_external_smoke_status(status, LSTM_GNN_STATUS_FILE, metrics_path)
     if metrics_path.exists():
         status["state"] = "complete"
         status["metrics_path"] = str(metrics_path)
@@ -431,17 +486,16 @@ async def lstm_gnn_smoke_status(current_user: User = Depends(get_current_user)):
     return status
 
 
-@router.post("/lstm-gnn-smoke/run")
+@router.post("/lstm-gnn-smoke/run", dependencies=[Depends(require_permission("epvo", "admin"))])
 async def run_lstm_gnn_smoke(
-    payload: dict | None = Body(default=None),
+    payload: GnnSmokeRequest = Body(default_factory=GnnSmokeRequest),
     current_user: User = Depends(get_current_user),
 ):
     """Start a small local GNN smoke run. Does not start full GPU training."""
     from fastapi import HTTPException
 
-    payload = payload or {}
-    dry_run = bool(payload.get("dry_run"))
-    force = bool(payload.get("force"))
+    dry_run = payload.dry_run
+    force = payload.force
     LSTM_GNN_RUN_DIR.mkdir(parents=True, exist_ok=True)
     output_dir = LSTM_GNN_RUN_DIR / "gnn-smoke"
     metrics_path = output_dir / "metrics.json"
@@ -452,6 +506,7 @@ async def run_lstm_gnn_smoke(
             "metrics_path": str(metrics_path),
         }
     existing = json.loads(LSTM_GNN_STATUS_FILE.read_text(encoding="utf-8")) if LSTM_GNN_STATUS_FILE.exists() else {}
+    existing = _reconcile_external_smoke_status(existing, LSTM_GNN_STATUS_FILE, metrics_path)
     if existing.get("state") == "running" and not force and not dry_run and not metrics_path.exists():
         raise HTTPException(status_code=409, detail="GNN smoke run is already marked as running")
 
@@ -464,8 +519,8 @@ async def run_lstm_gnn_smoke(
         str(script),
         "--splits", str(splits_dir),
         "--model", str(model_dir),
-        "--program-limit", str(int(payload.get("program_limit") or 80)),
-        "--epochs", str(int(payload.get("epochs") or 10)),
+        "--program-limit", str(payload.program_limit),
+        "--epochs", str(payload.epochs),
         "--output", str(output_dir),
     ]
     if dry_run:
@@ -487,7 +542,16 @@ async def run_lstm_gnn_smoke(
     return status
 
 
-@router.get("/lstm-smoke/status")
+@router.post("/lstm-gnn-smoke/cancel", dependencies=[Depends(require_permission("epvo", "admin"))])
+async def cancel_lstm_gnn_smoke(current_user: User = Depends(get_current_user)):
+    return _cancel_external_smoke(
+        LSTM_GNN_STATUS_FILE,
+        LSTM_GNN_RUN_DIR / "gnn-smoke" / "metrics.json",
+        "train_epvo_gnn_pilot.py",
+    )
+
+
+@router.get("/lstm-smoke/status", dependencies=[Depends(require_permission("epvo", "read"))])
 async def lstm_smoke_status(current_user: User = Depends(get_current_user)):
     LSTM_GNN_RUN_DIR.mkdir(parents=True, exist_ok=True)
     metrics_path = LSTM_GNN_RUN_DIR / "lstm-smoke" / "metrics.json"
@@ -495,6 +559,7 @@ async def lstm_smoke_status(current_user: User = Depends(get_current_user)):
         "state": "idle",
         "message": "LSTM smoke run has not been started.",
     }
+    status = _reconcile_external_smoke_status(status, LSTM_STATUS_FILE, metrics_path)
     if metrics_path.exists():
         status["state"] = "complete"
         status["metrics_path"] = str(metrics_path)
@@ -523,17 +588,16 @@ async def lstm_smoke_status(current_user: User = Depends(get_current_user)):
     return status
 
 
-@router.post("/lstm-smoke/run")
+@router.post("/lstm-smoke/run", dependencies=[Depends(require_permission("epvo", "admin"))])
 async def run_lstm_smoke(
-    payload: dict | None = Body(default=None),
+    payload: LstmSmokeRequest = Body(default_factory=LstmSmokeRequest),
     current_user: User = Depends(get_current_user),
 ):
     """Start a small local LSTM smoke run. Does not start full GPU training."""
     from fastapi import HTTPException
 
-    payload = payload or {}
-    dry_run = bool(payload.get("dry_run"))
-    force = bool(payload.get("force"))
+    dry_run = payload.dry_run
+    force = payload.force
     LSTM_GNN_RUN_DIR.mkdir(parents=True, exist_ok=True)
     output_dir = LSTM_GNN_RUN_DIR / "lstm-smoke"
     metrics_path = output_dir / "metrics.json"
@@ -544,6 +608,7 @@ async def run_lstm_smoke(
             "metrics_path": str(metrics_path),
         }
     existing = json.loads(LSTM_STATUS_FILE.read_text(encoding="utf-8")) if LSTM_STATUS_FILE.exists() else {}
+    existing = _reconcile_external_smoke_status(existing, LSTM_STATUS_FILE, metrics_path)
     if existing.get("state") == "running" and not force and not dry_run and not metrics_path.exists():
         raise HTTPException(status_code=409, detail="LSTM smoke run is already marked as running")
 
@@ -556,10 +621,10 @@ async def run_lstm_smoke(
         str(script),
         "--splits", str(splits_dir),
         "--model", str(model_dir),
-        "--program-limit", str(int(payload.get("program_limit") or 40)),
-        "--epochs", str(int(payload.get("epochs") or 3)),
-        "--train-batch-size", str(int(payload.get("train_batch_size") or 16)),
-        "--max-seq-len", str(int(payload.get("max_seq_len") or 12)),
+        "--program-limit", str(payload.program_limit),
+        "--epochs", str(payload.epochs),
+        "--train-batch-size", str(payload.train_batch_size),
+        "--max-seq-len", str(payload.max_seq_len),
         "--output", str(output_dir),
     ]
     if dry_run:
@@ -581,15 +646,21 @@ async def run_lstm_smoke(
     return status
 
 
-@router.get("/compare/{project_id}")
+@router.post("/lstm-smoke/cancel", dependencies=[Depends(require_permission("epvo", "admin"))])
+async def cancel_lstm_smoke(current_user: User = Depends(get_current_user)):
+    return _cancel_external_smoke(
+        LSTM_STATUS_FILE,
+        LSTM_GNN_RUN_DIR / "lstm-smoke" / "metrics.json",
+        "train_epvo_lstm_pilot.py",
+    )
+
+
+@router.get("/compare/{project_id}", dependencies=[Depends(require_project_object_access)])
 async def compare_project(project_id: int, language: str = Query("ru"), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     started = time.perf_counter()
     language = normalize_language(language)
     local_text = lambda ru, kk, en: kk if language == "kk" else en if language == "en" else ru
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Проект не найден")
+    project = require_project_access(db, current_user, project_id)
     constraints = project.constraints_json or {}
     group_code = str(constraints.get("group_code") or "")
     direction_code = str(constraints.get("direction_code") or "")
@@ -839,11 +910,11 @@ async def compare_project(project_id: int, language: str = Query("ru"), db: Sess
     return result
 
 
-@router.post("/projects/{project_id}/apply-priority")
+@router.post("/projects/{project_id}/apply-priority", dependencies=[Depends(require_project_object_access), Depends(require_permission("planner", "write"))])
 async def apply_epvo_priority_disciplines(
     project_id: int,
     limit: int = Query(10, ge=1, le=30),
-    payload: dict | None = Body(default=None),
+    payload: ApplyPriorityRequest = Body(default_factory=ApplyPriorityRequest),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -851,17 +922,14 @@ async def apply_epvo_priority_disciplines(
 
     This does not rewrite existing plans. The user rebuilds A/B/C afterwards.
     """
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        return {"created": 0, "existing": 0, "message": "Проект не найден"}
+    project = require_project_access(db, current_user, project_id)
     version = db.query(ProjectVersion).filter(
         ProjectVersion.project_id == project_id
     ).order_by(ProjectVersion.version_number.desc()).first()
     if not version:
         return {"created": 0, "existing": 0, "message": "Версия проекта не найдена"}
     selected_ids = []
-    if isinstance(payload, dict):
-        selected_ids = [int(value) for value in (payload.get("discipline_ids") or []) if str(value).isdigit()]
+    selected_ids = payload.discipline_ids
     if selected_ids:
         # The UI already obtained these IDs from the read-only comparison.
         # Avoid recalculating the full comparison (previously ~30 s and a

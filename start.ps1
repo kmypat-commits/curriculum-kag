@@ -1,5 +1,6 @@
 param(
     [switch]$NoBrowser,
+    [switch]$RestartBackend,
     [switch]$Rebuild,
     [ValidateSet("auto", "sqlite", "postgres-shadow", "postgres")]
     # PostgreSQL is the primary data store. SQLite is an explicit rollback
@@ -24,8 +25,20 @@ $cpuThreads = if ($env:CURRICULUM_CPU_THREADS) { $env:CURRICULUM_CPU_THREADS } e
 # Prevent an unavailable Docker engine from leaving the launcher waiting
 # indefinitely. Users can override these values in the environment when a
 # remote Docker endpoint legitimately needs more time.
-if (-not $env:DOCKER_CLIENT_TIMEOUT) { $env:DOCKER_CLIENT_TIMEOUT = "10" }
-if (-not $env:COMPOSE_HTTP_TIMEOUT) { $env:COMPOSE_HTTP_TIMEOUT = "30" }
+if (-not $env:DOCKER_CLIENT_TIMEOUT) { $env:DOCKER_CLIENT_TIMEOUT = "20" }
+if (-not $env:COMPOSE_HTTP_TIMEOUT) { $env:COMPOSE_HTTP_TIMEOUT = "180" }
+function Get-PositiveTimeout([string]$Name, [int]$Default, [int]$Maximum = 1800) {
+    $raw = [Environment]::GetEnvironmentVariable($Name, "Process")
+    if ([string]::IsNullOrWhiteSpace($raw)) { return $Default }
+    $value = 0
+    if (-not [int]::TryParse($raw, [ref]$value) -or $value -lt 5 -or $value -gt $Maximum) {
+        throw "$Name must be an integer between 5 and $Maximum seconds (received '$raw')."
+    }
+    return $value
+}
+$dockerDesktopStartupTimeout = Get-PositiveTimeout "DOCKER_DESKTOP_STARTUP_TIMEOUT_SECONDS" 60
+$dockerComposeStartupTimeout = Get-PositiveTimeout "DOCKER_COMPOSE_STARTUP_TIMEOUT_SECONDS" 180
+$postgresStartupTimeout = Get-PositiveTimeout "POSTGRES_STARTUP_TIMEOUT_SECONDS" 300
 foreach ($threadVariable in @("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS")) {
     if (-not [Environment]::GetEnvironmentVariable($threadVariable, "Process")) {
         [Environment]::SetEnvironmentVariable($threadVariable, $cpuThreads, "Process")
@@ -73,6 +86,13 @@ function Get-EndpointJson([string]$Url) {
     catch {
         return $null
     }
+}
+
+function Test-LocalService([string]$HostName, [int]$Port, [string]$Url) {
+    # An HTTP response alone is not sufficient: a proxy or stale health
+    # response can make a dead local service look alive. Require both the
+    # loopback TCP listener and the expected health endpoint.
+    return (Test-TcpPort $HostName $Port 1000) -and (Test-Endpoint $Url)
 }
 
 function Test-TcpPort([string]$HostName, [int]$Port, [int]$TimeoutMilliseconds = 1000) {
@@ -147,6 +167,34 @@ function Test-DockerEngine([string]$DockerCli, [int]$TimeoutMilliseconds = 5000)
     finally { if ($process) { $process.Dispose() } }
 }
 
+function Invoke-DockerRuntimeRepair([string]$Reason) {
+    $repairScript = Join-Path $root 'scripts\repair-docker-runtime.ps1'
+    if (-not (Test-Path -LiteralPath $repairScript)) {
+        Write-Warning 'Docker runtime repair script is missing.'
+        return $false
+    }
+    Write-Warning "$Reason Running one bounded Docker runtime repair."
+    $repair = $null
+    try {
+        $repairArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $repairScript, '-NoStart')
+        # Docker's runtime socket directory belongs to the interactive user
+        # profile.  Do not switch tokens with UAC here: an elevated repair
+        # can leave the launcher waiting for an invisible consent prompt and
+        # does not add permissions needed for this user-owned namespace.
+        $repair = Start-Process -FilePath 'powershell.exe' -ArgumentList $repairArgs -PassThru -WindowStyle Hidden
+        if ($repair.WaitForExit(60000) -and $repair.ExitCode -eq 0) {
+            return $true
+        }
+        if ($repair) { try { $repair.Kill($true) } catch { } }
+        Write-Warning 'Docker runtime repair did not complete within 60 seconds.'
+        return $false
+    }
+    catch {
+        Write-Warning 'Docker runtime repair could not be completed automatically.'
+        return $false
+    }
+}
+
 function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     if (Test-DockerEngine $DockerCli) { return $true }
 
@@ -155,94 +203,70 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
         "C:\Program Files\Docker\Docker\Docker Desktop.exe"
     )
     $desktop = $desktopCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if (-not $desktop) { return $false }
+    if (-not $desktop) {
+        Write-Warning "Docker Desktop executable was not found. The Docker CLI alone cannot start the Linux engine. Restore Docker Desktop installation; Docker data remains at D:\Docker\DockerDesktopWSL\disk\docker_data.vhdx."
+        return $false
+    }
 
-    # Remove only a stale inference socket after Desktop has fully exited.
-    # Docker Desktop recreates it; deleting the data-root or WSL disk here
-    # would be unsafe and is deliberately never attempted.
-    $runtimeSocketNames = @(
-        "dockerEthernetVfkit",
-        "dockerInference",
-        "sailor-ingest.sock",
-        "userAnalyticsOtlpHttp.sock",
-        "docker-secrets-engine\engine.sock"
-    )
-    $runtimeSockets = $runtimeSocketNames |
-        ForEach-Object { Join-Path $env:LOCALAPPDATA "Docker\run\$_" } |
-        Where-Object { Test-Path -LiteralPath $_ }
-    $secretEngineSocket = Join-Path $env:LOCALAPPDATA "docker-secrets-engine\engine.sock"
-    $secretEngineRoot = Join-Path $env:LOCALAPPDATA "docker-secrets-engine"
     $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
-    if ($runtimeSockets -or (Test-Path -LiteralPath $secretEngineSocket)) {
-        # A stale socket can survive a crashed Desktop process and prevents
-        # the Linux engine from starting. Recover the runtime state in-place;
-        # never touch the WSL disk or Docker data root.
-        if ($desktopRunning) {
-            Write-Host "Recovering Docker Desktop runtime sockets..." -ForegroundColor Yellow
-            Get-Process -Name "Docker Desktop", "com.docker.backend" -ErrorAction SilentlyContinue |
-                Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 3
-            $desktopRunning = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+    # Listener reparse points are normal while Desktop is running.  If no
+    # Desktop process exists, however, entries in this small ephemeral
+    # namespace are orphaned leftovers from a prior crash and must be reset
+    # before the next Engine start.  This is the precise stale-state signal;
+    # it does not inspect or modify the VHDX data root.
+    $runtimeNames = @('dockerEthernetVfkit', 'dockerInference', 'sailor-ingest.sock', 'userAnalyticsOtlpHttp.sock')
+    $runtimeDir = Join-Path $env:LOCALAPPDATA 'Docker\run'
+    $orphanRuntimeEntries = @(
+        Get-ChildItem -LiteralPath $runtimeDir -Force -ErrorAction SilentlyContinue |
+            Where-Object { $runtimeNames -contains $_.Name }
+    )
+    $secretsDir = Join-Path $env:LOCALAPPDATA 'docker-secrets-engine'
+    $orphanSecretsEntries = @(
+        Get-ChildItem -LiteralPath $secretsDir -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq 'engine.sock' }
+    )
+    if (-not $desktopRunning -and ($orphanRuntimeEntries.Count -gt 0 -or $orphanSecretsEntries.Count -gt 0)) {
+        if (-not (Invoke-DockerRuntimeRepair 'Docker Desktop is stopped but orphaned runtime listeners were found.')) {
+            return $false
         }
-        # A crashed backend can keep the Unix-socket inode open from its WSL
-        # utility VM even after the Windows processes have exited.  Shutting
-        # down WSL releases only runtime handles; it does not remove Docker's
-        # VHDX, images, volumes, or the moved data root.
+    }
+
+    # Check WSL only after stale runtime cleanup.  A broken WSL access check
+    # must not prevent the elevated repair from releasing/removing stale
+    # Docker listener entries, which is the common cause of the Desktop
+    # startup failure shown to the user.
+    $wslCli = Get-Command wsl.exe -ErrorAction SilentlyContinue
+    if ($wslCli) {
+        $wslProbe = $null
         try {
-            $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
-            if ($wsl) {
-                $wslProcess = Start-Process -FilePath $wsl.Source -ArgumentList "--shutdown" -WindowStyle Hidden -PassThru
-                [void]$wslProcess.WaitForExit(15000)
-                Start-Sleep -Seconds 2
+            $probeInfo = [Diagnostics.ProcessStartInfo]::new()
+            $probeInfo.FileName = $wslCli.Source
+            $probeInfo.Arguments = '--status'
+            $probeInfo.WorkingDirectory = $root
+            $probeInfo.UseShellExecute = $false
+            $probeInfo.CreateNoWindow = $true
+            $probeInfo.RedirectStandardOutput = $true
+            $probeInfo.RedirectStandardError = $true
+            $wslProbe = [Diagnostics.Process]::new()
+            $wslProbe.StartInfo = $probeInfo
+            [void]$wslProbe.Start()
+            if (-not $wslProbe.WaitForExit(5000)) {
+                try { $wslProbe.Kill($true) } catch {}
+                Write-Warning 'WSL service probe timed out; continuing so Docker Desktop can start and report its own daemon state.'
             }
-        }
-        catch { }
-        try {
-            foreach ($socket in $runtimeSockets) {
-                Remove-Item -LiteralPath $socket -Force -ErrorAction SilentlyContinue
-                if (Test-Path -LiteralPath $socket) {
-                    # Docker Desktop creates these as Windows reparse-point
-                    # sockets. PowerShell can report access denied for the
-                    # link even after the backend has stopped; `del` removes
-                    # only the link itself, never its target.
-                    $del = Start-Process -FilePath "$env:ComSpec" -ArgumentList "/c", "del", "/f", "/q", "$socket" -WindowStyle Hidden -Wait -PassThru
-                    if ($del.ExitCode -ne 0 -and (Test-Path -LiteralPath $socket)) {
-                        throw "Could not remove stale Docker runtime socket: $socket"
-                    }
-                }
+            if ($wslProbe.ExitCode -ne 0) {
+                $probeError = $wslProbe.StandardError.ReadToEnd()
+                # Keep the parser guard ASCII-only: Windows PowerShell 5 may
+                # decode UTF-8 source without a BOM as mojibake and break the
+                # entire launcher before Docker is even started.
+                $probeKind = if ($probeError -match 'E_ACCESSDENIED|ACCESS.?DENIED') { 'E_ACCESSDENIED' } else { 'WSL_SERVICE_ERROR' }
+                Write-Warning "WSL service preflight reported $probeKind; continuing with Docker Desktop startup. Docker data was not changed."
             }
-            if (Test-Path -LiteralPath $secretEngineSocket) {
-                Remove-Item -LiteralPath $secretEngineSocket -Force -ErrorAction SilentlyContinue
-            }
-            if (Test-Path -LiteralPath $secretEngineSocket) {
-                $del = Start-Process -FilePath "$env:ComSpec" -ArgumentList '/c', 'del', '/f', '/q', "$secretEngineSocket" -WindowStyle Hidden -Wait -PassThru
-                if ($del.ExitCode -ne 0 -and (Test-Path -LiteralPath $secretEngineSocket)) {
-                    throw "Could not remove stale Docker secrets-engine socket: $secretEngineSocket"
-                }
-            }
-            Write-Host "Removed stale Docker runtime sockets; Desktop will recreate them." -ForegroundColor DarkGray
         }
         catch {
-            # If Windows still holds a reparse point, quarantine the runtime
-            # directory itself. It contains ephemeral listeners only; Docker
-            # recreates it on startup. Never move the WSL disk or data-root.
-            try {
-                $runtimeDir = Join-Path $env:LOCALAPPDATA "Docker\run"
-                $quarantine = Join-Path $env:LOCALAPPDATA ("Docker\run.stale-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
-                Move-Item -LiteralPath $runtimeDir -Destination $quarantine -Force -ErrorAction Stop
-                New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
-                if (Test-Path -LiteralPath $secretEngineRoot) {
-                    $secretQuarantine = Join-Path $env:LOCALAPPDATA ("docker-secrets-engine.stale-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
-                    Move-Item -LiteralPath $secretEngineRoot -Destination $secretQuarantine -Force -ErrorAction Stop
-                    New-Item -ItemType Directory -Path $secretEngineRoot -Force | Out-Null
-                }
-                Write-Host "Quarantined stale Docker runtime directory; Docker will recreate it." -ForegroundColor DarkGray
-            }
-            catch {
-                Write-Warning "Docker Desktop has stale runtime sockets under '$($env:LOCALAPPDATA)\Docker\run'. Reboot Windows once, then run start.bat again. No Docker data was changed."
-                return $false
-            }
+            Write-Warning 'WSL service probe failed; continuing with Docker Desktop startup. Docker data was not changed.'
         }
+        finally { if ($wslProbe) { $wslProbe.Dispose() } }
     }
 
     # Avoid launching a second Desktop instance when the daemon is still
@@ -260,29 +284,56 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
     else {
         Write-Host "Docker Desktop is already running; waiting for its daemon..." -ForegroundColor DarkGray
     }
-    $deadline = (Get-Date).AddSeconds(45)
+    $deadline = (Get-Date).AddSeconds($dockerDesktopStartupTimeout)
     while ((Get-Date) -lt $deadline) {
         if (Test-DockerEngine $DockerCli) { return $true }
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 5
     }
-    Write-Warning "Docker Desktop did not expose a working engine within 45 seconds. If it shows an 'unexpected error' about dockerInference, choose Quit (not Reset to factory defaults), then run start.bat again."
+    if (Invoke-DockerRuntimeRepair 'Docker Engine did not start on the first attempt.') {
+        Start-Process -FilePath $desktop -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        $retryDeadline = (Get-Date).AddSeconds($dockerDesktopStartupTimeout)
+        while ((Get-Date) -lt $retryDeadline) {
+            if (Test-DockerEngine $DockerCli) { return $true }
+            Start-Sleep -Seconds 5
+        }
+    }
+    Write-Warning "Docker Desktop did not expose a working engine after one normal start and one repair retry. The VHDX/data root was not moved or modified. Quit the Docker error dialog (never Reset to factory defaults), then run scripts\repair-docker-runtime.ps1 from the same interactive user profile and start.bat again."
     return $false
 }
 
+function Get-DockerDataRoot {
+    # The WSL data location is separate from ephemeral runtime sockets.
+    $settingsPath = Join-Path $env:APPDATA "Docker\settings-store.json"
+    try {
+        if (-not (Test-Path -LiteralPath $settingsPath)) { return $null }
+        $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+        $configured = [string]$settings.CustomWslDistroDir
+        if ($configured -and (Test-Path -LiteralPath $configured)) {
+            return [IO.Path]::GetFullPath($configured)
+        }
+    } catch { }
+    return $null
+}
+
 function Warn-IfDockerRestoreMayExhaustSystemDisk {
-    # Docker Desktop stores its WSL disk on C: by default. A PostgreSQL
-    # restore temporarily needs roughly the database size again, even when
-    # project data and dumps are stored on D:. Warn early instead of letting
-    # Docker stall the machine during a recovery drill.
-    $systemDrive = Get-PSDrive -Name C -ErrorAction SilentlyContinue
-    if ($systemDrive -and $systemDrive.Free -lt 12GB) {
-        $freeGb = [math]::Round($systemDrive.Free / 1GB, 1)
-        Write-Host "Warning: only $freeGb GB is free on C:. PostgreSQL restore verification may require more space because Docker Desktop uses its WSL disk there. Free space or move Docker data to D: before a restore drill." -ForegroundColor Yellow
+    # Check the drive hosting Docker's WSL disk without moving or rewriting it.
+    $dataRoot = Get-DockerDataRoot
+    $driveName = if ($dataRoot) { ([IO.Path]::GetPathRoot($dataRoot)).TrimEnd('\', ':') } else { 'C' }
+    $dataDrive = Get-PSDrive -Name $driveName -ErrorAction SilentlyContinue
+    if ($dataRoot) {
+        Write-Host "Docker Desktop data root: $dataRoot (runtime sockets remain under $env:LOCALAPPDATA\Docker\run)." -ForegroundColor DarkGray
+    }
+    if ($dataDrive -and $dataDrive.Free -lt 12GB) {
+        $freeGb = [math]::Round($dataDrive.Free / 1GB, 1)
+        Write-Host "Warning: only $freeGb GB is free on $driveName`:. PostgreSQL restore verification may need additional temporary space. The launcher will not move Docker data." -ForegroundColor Yellow
     }
 }
 
 function Start-PostgresShadowIfNeeded {
-    if (Wait-TcpPort "localhost" 5433 2) { return $true }
+    # Docker Desktop publishes the shadow database on IPv4.  Use the numeric
+    # loopback address here so a slow/broken localhost IPv6 resolution cannot
+    # make the launcher wait for the full startup timeout or fail falsely.
+    if (Wait-TcpPort "127.0.0.1" 5433 2) { return $true }
     $composeFile = Join-Path $root "docker-compose.postgres-only.yml"
     if (-not (Test-Path $composeFile)) { return $false }
     $docker = Find-DockerCli
@@ -304,15 +355,15 @@ function Start-PostgresShadowIfNeeded {
         $psi.CreateNoWindow = $true
         $proc = [Diagnostics.Process]::new(); $proc.StartInfo = $psi
         [void]$proc.Start()
-        if (-not $proc.WaitForExit(45000)) {
+        if (-not $proc.WaitForExit($dockerComposeStartupTimeout * 1000)) {
             try { $proc.Kill($true) } catch {}
-            Write-Warning "Docker Compose did not respond within 45 seconds; startup was stopped without deleting data."
+            Write-Warning "Docker Compose did not respond within $dockerComposeStartupTimeout seconds; startup was stopped without deleting data."
             return $false
         }
         if ($proc.ExitCode -ne 0) { return $false }
     }
     finally { if ($proc) { $proc.Dispose() }; Pop-Location }
-    return (Wait-TcpPort "localhost" 5433 90)
+    return (Wait-TcpPort "127.0.0.1" 5433 $postgresStartupTimeout)
 }
 
 function Get-LatestSourceTime {
@@ -386,18 +437,19 @@ function Test-PythonRuntime([string]$Path) {
 
 $bundledPython = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 $existingSitePackages = Join-Path $backendDir "venv\Lib\site-packages"
-$pythonCandidates = @(
-    $bundledPython,
-    (Join-Path $backendDir "venv\Scripts\python.exe")
-)
+$venvPython = Join-Path $backendDir "venv\Scripts\python.exe"
 $previousPythonPath = $env:PYTHONPATH
-if (Test-Path $existingSitePackages) {
+# Prefer the project's virtual environment.  The bundled Codex runtime is a
+# fallback for an actually broken venv only: choosing it first silently loses
+# the project's CUDA-enabled PyTorch and can turn a short SBERT batch into a
+# tens-of-minutes CPU build.
+$python = if (Test-PythonRuntime $venvPython) { $venvPython } else { $null }
+if (-not $python -and (Test-Path $existingSitePackages)) {
     # A moved/removed system Python can leave a broken venv launcher while its
-    # installed packages are still valid. The bundled Python is the same ABI
-    # and can safely reuse those local packages.
+    # installed packages are still valid. Reuse them only in this fallback.
     $env:PYTHONPATH = $existingSitePackages
+    if (Test-PythonRuntime $bundledPython) { $python = $bundledPython }
 }
-$python = $pythonCandidates | Where-Object { Test-PythonRuntime $_ } | Select-Object -First 1
 
 if (-not $python) {
     $systemPython = Get-Command python.exe -ErrorAction SilentlyContinue
@@ -413,6 +465,21 @@ if (-not $python) {
     $python = Join-Path $venvDir "Scripts\python.exe"
     & $python -m pip install --disable-pip-version-check -r (Join-Path $backendDir "requirements-local.txt")
     if ($LASTEXITCODE -ne 0) { throw "Could not install backend dependencies." }
+}
+
+# Do not silently turn an explicitly configured GPU build into a very slow
+# CPU job.  This is deliberately a launcher check: a long plan should fail
+# early with a clear repair path rather than appear stuck at vectorization.
+$backendEnv = Join-Path $backendDir ".env"
+$requestedSbertDevice = if (Test-Path $backendEnv) {
+    (Get-Content -LiteralPath $backendEnv | Where-Object { $_ -match '^\s*SBERT_DEVICE\s*=' } | Select-Object -Last 1) -replace '^\s*SBERT_DEVICE\s*=\s*', ''
+} else { "" }
+if ($requestedSbertDevice -match '^(cuda|gpu)$') {
+    $cudaProbe = & $python -c "import torch; print('1' if torch.cuda.is_available() else '0'); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $cudaProbe -or $cudaProbe[0] -ne '1') {
+        throw "SBERT_DEVICE=cuda is configured, but this project Python cannot access CUDA. Install the CUDA PyTorch wheel in backend\\venv before starting a build."
+    }
+    Write-Host "SBERT GPU: $($cudaProbe[1])" -ForegroundColor Green
 }
 
 Build-FrontendIfNeeded
@@ -463,8 +530,9 @@ if ($configuredDatabaseUrl -match '^postgresql') {
     $postgresPort = 5432
     if ($configuredDatabaseUrl -match '@([^/:]+)(?::(\d+))?/') {
         $postgresHost = $Matches[1]
-        if ($Matches[2]) { $postgresPort = [int]$Matches[2] }
+    if ($Matches[2]) { $postgresPort = [int]$Matches[2] }
     }
+    if ($postgresHost -eq "localhost") { $postgresHost = "127.0.0.1" }
     if (-not (Test-TcpPort $postgresHost $postgresPort 1000)) {
         if ($Database -in @("postgres", "postgres-shadow")) {
             throw "PostgreSQL ${postgresHost}:${postgresPort} is unavailable. Start Docker/PostgreSQL or use -Database sqlite."
@@ -476,7 +544,47 @@ if ($configuredDatabaseUrl -match '^postgresql') {
 
 $effectiveDatabaseUrl = if ($env:DATABASE_URL) { $env:DATABASE_URL } else { $configuredDatabaseUrl }
 $expectedDatabaseDialect = if ($effectiveDatabaseUrl -match '^postgresql') { "postgresql" } else { "sqlite" }
-$existingBackendHealth = Get-EndpointJson "http://127.0.0.1:8000/health"
+$existingBackendHealth = if (Test-TcpPort "127.0.0.1" 8000 1000) {
+    Get-EndpointJson "http://127.0.0.1:8000/health"
+} else {
+    $null
+}
+$savedBackendPid = $null
+if (Test-Path $pidFile) {
+    try { $savedBackendPid = (Get-Content $pidFile -Raw | ConvertFrom-Json).backend } catch { $savedBackendPid = $null }
+}
+if ($RestartBackend -and $savedBackendPid) {
+    $savedProcess = Get-Process -Id ([int]$savedBackendPid) -ErrorAction SilentlyContinue
+    if ($savedProcess -and $savedProcess.ProcessName -in @("python", "pythonw")) {
+        Write-Host "Restarting project backend PID $savedBackendPid..." -ForegroundColor Yellow
+        Stop-Process -Id ([int]$savedBackendPid) -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+        $existingBackendHealth = $null
+    }
+}
+$backendPortBusy = Test-TcpPort "127.0.0.1" 8000 1000
+if ($backendPortBusy -and -not $existingBackendHealth) {
+    # A previous launcher can leave uvicorn alive after its parent shell has
+    # exited. Reap only a process that is unambiguously this project's local
+    # backend; never kill an unrelated service merely because it owns 8000.
+    $projectBackendProcesses = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and
+            $_.CommandLine -like "*$backendDir*" -and
+            $_.CommandLine -match "uvicorn.*--port\s+8000"
+        }
+    foreach ($staleBackend in $projectBackendProcesses) {
+        Write-Host "Stopping stale project backend PID $($staleBackend.ProcessId)..." -ForegroundColor Yellow
+        Stop-Process -Id ([int]$staleBackend.ProcessId) -Force -ErrorAction SilentlyContinue
+    }
+    if ($projectBackendProcesses) {
+        Start-Sleep -Milliseconds 500
+        $backendPortBusy = Test-TcpPort "127.0.0.1" 8000 1000
+    }
+    if ($backendPortBusy) {
+        throw "Port 8000 is occupied by another process and is not a healthy Curriculum-KAG backend. Stop that process or set a different backend port."
+    }
+}
 if ($existingBackendHealth) {
     if (-not $existingBackendHealth.database) {
         throw "Backend is already running without database diagnostics. Run stop.ps1 once, then start again."
@@ -487,7 +595,7 @@ if ($existingBackendHealth) {
 }
 
 $pids = @{}
-if (-not (Test-Endpoint "http://127.0.0.1:8000/health")) {
+if (-not (Test-LocalService "127.0.0.1" 8000 "http://127.0.0.1:8000/health")) {
     if ($expectedDatabaseDialect -eq "postgresql") {
         Write-Host "Applying PostgreSQL migrations..."
         Push-Location $backendDir
@@ -519,7 +627,32 @@ if ($backendHealth.database -ne $expectedDatabaseDialect) {
     throw "Backend started with '$($backendHealth.database)' instead of '$expectedDatabaseDialect'."
 }
 
-if (-not (Test-Endpoint "http://127.0.0.1:3001/api/health")) {
+# A planner build is CPU-intensive on local installations.  Use one durable
+# queue consumer instead of starting an unconstrained one-shot Python process
+# for every button click.  The worker is safe to start before a job exists and
+# leaves queued work recoverable after an API restart.
+$workerScript = Join-Path $backendDir "scripts\run_planner_build_worker.py"
+$workerHeartbeat = Join-Path $runtime "planner-worker.heartbeat"
+$existingPlannerWorker = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.CommandLine -and
+        $_.CommandLine -like "*$workerScript*" -and
+        $_.CommandLine -match "--daemon" -and
+        (Test-Path -LiteralPath $workerHeartbeat) -and
+        ((Get-Date) - (Get-Item -LiteralPath $workerHeartbeat).LastWriteTime).TotalSeconds -lt 30
+    } |
+    Select-Object -First 1
+if (-not $existingPlannerWorker) {
+    Write-Host "Starting bounded planner worker (concurrency: 1)..."
+    $plannerWorker = Start-Process -FilePath $python -ArgumentList $workerScript, "--daemon", "--poll-seconds", "2", "--max-jobs", "1" -WorkingDirectory $backendDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime "planner-worker.out.log") -RedirectStandardError (Join-Path $runtime "planner-worker.err.log")
+    try { $plannerWorker.PriorityClass = "BelowNormal" } catch { }
+    $pids.plannerWorker = $plannerWorker.Id
+}
+else {
+    Write-Host "Planner worker is already running (PID $($existingPlannerWorker.ProcessId))."
+}
+
+if (-not (Test-LocalService "127.0.0.1" 3001 "http://127.0.0.1:3001/api/health")) {
     Write-Host "Starting frontend..."
     $frontend = Start-Process -FilePath $python -ArgumentList (Join-Path $root "frontend_server.py") -WorkingDirectory $root -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime "frontend.out.log") -RedirectStandardError (Join-Path $runtime "frontend.err.log")
     $pids.frontend = $frontend.Id
@@ -536,9 +669,14 @@ if ($pids.Count -gt 0) {
 
 Write-Host ""
 Write-Host "Curriculum-KAG is ready: http://127.0.0.1:3001/ (localhost is also supported)" -ForegroundColor Green
-Write-Host "Login: admin@curriculum-kag.local / admin123"
+Write-Host "Login credentials are not printed. Use CURRICULUM_LOCAL_EMAIL and CURRICULUM_LOCAL_PASSWORD for local smoke/tests."
 Write-Host "Use stop.bat to stop services started by this launcher."
 
 if (-not $NoBrowser) {
-    Start-Process "http://127.0.0.1:3001/"
+    try {
+        Start-Process "http://127.0.0.1:3001/" -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Сервисы запущены, но Windows не разрешила автоматически открыть браузер. Откройте http://127.0.0.1:3001/ вручную."
+    }
 }

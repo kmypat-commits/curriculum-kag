@@ -1,5 +1,6 @@
 ﻿from types import SimpleNamespace
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -27,8 +28,9 @@ from app.planner.scheduler import (
     ensure_credit_bridge_modules,
     schedule_courses,
 )
-from app.planner.bridge_policy import bridge_module_limit
-from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.bridge_policy import bridge_can_close_program_lo, bridge_module_limit, scheduled_bridge_count
+from app.planner.credit_balancing import _semantic_latest
+from app.planner.domain_evidence import domain_credit_shares, domain_label_matches, is_information_technology_domain
 from app.planner.evidence_preflight import evaluate_scoped_evidence
 from app.planner.verifier import (
     _ict_competency_audit,
@@ -58,6 +60,37 @@ def test_epvo_stage_stamp_changes_after_in_place_checksum_update():
         after = _table_stamp(db, RawEpvoProgram)
     assert before != after
     engine.dispose()
+
+
+def test_scoring_signature_reuses_supplied_epvo_signature(monkeypatch):
+    from app.services import planner_stage_cache as cache
+
+    class EmptyQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeDb:
+        def query(self, *_args, **_kwargs):
+            return EmptyQuery()
+
+    version = SimpleNamespace(
+        id=1,
+        project=SimpleNamespace(domain1="data", domain2=None, constraints_json={}),
+        learning_outcomes=[],
+    )
+    monkeypatch.setattr(cache, "_table_stamp", lambda *_args: [])
+    monkeypatch.setattr(cache, "epvo_input_signature", lambda *_args: (_ for _ in ()).throw(AssertionError("duplicate EPVO fingerprint")))
+
+    signature = cache.scoring_input_signature(version, FakeDb(), epvo_signature="already-computed")
+
+    assert isinstance(signature, str)
+    assert len(signature) == 64
 
 
 def test_epvo_normalized_stamp_changes_after_in_place_fingerprint_update():
@@ -114,6 +147,37 @@ def test_bridge_budget_is_hard_capped_by_user_and_system_limits():
     project.constraints_json = {"allow_new_courses": False, "max_new_courses": 5}
     assert bridge_module_limit(version) == 0
 
+    project.constraints_json = {
+        "allow_new_courses": True,
+        "max_new_courses": 1,
+        "program_type": "interdisciplinary",
+    }
+    assert bridge_module_limit(version) == 1
+
+
+def test_bridge_budget_counts_the_core_module_and_all_other_generated_modules():
+    schedule = {
+        1: [{"bridge_module_id": 1, "course_id": "CORE_BRIDGE_1"}],
+        2: [{"bridge_module_id": 2, "course_id": "AUTO_BALANCE_2"}],
+        3: [{"course_id": 3}],
+    }
+    assert scheduled_bridge_count(schedule) == 2
+
+
+def test_generated_bridge_does_not_self_certify_program_lo_evidence():
+    proposal = SimpleNamespace(
+        target_los=["LO1"],
+        source_chunks_json=[],
+        generation_params_json={"mode": "final_credit_and_load_repair"},
+    )
+    approved = SimpleNamespace(
+        target_los=["LO1"],
+        source_chunks_json=[{"source": "EPVO"}],
+        generation_params_json={"evidence_status": "approved"},
+    )
+    assert bridge_can_close_program_lo(proposal) is False
+    assert bridge_can_close_program_lo(approved) is True
+
 
 def test_evidence_preflight_blocks_dual_domain_credit_deficit_before_scheduler():
     courses = [
@@ -157,6 +221,12 @@ def test_epvo_domain_aliases_match_localized_labels_without_cross_domain_leakage
     assert domain_label_matches("Healthcare", ["6B101 Здравоохранение"])
     assert domain_label_matches("Agriculture", ["Агрономия"])
     assert not domain_label_matches("Finance", ["Здравоохранение"])
+    assert domain_label_matches("Information technology", ["Information and communication technologies"])
+    assert not domain_label_matches("Literature", ["Information and communication technologies"])
+    assert not domain_label_matches("Hospitality", ["Information and communication technologies"])
+    assert is_information_technology_domain("IT")
+    assert is_information_technology_domain("Информационно-коммуникационные технологии")
+    assert not is_information_technology_domain("Literature")
 
 
 def test_interdisciplinary_scoring_keeps_a_wide_secondary_scope_frontier():
@@ -202,6 +272,39 @@ def test_foundation_source_semester_is_advisory_except_for_clinical_depth():
     assert _foundation_max_semester(surgery["title"], 8) == 8
     assert _semantic_min_semester("Основы общей врачебной практики", 8) >= 5
     assert _semantic_max_semester("Основы общей врачебной практики", 8) == 8
+
+
+def test_load_repair_keeps_introductory_course_inside_semantic_window():
+    """A late load pass must not turn an introductory course into a capstone."""
+    introduction = {
+        "course_id": 101,
+        "title": "Введение в биологию",
+        "credits": 5,
+        # Simulates metadata from a late replacement candidate. The lexical
+        # rule must remain authoritative even when this value is too broad.
+        "latest_semester": 8,
+        "recommended_semester": 1,
+    }
+    assert _semantic_latest(introduction, 8) == 3
+
+    schedule = {semester: [] for semester in range(1, 9)}
+    schedule[1] = [
+        introduction,
+        {
+            "course_id": 102,
+            "title": "Нормативный модуль",
+            "credits": 29,
+            "regulatory_required": True,
+            "recommended_semester": 1,
+        },
+    ]
+    balanced = _rebalance_semester_load(schedule, 8, 30)
+    assigned_semester = next(
+        semester
+        for semester, items in balanced.items()
+        if introduction in items
+    )
+    assert assigned_semester <= 3
 
 
 def test_source_semester_is_advisory_unless_explicitly_locked():
@@ -323,6 +426,10 @@ def test_foreign_professional_context_is_not_hidden_by_ai_or_digital_words():
             domain="it",
         ),
         ["6B061", "B057"],
+    )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Маркетинговый менеджмент", domain="it"),
+        ["7M061", "M094"],
     )
 
 
@@ -692,6 +799,24 @@ def test_load_repair_can_swap_five_credit_and_three_credit_courses():
     assert loads == {1: 27, 2: 28}
 
 
+def test_load_repair_transfers_only_flexible_bridge_credits():
+    schedule = {
+        1: [
+            {"bridge_module_id": 101, "title": "Foundation bridge", "credits": 7, "prerequisites": []},
+            {"course_id": 1, "title": "Protected block", "credits": 27, "regulatory_required": True},
+        ],
+        2: [
+            {"bridge_module_id": 102, "title": "Specialisation bridge", "credits": 3, "prerequisites": []},
+            {"course_id": 2, "title": "Protected block 2", "credits": 26, "regulatory_required": True},
+        ],
+    }
+    result = _rebalance_semester_load(schedule, 2, 30)
+    loads = {semester: sum(item["credits"] for item in items) for semester, items in result.items()}
+    assert loads == {1: 33, 2: 30}
+    assert next(item for item in result[1] if item.get("bridge_module_id") == 101)["credits"] == 6
+    assert next(item for item in result[2] if item.get("bridge_module_id") == 102)["credits"] == 4
+
+
 def test_verifier_accepts_plus_five_total_and_plus_three_load():
     schedule = {1: [{"course_id": 1, "credits": 29, "prerequisites": []}], 2: [{"course_id": 2, "credits": 32, "prerequisites": []}]}
     project = SimpleNamespace(constraints_json={"total_semesters": 2, "total_credits": 60, "max_credits_per_semester": 30})
@@ -699,6 +824,7 @@ def test_verifier_accepts_plus_five_total_and_plus_three_load():
     db = MagicMock()
     result = verify_curriculum_plan(schedule, version, db)
     assert result["feasible"] is True
+    assert result["insufficient_evidence"] is False
     assert result["total_credits"] == 61
     assert result["semester_load_violations"] == []
 

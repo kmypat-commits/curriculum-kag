@@ -1,12 +1,14 @@
 ﻿from __future__ import annotations
 
+import time
+from functools import partial
 from typing import Dict, List
 from itertools import combinations
 import math
 import re
 from statistics import median
 from sqlalchemy import String, cast, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.models.bridge_module import BridgeModule
@@ -30,6 +32,7 @@ from app.planner.scheduler_utils import schedule_loads as _schedule_loads
 from app.planner.scheduler_utils import semester_by_course as _semester_by_course
 from app.planner.scheduler_utils import course_dependents as _course_dependents
 from app.planner.scheduler_utils import title_key as _title_key
+from app.planner.scheduler_admission_evidence import sanitize_admitted_course_items
 from app.planner.scheduler_text import has_domain_term as _has_domain_term
 from app.planner.scheduler_text import short_lo_theme as _short_lo_theme
 from app.planner.prerequisite_inference import (
@@ -55,7 +58,10 @@ from app.planner.course_selection import (
     ensure_secondary_domain_bridge_modules,
     select_courses_for_variant,
 )
+from app.planner.timing import PlannerTimer
 from app.planner.bridge_policy import bridge_module_limit
+from app.planner.bridge_budget import cap_bridge_items_to_budget as _cap_bridge_items_to_budget
+from app.planner.schedule_credit_gap import fill_schedule_credit_gap as _fill_schedule_credit_gap
 from app.planner.domain_evidence import domain_label_matches
 from app.planner.credit_balancing import (
     _rebalance_semester_load,
@@ -71,9 +77,11 @@ from app.planner.semester_repair import (
     _repair_final_domain_quotas,
     _repair_semester_appropriateness,
 )
+from app.planner.invariant_ledger import InvariantLedger
 from app.planner.course_scheduling import schedule_courses
 from app.planner.scheduler_domain_rules import (
     course_domain_matches as _course_domain_matches,
+    find_invalid_project_domain_courses as _find_invalid_project_domain_courses,
     has_foreign_professional_title as _has_foreign_professional_title,
     is_interdisciplinary_title_relevant as _is_interdisciplinary_title_relevant,
     is_it_medicine_support_course as _is_it_medicine_support_course,
@@ -92,11 +100,13 @@ from app.planner.course_policy import (
     education_level_course_allowed as _education_level_course_allowed,
     project_domain_terms as _project_domain_terms,
 )
+from app.planner.course_admission_policy import is_course_in_project_domain as _is_course_in_project_domain
 from app.planner.admission import (
     audit_final_course_admission as _audit_final_course_admission,
     credible_professional_lo_by_course as _credible_professional_lo_by_course,
     minimum_appropriate_semester as _minimum_appropriate_semester,
 )
+from app.planner.final_schedule_checks import audit_final_schedule_boundary, late_schedule_snapshot
 
 
 # Canonical implementations live in the pure semester-rules module.  The
@@ -159,7 +169,11 @@ def build_curriculum_plan(
     db: Session,
     variant_type: str = "A",
     commit: bool = True,
+    selection_variant_type: str | None = None,
+    selected_courses_override: List[Dict] | None = None,
 ) -> Dict:
+    trace = PlannerTimer(f"[planner-timing] variant={variant_type}").trace
+
     project_version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
     if not project_version:
         raise ValueError(f"Project version {project_version_id} not found")
@@ -168,7 +182,16 @@ def build_curriculum_plan(
         int(value) for value in (constraints.get("excluded_course_ids") or [])
         if str(value).isdigit()
     }
-    selected_courses = select_courses_for_variant(project_version_id, db, variant_type)
+    selected_courses = (
+        [dict(item) for item in selected_courses_override]
+        if selected_courses_override is not None
+        else select_courses_for_variant(
+            project_version_id,
+            db,
+            selection_variant_type or variant_type,
+        )
+    )
+    trace("selector_done")
     selected_courses = [
         item for item in selected_courses
         if item.get("course_id") is None or int(item.get("course_id")) not in excluded_course_ids
@@ -227,8 +250,9 @@ def build_curriculum_plan(
     # competency pass after it so a required ICT block (notably information
     # security) cannot be discarded by the later fallback.
     selected_courses = _repair_missing_ict_competencies(
-        selected_courses, project_version, db
+        selected_courses, project_version, db, variant_type
     )
+    trace("course_repairs_done")
     confirmed_bridge_ids = {
         int(bridge_id)
         for bridge_id in (constraints.get("confirmed_bridge_replacements") or {})
@@ -332,64 +356,75 @@ def build_curriculum_plan(
         .all()
     }
 
-    def is_project_domain(course: Course) -> bool:
-        if course.id in excluded_course_ids:
-            return False
-        if not _education_level_course_allowed(course, constraints.get("education_level")):
-            return False
-        # Canonical EPVO rows can retain the domain of their first source
-        # programme after title deduplication.  Never let a medical row enter
-        # an ICT+agriculture plan merely because a broad alias/scope match
-        # succeeded elsewhere in the pipeline.
-        course_domain_key = str(course.domain or "").casefold()
-        project_domain_text = " ".join(project_domains).casefold()
-        medical_domain = any(token in course_domain_key for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
-        medical_project = any(token in project_domain_text for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
-        agriculture_project = any(token in f"{declared_secondary_domain} {project_domain_text}" for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл"))
-        declared_medical_project = any(token in declared_secondary_domain for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
-        if medical_domain and agriculture_project and not declared_medical_project:
-            return False
-        if not (
-            _course_domain_matches(course, project_domains)
-            or domain_label_matches(course.domain, project_domains)
-        ):
-            return False
-        if cyber_forensics_program:
-            return _course_curriculum_role(course, project_domains) == "core"
-        if interdisciplinary_professional and _course_curriculum_role(course, project_domains) == "general":
-            return match_max_by_course.get(course.id, 0.0) >= 0.55
-        return True
-
-    def sanitize_selected_courses(items: List[Dict]) -> List[Dict]:
-        """Prevent late credit/prerequisite repair from bypassing admission."""
-        cleaned = []
-        for item in items:
-            if item.get("regulatory_required"):
-                cleaned.append(item)
-                continue
-            course_id = item.get("course_id")
-            if course_id is None:
-                cleaned.append(item)
-                continue
-            course = db.get(Course, course_id) if course_id else None
-            if course is None:
-                continue
-            code = str(course.course_id or "")
-            if code.startswith("GOSO-KZ-") and str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ":
-                item["regulatory_required"] = True
-                cleaned.append(item)
-                continue
-            if not item.get("admission_los"):
-                continue
-            if not _education_level_course_allowed(course, constraints.get("education_level")):
-                continue
-            if course and _course_curriculum_role(course, project_domains) == "general":
-                if match_max_by_course.get(course.id, 0.0) < 0.55:
-                    continue
-            cleaned.append(item)
-        return cleaned
+    # Keep admission policy as an explicit dependency instead of a nested
+    # closure.  This makes the scheduler orchestration easier to inspect and
+    # lets unit tests exercise the exact same admission contract directly.
+    is_project_domain = partial(
+        _is_course_in_project_domain,
+        excluded_course_ids=excluded_course_ids,
+        education_level=constraints.get("education_level"),
+        project_domains=project_domains,
+        declared_secondary_domain=declared_secondary_domain,
+        interdisciplinary_professional=interdisciplinary_professional,
+        cyber_forensics_program=cyber_forensics_program,
+        match_max_by_course=match_max_by_course,
+        education_level_check=_education_level_course_allowed,
+        domain_match=_course_domain_matches,
+        domain_label_match=domain_label_matches,
+        title_relevant=_is_interdisciplinary_title_relevant,
+        curriculum_role=_course_curriculum_role,
+    )
+    sanitize_selected_courses = partial(
+        sanitize_admitted_course_items,
+        project_version_id=project_version_id,
+        professional_los=professional_los,
+        project_domains=project_domains,
+        constraints=constraints,
+        is_project_domain=is_project_domain,
+        curriculum_role=_course_curriculum_role,
+        match_max_by_course=match_max_by_course,
+        db=db,
+    )
 
     selected_courses = sanitize_selected_courses(selected_courses)
+    # Late domain/credit repairs can remove the only real source for an LO.
+    # Restore an evidence-backed original candidate before scheduling, using
+    # a same-credit bridge or weak real item as the exchange slot. This keeps
+    # the verifier strict while preventing B/C diversification from silently
+    # losing professional outcomes.
+    covered_lo_codes = {
+        code for item in selected_courses for code in (item.get("admission_los") or [])
+    }
+    required_lo_codes = {
+        str(lo.lo_code or "") for lo in professional_los if str(lo.lo_code or "")
+    }
+    missing_lo_codes = required_lo_codes - covered_lo_codes
+    if missing_lo_codes:
+        selected_ids = {
+            int(item["course_id"]) for item in selected_courses
+            if item.get("course_id") is not None
+        }
+        for candidate in domain_repair_candidates:
+            candidate_los = set(candidate.get("admission_los") or [])
+            course_id = candidate.get("course_id")
+            if not candidate_los.intersection(missing_lo_codes) or course_id in selected_ids:
+                continue
+            replacement_index = next(
+                (
+                    index for index, item in enumerate(selected_courses)
+                    if item.get("bridge_module_id") is not None
+                    and int(item.get("credits") or 0) == int(candidate.get("credits") or 0)
+                ),
+                None,
+            )
+            if replacement_index is None:
+                continue
+            selected_courses[replacement_index] = dict(candidate)
+            selected_ids.add(int(course_id))
+            covered_lo_codes.update(candidate_los)
+            missing_lo_codes -= candidate_los
+            if not missing_lo_codes:
+                break
     selected_courses = _trim_to_target_credits(selected_courses, target_credits, db)
     # Final candidate repairs can reintroduce a second generic foundation
     # after the earlier normalization pass.  Deduplicate once immediately
@@ -398,6 +433,7 @@ def build_curriculum_plan(
     selected_courses = _unique_items_by_title(selected_courses)
     selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
 
+    previous_offending: frozenset[int] | None = None
     for _ in range(12):
         # Prerequisite repair may append replacement courses after the initial
         # EPVO-semester pass. Re-attach the selected direction/group evidence
@@ -408,7 +444,7 @@ def build_curriculum_plan(
         # ICT competency contract here because any preceding normalization or
         # credit repair may have replaced the marked security course.
         selected_courses = _repair_missing_ict_competencies(
-            selected_courses, project_version, db
+            selected_courses, project_version, db, variant_type
         )
         if interdisciplinary_professional:
             integration = next(
@@ -427,16 +463,36 @@ def build_curriculum_plan(
                 selected_courses = _force_bridge_item(
                     selected_courses, integration, variant_type, target_credits
                 )
+        # The repair loop above may remove a real LO source while solving a
+        # prerequisite or credit issue. If that happens, restore the
+        # evidence-backed selector result before scheduling; otherwise the
+        # final verifier reports a loss that was introduced by repair itself.
+        current_lo_codes = {
+            code for item in selected_courses
+            for code in (item.get("admission_los") or [])
+        }
+        if required_lo_codes - current_lo_codes:
+            restored = sanitize_selected_courses(domain_repair_candidates)
+            if restored:
+                selected_courses = restored
         schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
         schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
         verification = verify_curriculum_plan(schedule, project_version, db)
         offending = {item["course_id"] for item in verification["prerequisite_violations"] if item.get("course_id") is not None}
         if not offending: break
+        # A repair that produces the same offending set cannot make progress:
+        # repeating normalization and verification only burns minutes and
+        # leaves the user with a generic timeout. Let the final verifier report
+        # the stable violation instead of looping over an unchanged state.
+        current_offending = frozenset(int(course_id) for course_id in offending)
+        if current_offending == previous_offending:
+            break
+        previous_offending = current_offending
         selected_courses = [item for item in selected_courses if item.get("course_id") not in offending]
         selected_ids = {item.get("course_id") for item in selected_courses if item.get("course_id") is not None}
         total = sum(item.get("credits") or 0 for item in selected_courses)
         replacements = [
-            course for course in db.query(Course).filter(
+            course for course in db.query(Course).options(selectinload(Course.prerequisites)).filter(
                 Course.id.in_(list(match_max_by_course) or [-1])
             ).all()
             if course.id not in selected_ids and not course.prerequisites and is_project_domain(course)
@@ -478,7 +534,7 @@ def build_curriculum_plan(
     # a competency repair marker. Re-run this quality-critical pass at the
     # final selection boundary so required ICT blocks survive every repair.
     selected_courses = _repair_missing_ict_competencies(
-        selected_courses, project_version, db
+        selected_courses, project_version, db, variant_type
     )
 
     # Fill an ordinary credit gap with several distinct, auditable modules.
@@ -521,8 +577,14 @@ def build_curriculum_plan(
                 db,
             )
         )
+        # ``match_max_by_course`` is the authoritative candidate frontier for
+        # this build.  Scanning the complete catalogue here once per variant
+        # made the planner spend minutes in an O(|catalogue|) pass despite
+        # discarding every unscored row below.
         secondary_courses = [
-            course for course in db.query(Course).all()
+            course for course in db.query(Course).options(selectinload(Course.prerequisites)).filter(
+                Course.id.in_(match_max_by_course.keys() or {-1})
+            ).all()
             if course.id not in selected_ids
             and _title_key(course.title) not in selected_titles
             and 3 <= int(course.credits or 0) <= 7
@@ -664,7 +726,9 @@ def build_curriculum_plan(
             if item.get("course_id") is not None
             and not item.get("regulatory_required")
             and not item.get("competency_required")
-            and int(item.get("credits") or 0) == 5
+            # Doctoral professional blocks commonly use 3–4 credit courses;
+            # requiring exactly five here made the C trajectory nudge a no-op.
+            and int(item.get("credits") or 0) > 0
             and _foundation_max_semester(item.get("title"), num_semesters)
             >= preferred_semester
         ]
@@ -677,6 +741,34 @@ def build_curriculum_plan(
             trajectory_item["latest_semester"] = max(
                 preferred_semester,
                 int(trajectory_item.get("latest_semester") or 1),
+            )
+    elif (
+        variant_type == "B"
+        and str(constraints.get("education_level") or "").lower()
+        in {"doctorate", "doctoral", "phd"}
+    ):
+        # When the doctoral catalogue has only one credit-balanced competency
+        # exchange, B and A can still converge on the same course set.  Give B
+        # a real trajectory alternative by moving one unprotected professional
+        # unit to semester 2; this changes sequencing only and leaves credits,
+        # prerequisites, level and competency evidence untouched.
+        trajectory_candidates = [
+            item for item in selected_courses
+            if item.get("course_id") is not None
+            and not item.get("regulatory_required")
+            and not item.get("competency_required")
+            and not item.get("prerequisites")
+            and int(item.get("credits") or 0) > 0
+            and int(item.get("recommended_semester") or 1) <= 1
+        ]
+        if trajectory_candidates:
+            trajectory_item = max(
+                trajectory_candidates,
+                key=lambda item: int(item.get("course_id") or 0),
+            )
+            trajectory_item["variant_preferred_semester"] = 3
+            trajectory_item["latest_semester"] = max(
+                3, int(trajectory_item.get("latest_semester") or 1)
             )
 
     # Close residual credit/load gaps even when prerequisite verification was
@@ -703,9 +795,20 @@ def build_curriculum_plan(
             and int(item["course_id"]) not in selected_ids
             and _title_key(item.get("title")) not in selected_titles
         }
+        if residual_gap <= 7:
+            # Include scored repository candidates that were not in the
+            # selector's already-normalized subset; they are needed when a
+            # late variant-specific repair removed the only exact-gap item.
+            residual_ids.update(
+                int(course_id)
+                for (course_id,) in db.query(Course.id).filter(
+                    Course.id.in_(list(match_max_by_course) or [-1]),
+                    Course.credits == residual_gap,
+                ).all()
+            )
         residual_courses = {
             course.id: course
-            for course in db.query(Course).filter(
+            for course in db.query(Course).options(selectinload(Course.prerequisites)).filter(
                 Course.id.in_(residual_ids or {-1})
             ).all()
         }
@@ -743,14 +846,80 @@ def build_curriculum_plan(
             int(item.get("recommended_semester") or 99),
             int(item.get("course_id") or 0),
         ))
+        # A variant can lose a real course during late competency/domain
+        # normalization even when the original selected subset had no exact
+        # residual candidate.  Do not silently leave (for example) 236/240
+        # credits just because the bridge budget is already full: use a scored,
+        # unused repository course with the exact gap and the same admission
+        # gates.  This keeps credit repair semantic and auditable.
+        if not residual_candidates and residual_gap <= 7:
+            selected_titles = {
+                _title_key(item.get("title"))
+                for item in selected_courses
+                if item.get("title")
+            }
+            fallback_courses = db.query(Course).options(selectinload(Course.prerequisites)).filter(
+                Course.id.in_(list(match_max_by_course) or [-1]),
+                Course.credits == residual_gap,
+            ).all()
+            for course in fallback_courses:
+                if (
+                    course.id in selected_ids
+                    or _title_key(course.title) in selected_titles
+                    or not is_project_domain(course)
+                    or course.prerequisites
+                    or _has_foreign_professional_title(course, project_domains)
+                    or (
+                        build_is_interdisciplinary
+                        and not _is_it_medicine_support_course(course, project_domains)
+                    )
+                    or course.id not in residual_evidence
+                ):
+                    continue
+                residual_candidates.append({
+                    "course_id": course.id,
+                    "title": course.title,
+                    "domain": course.domain,
+                    "credits": int(course.credits or 0),
+                    "recommended_semester": course.recommended_semester,
+                    "prerequisites": [],
+                    # Keep the same admission contract as candidates coming
+                    # from retrieval.  Without this field the later
+                    # sanitize_selected_courses gate correctly (but
+                    # incorrectly for this already-evidenced fallback)
+                    # discarded the real credit-fill course.
+                    "admission_los": sorted(residual_evidence.get(course.id, set())),
+                    "type": course.cycle_component or "mandatory",
+                    "score": match_max_by_course.get(course.id, 0.0),
+                })
+                break
         if residual_candidates:
             real_fill = dict(residual_candidates[0])
             real_fill["selection_method"] = "final_real_credit_fill"
             selected_courses.append(real_fill)
 
     selected_courses = _apply_scoped_epvo_semesters(selected_courses, project_version, db)
+    # An explicitly introductory course with an early source semester is not
+    # a generic load shuttle.  Interdisciplinary balancing used to move such a
+    # foundation to the final semester when bridge modules filled the early
+    # terms, producing a real semantic violation (for example "Введение в
+    # биологию" in semester 8).  Mark the source placement as required so the
+    # scheduler and subsequent load repairs preserve its admissible window.
+    for item in selected_courses:
+        title = str(item.get("title") or "").casefold().strip()
+        recommended = int(item.get("recommended_semester") or 0)
+        if (
+            recommended == 1
+            and title.startswith(("введение ", "основы ", "introduction ", "fundamentals "))
+            and item.get("course_id") is not None
+        ):
+            item["_scoped_epvo_semester"] = True
+            item["source_semester_required"] = True
     schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
+    trace("schedule_courses_done")
     schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
+    invariant_ledger = InvariantLedger(num_semesters)
+    invariant_ledger.record("scheduled", schedule)
     provisional = verify_curriculum_plan(schedule, project_version, db)
     total_now = sum(int(item.get("credits") or 0) for item in selected_courses)
     load_gaps = [
@@ -786,7 +955,10 @@ def build_curriculum_plan(
                 topics=["Интегрированный кейс", "Прикладная практика", "Портфолио подтверждений", "Рефлексия и защита"],
                 prerequisites=[], assessment_methods=["портфолио", "проектный кейс", "защита"],
                 source_chunks_json=[], generation_params_json={"mode": "final_credit_and_load_repair"},
-                target_los=[lo.lo_code for lo in project_version.learning_outcomes],
+                # Credit/load repair has no independent programme-LO evidence.
+                # Do not claim all programme outcomes merely because the
+                # module was inserted into a semester.
+                target_los=[],
             )
             db.add(balance); db.flush()
         else:
@@ -830,13 +1002,16 @@ def build_curriculum_plan(
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )
+    trace("semester_repair_1_done")
     schedule = _repair_underloaded_semesters_with_bridges(
         schedule, project_version, nominal_load, target_credits, maximum_credits, db
     )
+    trace("underloaded_bridge_repair_done")
     # Flexible bridge credits can change by one during residual repair. Run
     # the bounded whole-course/swap balancer once more so a valid 3↔4 credit
     # exchange is not left as a 26-credit semester.
     schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    trace("rebalance_1_done")
     # The residual-load repair is intentionally the last credit operation, but
     # it can change which semester has room for a foundation course.  Re-run
     # the semantic repair so the persisted plan, not only the provisional
@@ -844,9 +1019,12 @@ def build_curriculum_plan(
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )
-    schedule = _repair_final_domain_quotas(
-        schedule, domain_repair_candidates, project_version, db
-    )
+    trace("semester_repair_2_done")
+    # Domain quota repair is intentionally deferred until the final mutation
+    # boundary below. Running it here and then mutating the schedule again
+    # caused the same expensive search to execute repeatedly per variant.
+    trace("domain_repair_deferred_1")
+    invariant_ledger.record("final_repair_boundary", schedule)
     # Equal-credit quota swaps preserve load, but a replacement can have a
     # different semantic study window. Keep the persisted semester ordering
     # subject to the same final appropriateness rule.
@@ -861,7 +1039,12 @@ def build_curriculum_plan(
         schedule, domain_repair_candidates, project_version, db
     )
     schedule = _fill_schedule_credit_gap(
-        schedule, project_version, target_credits, maximum_credits, db
+        schedule, project_version, target_credits, maximum_credits, db,
+        # Late quota/quality repairs may remove a real course from the active
+        # list while retaining it in the pre-repair domain candidate pool.
+        # Offer both pools at the final boundary; the gap helper deduplicates
+        # by course_id and admits only courses not already scheduled.
+        real_candidates=[*selected_courses, *domain_repair_candidates],
     )
     schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
     schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
@@ -869,7 +1052,8 @@ def build_curriculum_plan(
     # Run the bounded repair once more at the final envelope; no later step
     # removes these explicit bridge credits.
     schedule = _fill_schedule_credit_gap(
-        schedule, project_version, target_credits, maximum_credits, db
+        schedule, project_version, target_credits, maximum_credits, db,
+        real_candidates=selected_courses,
     )
     prerequisite_graph = _infer_schedule_prerequisites(schedule)
     # The final credit-gap repair may move flexible courses after the normal
@@ -888,6 +1072,18 @@ def build_curriculum_plan(
     schedule = _repair_semester_appropriateness(
         schedule, num_semesters, nominal_load, db
     )
+    # Admission/semantic repairs can leave a late semester underloaded after
+    # a domain swap. Stabilize the load envelope at the final boundary before
+    # competency and domain assertions; this pass only moves admissible items
+    # and cannot change credits or domain quotas.
+    schedule = _repair_underloaded_semesters_with_bridges(
+        schedule, project_version, nominal_load, target_credits, maximum_credits, db
+    )
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    # The residual bridge pass may add credits after the ordinary balancer.
+    # Close the pipeline with the strict envelope as well; otherwise a valid
+    # 33-credit semester can become 34 and reach the verifier unchanged.
+    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
 
     # Final schedule guard: load/quota repairs operate on a flat schedule and
     # can otherwise replace the only course carrying an ICT competency block.
@@ -903,7 +1099,7 @@ def build_curriculum_plan(
         }
         final_courses = {
             course.id: course
-            for course in db.query(Course).filter(
+            for course in db.query(Course).options(selectinload(Course.prerequisites)).filter(
                 Course.id.in_(final_course_ids or {-1})
             ).all()
         }
@@ -911,7 +1107,7 @@ def build_curriculum_plan(
         if final_audit.get("missing"):
             flat_items = [dict(item) for rows in schedule.values() for item in rows]
             repaired_items = _repair_missing_ict_competencies(
-                flat_items, project_version, db
+                flat_items, project_version, db, variant_type
             )
             repaired_by_id = {
                 int(item["course_id"]): item
@@ -976,92 +1172,173 @@ def build_curriculum_plan(
     # same-credit secondary-domain course.  Quota repair must therefore be
     # the last schedule mutation before validation; otherwise a valid quota
     # can regress between repair and verification (notably ict-medicine A).
-    schedule = _repair_final_domain_quotas(
-        schedule, domain_repair_candidates, project_version, db
-    )
+    trace("domain_repair_deferred_2")
 
-    invalid_domain_courses = []
-    for semester_items in schedule.values():
-        for item in semester_items:
-            if item.get("regulatory_required"):
-                continue
-            course_id = item.get("course_id")
-            if course_id is None:
-                continue
-            course = db.get(Course, course_id)
-            item_domain = str(item.get("domain") or "").lower().strip()
-            raw_course_domain = str(course.domain or "").casefold() if course else ""
-            if course and raw_course_domain.startswith(("med", "health", "мед", "здрав")) and not any(
-                token in f"{declared_secondary_domain} {' '.join(project_domains)}"
-                for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical")
-            ):
-                continue
-            declared_agriculture = any(
-                token in f"{declared_secondary_domain} {' '.join(project_domains)}"
-                for token in ("agri", "agro", "farm", "сельск", "аграр", "агроном", "ауыл")
+    # Domain-quota repair is the last schedule mutation and may replace the
+    # only real course carrying an ICT competency block. Restore that block at
+    # the true validation boundary so no later balancing pass can erase it.
+    if competency_requirements:
+        final_course_ids = {
+            int(item["course_id"])
+            for rows in schedule.values()
+            for item in rows
+            if item.get("course_id") is not None
+        }
+        final_courses = {
+            course.id: course
+            for course in db.query(Course).options(selectinload(Course.prerequisites)).filter(
+                Course.id.in_(final_course_ids or {-1})
+            ).all()
+        }
+        final_audit = _ict_competency_audit(list(final_courses.values()), constraints)
+        if final_audit.get("missing"):
+            flat_items = [dict(item) for rows in schedule.values() for item in rows]
+            repaired_items = _repair_missing_ict_competencies(
+                flat_items, project_version, db, variant_type
             )
-            canonical_domain = str(course.domain or "").casefold() if course else ""
-            item_medical = any(token in f"{item_domain} {canonical_domain}" for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical"))
-            project_has_medical_domain = any(
-                token in f"{declared_secondary_domain} {' '.join(project_domains)}"
-                for token in ("medicine", "medical", "health", "медицин", "здрав", "clinical")
-            )
-            canonical_medical = canonical_domain in {"medicine", "medical", "health sciences", "здравоохранение"}
-            if (declared_agriculture and (item_medical or canonical_medical)) or ((item_medical or canonical_medical) and not project_has_medical_domain):
-                invalid_domain_courses.append({"course_id": course.id, "title": course.title, "domain": course.domain})
-                continue
-            item_has_project_domain = any(
-                domain and (domain in item_domain or item_domain in domain)
-                for domain in project_domains
-            ) or domain_label_matches(item_domain, project_domains)
-            # The selector rewrites canonical EPVO labels to the exact
-            # project-specific direction. Trust that evidence here; canonical
-            # Course.domain may come from the first programme that used the
-            # deduplicated discipline (for example, "Medicine").
-            if course and not (is_project_domain(course) or item_has_project_domain):
-                if (canonical_medical or canonical_domain.startswith(("med", "health", "мед", "здрав"))) and not project_has_medical_domain:
-                    continue
-                invalid_domain_courses.append({
-                    "course_id": course.id,
-                    "title": course.title,
-                    "domain": course.domain,
-                })
+            repaired_by_id = {
+                int(item["course_id"]): item
+                for item in repaired_items
+                if item.get("course_id") is not None
+                and int(item["course_id"]) not in final_course_ids
+                and item.get("competency_required")
+            }
+            if repaired_by_id:
+                repaired_iter = iter(repaired_items)
+                for semester, rows in schedule.items():
+                    for index in range(len(rows)):
+                        rows[index] = next(repaired_iter)
+                schedule = _repair_semester_appropriateness(
+                    schedule, num_semesters, nominal_load, db
+                )
+
+    # The final competency replacement can legitimately move a course to a
+    # different semantic window. Re-establish the load envelope once more at
+    # the actual validation boundary; no later mutation follows this pass.
+    schedule = _repair_underloaded_semesters_with_bridges(
+        schedule, project_version, nominal_load, target_credits, maximum_credits, db
+    )
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+
+    # Late semester/load repairs may introduce a bridge after the flat
+    # selection cap above. Re-apply the same budget at the actual validation
+    # boundary, while preserving each item's semester and all real courses.
+    # This prevents an apparently valid plan from persisting 8+ bridge rows
+    # when the interdisciplinary contract allows only seven.
+    flat_schedule_items = [
+        item for items in schedule.values() for item in items
+    ]
+    capped_items = _cap_bridge_items_to_budget(
+        flat_schedule_items, project_version, confirmed_bridge_ids
+    )
+    capped_ids = {id(item) for item in capped_items}
+    schedule = {
+        semester: [
+            item for item in items
+            if item.get("bridge_module_id") is None or id(item) in capped_ids
+        ]
+        for semester, items in schedule.items()
+    }
+    # Removing an over-budget bridge can leave a small credit/load gap. Close
+    # it only through the bounded repair path, which flexes retained bridges
+    # before considering a new module and therefore cannot reintroduce the
+    # bridge-count violation at this final boundary.
+    schedule = _fill_schedule_credit_gap(
+        schedule, project_version, target_credits, maximum_credits, db,
+        real_candidates=selected_courses,
+    )
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    # Credit-gap/load balancing can add or move a secondary-domain bridge.
+    # Reconcile the domain quota at the true validation boundary so the
+    # verifier sees the same invariant that the repair stage established.
+    schedule = _repair_final_domain_quotas(
+        schedule,
+        domain_repair_candidates,
+        project_version,
+        db,
+        is_admissible=is_project_domain,
+    )
+    # Domain replacement can change the credit weight of the affected
+    # semester.  Balance only after the last replacement; otherwise the
+    # verifier can reject a plan that was balanced immediately beforehand.
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+
+    # Final regulatory boundary.  Several late quality repairs legitimately
+    # replace ordinary courses, but none of them may be allowed to erase a
+    # mandatory ГОСО component.  Rebuild the schedule from the current items
+    # plus the canonical ruleset block, then trim only non-regulatory courses
+    # as whole units to the requested total.  This is deliberately explicit:
+    # the verifier must validate the same mandatory block that is persisted.
+    if str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ":
+        final_items = [item for rows in schedule.values() for item in rows]
+        # Domain repair may have replaced an evidence-bearing professional
+        # course. Re-run the existing evidence-backed LO repair at this final
+        # boundary; it only admits scored in-scope EPVO rows and never uses a
+        # synthetic bridge as proof of a real course outcome.
+        final_items = _normalize_selected_courses_for_quality(
+            final_items, project_version, db, variant_type
+        )
+        final_items = merge_goso_items(final_items, project_version, db)
+        final_items = _trim_to_target_credits(final_items, target_credits, db)
+        schedule = schedule_courses(final_items, num_semesters, nominal_load, db)
+        # The regulatory block is not part of a project-domain quota.  Re-run
+        # the quota repair against the complete post-GOSO schedule so a late
+        # trim cannot leave one declared domain at zero.
+        schedule = _repair_final_domain_quotas(
+            schedule,
+            domain_repair_candidates,
+            project_version,
+            db,
+            is_admissible=is_project_domain,
+        )
+        final_items = [item for rows in schedule.values() for item in rows]
+        final_items = merge_goso_items(final_items, project_version, db)
+        final_items = _trim_to_target_credits(final_items, target_credits, db)
+        schedule = schedule_courses(final_items, num_semesters, nominal_load, db)
+
+    # The KZ regulatory branch performs its own final merge/trim/schedule
+    # sequence.  Rebalance after that branch as well, at the actual verifier
+    # boundary, so the last mutation cannot reintroduce a semester-load error.
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+
+    # The KZ branch rebuilds the schedule after quota repair and can erase a
+    # previously closed credit gap.  Restore the exact credit contract at the
+    # actual verifier boundary, before any publication decision is made.
+    schedule = _fill_schedule_credit_gap(
+        schedule, project_version, target_credits, maximum_credits, db,
+        real_candidates=selected_courses,
+    )
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+
+    # Keep the final domain decision in one auditable helper.  The local scan
+    # above is retained temporarily for compatibility while the orchestration
+    # function is being split into pipeline phases; this assignment makes the
+    # extracted boundary authoritative for the error raised below.
+    boundary_audit = audit_final_schedule_boundary(
+        schedule,
+        db=db,
+        project_version=project_version,
+        project_domains=project_domains,
+        declared_secondary_domain=declared_secondary_domain,
+        is_project_domain=is_project_domain,
+        is_general_course=lambda course: _course_curriculum_role(course, project_domains) == "general",
+    )
+    invalid_domain_courses = boundary_audit["invalid_domain_courses"]
     if invalid_domain_courses:
         raise ValueError(
             "Planner selected courses outside the project domains: "
             + ", ".join(f"{c['title']} ({c['domain']})" for c in invalid_domain_courses[:8])
         )
-    admission_audit = _audit_final_course_admission(schedule, project_version, db)
+    admission_audit = boundary_audit["admission"]
     if not admission_audit["passed"]:
         examples = admission_audit["violations"][:8]
-        late_schedule = {
-            int(semester): {
-                "credits": sum(
-                    int(item.get("credits") or 0) for item in items
-                ),
-                "items": [
-                    {
-                        "title": item.get("title"),
-                        "credits": int(item.get("credits") or 0),
-                        "minimum": (
-                            _minimum_appropriate_semester(
-                                item,
-                                db.get(Course, int(item["course_id"])),
-                                num_semesters,
-                            )
-                            if item.get("course_id") is not None
-                            and db.get(Course, int(item["course_id"])) is not None
-                            else None
-                        ),
-                        "regulatory": bool(item.get("regulatory_required")),
-                        "competency": bool(item.get("competency_required")),
-                    }
-                    for item in items
-                ],
-            }
-            for semester, items in schedule.items()
-            if int(semester) >= max(1, num_semesters - 2)
-        }
+        late_schedule = late_schedule_snapshot(
+            schedule,
+            db=db,
+            num_semesters=num_semesters,
+            minimum_semester=_minimum_appropriate_semester,
+        )
         raise ValueError(
             "Admission filter rejected real courses: "
             + ", ".join(
@@ -1076,8 +1353,15 @@ def build_curriculum_plan(
             + f"; late_schedule={late_schedule}"
         )
     verification = verify_curriculum_plan(schedule, project_version, db)
+    trace("verification_done")
     verification["prerequisite_graph"] = prerequisite_graph
     metrics = calculate_plan_metrics(schedule, selected_courses, project_version, db, verification)
+    metrics["invariant_ledger"] = invariant_ledger.as_dict()
+    if str((project_version.project.constraints_json or {}).get("jurisdiction") or "INTERNATIONAL").upper() == "KZ":
+        from app.planner.goso_ruleset import GOSO_RULESET_CHECKSUM, GOSO_RULESET_VERSION
+        metrics["goso_ruleset_version"] = GOSO_RULESET_VERSION
+        metrics["goso_ruleset_checksum"] = GOSO_RULESET_CHECKSUM
+        metrics["goso_ruleset_source"] = "https://adilet.zan.kz/rus/docs/V2200028916"
     metrics["course_admission"] = admission_audit
     plan = Plan(project_version_id=project_version_id, variant_type=variant_type, metrics_json=metrics)
     db.add(plan); db.flush()
@@ -1098,14 +1382,43 @@ def build_curriculum_plan(
         .all()
     }
     lo_by_code = {lo.lo_code: lo for lo in lo_by_id.values()}
+    # Build the semester evidence from one bounded read instead of querying
+    # MatchScore once per course in every semester (N+1 on the hot path).
+    schedule_course_ids = {
+        int(item["course_id"])
+        for courses in schedule.values()
+        for item in courses
+        if item.get("course_id")
+    }
+    match_rows_by_course = {}
+    if schedule_course_ids:
+        for row in (
+            db.query(MatchScore)
+            .filter(
+                MatchScore.project_version_id == project_version_id,
+                MatchScore.course_id.in_(schedule_course_ids),
+            )
+            .order_by(MatchScore.course_id, MatchScore.score.desc())
+            .all()
+        ):
+            match_rows_by_course.setdefault(int(row.course_id), []).append(row)
+    schedule_bridge_ids = {
+        int(item["bridge_module_id"])
+        for courses in schedule.values()
+        for item in courses
+        if item.get("bridge_module_id")
+    }
+    bridge_by_id = {
+        int(module.id): module
+        for module in db.query(BridgeModule).filter(
+            BridgeModule.id.in_(schedule_bridge_ids or {-1})
+        ).all()
+    }
     for semester, courses in schedule.items():
         evidence = {}
         for item in courses:
             if item.get("course_id"):
-                all_rows = db.query(MatchScore).filter(
-                    MatchScore.course_id == item["course_id"],
-                    MatchScore.project_version_id == project_version_id,
-                ).order_by(MatchScore.score.desc()).all()
+                all_rows = match_rows_by_course.get(int(item["course_id"]), [])
                 rows = [row for row in all_rows if row.score >= 0.4] or all_rows[:1]
                 for row in rows:
                     lo = lo_by_id.get(row.lo_id)
@@ -1121,7 +1434,7 @@ def build_curriculum_plan(
                         if item.get("title") not in detail["courses"]:
                             detail["courses"].append(item.get("title"))
             elif item.get("bridge_module_id"):
-                bridge = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
+                bridge = bridge_by_id.get(int(item["bridge_module_id"]))
                 for code in (bridge.target_los or []) if bridge else []:
                     lo = lo_by_code.get(code)
                     if lo:
@@ -1138,146 +1451,5 @@ def build_curriculum_plan(
         details = sorted(evidence.values(), key=lambda row: row["code"])
         semester_lo_details[semester] = details
         semester_los[semester] = ", ".join(row["code"] for row in details) if details else "-"
+    trace("plan_ready")
     return {"plan_id": plan.id, "variant_type": variant_type, "schedule": schedule, "metrics": metrics, "verification": verification, "semester_los": semester_los, "semester_lo_details": semester_lo_details}
-
-
-
-
-
-
-
-
-
-
-
-
-def _cap_bridge_items_to_budget(
-    selected_courses: List[Dict],
-    project_version: ProjectVersion,
-    confirmed_bridge_ids: set[int] | None = None,
-) -> List[Dict]:
-    """Keep bridge units within the auditable programme budget.
-
-    Bridge rows may be introduced by several independent repair stages.  A
-    single final gate prevents those stages from accumulating 10+ modules.
-    Confirmed replacements are retained; remaining slots favour bridges with
-    more explicit LO targets and higher admission evidence.
-    """
-    limit = bridge_module_limit(project_version)
-    bridges = [item for item in selected_courses if item.get("bridge_module_id") is not None]
-    if len(bridges) <= limit:
-        return selected_courses
-    confirmed = confirmed_bridge_ids or set()
-    protected = [item for item in bridges if int(item.get("bridge_module_id") or 0) in confirmed]
-    if len(protected) >= limit:
-        protected.sort(
-            key=lambda item: (
-                0 if str(item.get("course_id") or "").startswith("SECONDARY_INTEGRATION_") else
-                1 if str(item.get("course_id") or "").startswith("SECONDARY_") else 2,
-                -int(item.get("credits") or 0),
-            )
-        )
-        keep = protected[:limit]
-    else:
-        remaining = [item for item in bridges if item not in protected]
-        remaining.sort(
-            key=lambda item: (
-                # Preserve explicit interdisciplinary structure before
-                # generic LO-gap/load-repair bridges.  Without this priority
-                # the cap kept SECONDARY_FOUNDATION/DATA/ADVANCED but dropped
-                # SECONDARY_INTEGRATION, making the second-domain quota fail.
-                0 if str(item.get("course_id") or "").startswith("SECONDARY_INTEGRATION_") else
-                1 if str(item.get("course_id") or "").startswith("SECONDARY_") else 2,
-                -len(item.get("target_los") or item.get("learning_outcomes") or []),
-                -float(item.get("admission_score") or item.get("score") or 0.0),
-                int(item.get("credits") or 0),
-            )
-        )
-        keep = protected + remaining[: max(0, limit - len(protected))]
-    keep_ids = {id(item) for item in keep}
-    return [
-        item for item in selected_courses
-        if item.get("bridge_module_id") is None or id(item) in keep_ids
-    ]
-
-
-def _fill_schedule_credit_gap(
-    schedule: Dict[int, List[Dict]],
-    project_version: ProjectVersion,
-    target_credits: int,
-    maximum_credits: int,
-    db: Session,
-) -> Dict[int, List[Dict]]:
-    """Close a residual schedule gap after late semester repairs."""
-    total = sum(int(item.get("credits") or 0) for items in schedule.values() for item in items)
-    gap = int(target_credits) - total
-    if gap <= 0:
-        return schedule
-    # Prefer flexing existing bridges before creating another visible module.
-    for items in schedule.values():
-        for item in reversed(items):
-            if gap <= 0 or item.get("bridge_module_id") is None:
-                continue
-            room = min(7 - int(item.get("credits") or 0), gap)
-            if room <= 0:
-                continue
-            item["credits"] = int(item.get("credits") or 0) + room
-            module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
-            if module:
-                module.credits = item["credits"]
-            gap -= room
-    if gap <= 0:
-        return schedule
-    if total + gap > int(maximum_credits):
-        return schedule
-    # Late prerequisite/domain repairs can remove several real courses after
-    # the earlier bridge-slot pass.  Creating only one module here left new
-    # programmes at 120--151/240 credits even though the planner was allowed
-    # to use explicit bridge modules.  Close the residual gap atomically with
-    # the minimum number of 3--7 credit modules instead of silently returning
-    # an incomplete plan.  The verifier still marks bridge-heavy plans for
-    # expert review; this change only makes the credit envelope deterministic.
-    existing_bridge_ids = {
-        int(item.get("bridge_module_id"))
-        for items in schedule.values()
-        for item in items
-        if item.get("bridge_module_id") is not None
-    }
-    available_bridge_slots = max(
-        0, bridge_module_limit(project_version) - len(existing_bridge_ids)
-    )
-    if available_bridge_slots <= 0:
-        return schedule
-    slots_needed = min(available_bridge_slots, max(1, math.ceil(gap / 7)))
-    modules = ensure_credit_bridge_modules(
-        project_version,
-        db,
-        gap,
-        slots_needed,
-        desired_count=slots_needed,
-    )
-    if not modules:
-        return schedule
-    remaining = gap
-    for module in modules:
-        if remaining <= 0:
-            break
-        module.credits = max(3, min(7, math.ceil(remaining / max(1, len(modules)))) )
-        item = _bridge_item(module)
-        item["credits"] = module.credits
-        upper = int((project_version.project.constraints_json or {}).get(
-            "max_credits_per_semester", 30
-        )) + 3
-        eligible = [
-            value for value in schedule
-            if sum(int(row.get("credits") or 0) for row in schedule[value]) + int(item["credits"]) <= upper
-        ]
-        if not eligible:
-            break
-        semester = min(
-            eligible,
-            key=lambda value: sum(int(row.get("credits") or 0) for row in schedule[value]),
-        )
-        schedule[semester].append(item)
-        remaining -= module.credits
-    return schedule

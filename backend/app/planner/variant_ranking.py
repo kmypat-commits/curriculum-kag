@@ -1,6 +1,7 @@
 """Deterministic ranking primitives for curriculum-plan variants."""
 from __future__ import annotations
 
+import heapq
 from collections.abc import Callable, Iterable, MutableMapping
 from typing import Any
 
@@ -138,7 +139,11 @@ def rank_domain_quota_candidates(
         and domain_share(course, domain_index) > 0.0
         and course_depth(course.id) < max_depth
     )
-    return sorted(candidates, key=rank_key)
+    # The repair stage consumes only a bounded frontier. Sorting the complete
+    # catalogue on every variant made the late quota pass dominate generation;
+    # nsmallest preserves the exact ranking semantics for the candidates that
+    # can actually be evaluated downstream.
+    return heapq.nsmallest(80, candidates, key=rank_key)
 
 
 def get_domain_quota_candidates(

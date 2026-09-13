@@ -22,6 +22,11 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def seed_data():
+    if os.getenv("ALLOW_DEMO_SEED", "").lower() != "true":
+        raise RuntimeError("Legacy demo seed is disabled; set ALLOW_DEMO_SEED=true explicitly for local/test only")
+    admin_password = os.getenv("CURRICULUM_LOCAL_PASSWORD")
+    if not admin_password:
+        raise RuntimeError("Set CURRICULUM_LOCAL_PASSWORD; legacy seed never uses a default password")
     print("--- STARTING DATABASE SCALE-UP (130 COURSES) ---")
     
     # Ensure tables are created
@@ -59,7 +64,7 @@ def seed_data():
             admin = User(
                 email="admin@curriculum-kag.local",
                 full_name="System Administrator",
-                hashed_password=pwd_context.hash("admin123"),
+                hashed_password=pwd_context.hash(admin_password),
                 is_active=1
             )
             admin.roles = [admin_role]

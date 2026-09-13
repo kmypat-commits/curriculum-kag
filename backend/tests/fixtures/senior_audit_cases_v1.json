@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "purpose": "Minimal deterministic regressions from senior-audit-2026-09-08. No user project IDs or production catalogue rows.",
+  "bridge_budget": {
+    "constraints": {
+      "allow_new_courses": true,
+      "max_new_courses": 1,
+      "program_type": "interdisciplinary"
+    },
+    "expected_limit": 1
+  },
+  "domain_alias": {
+    "scope": ["Information and communication technologies"],
+    "accepted": ["IT", "Information technology"],
+    "rejected": ["Literature", "Hospitality"]
+  },
+  "variant_order": {
+    "left": {
+      "1": [
+        {"course_id": 42, "credits": 5},
+        {"bridge_module_id": 7, "credits": 3}
+      ]
+    },
+    "right": {
+      "1": [
+        {"bridge_module_id": 7, "credits": 3},
+        {"course_id": 42, "credits": 5}
+      ]
+    }
+  },
+  "credit_deficit": {
+    "target_credits": 240,
+    "actual_credits": 236,
+    "verification": {
+      "feasible": false,
+      "hard_violation_count": 1,
+      "credit_violations": [{"reason": "below_target", "actual": 236, "target": 240}]
+    }
+  },
+  "prerequisite_ontology": {
+    "occupational_safety": "Безопасность жизнедеятельности",
+    "cybersecurity": "Введение в кибербезопасность"
+  },
+  "unapproved_bridge": {
+    "target_los": ["LO1", "LO2"],
+    "source_chunks_json": [],
+    "generation_params_json": {"mode": "final_credit_and_load_repair"}
+  }
+}

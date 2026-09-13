@@ -25,6 +25,26 @@ def main() -> int:
         importlib.import_module(f"tests.{path.stem}")
         for path in sorted(test_dir.glob("test_*.py"))
     ]
+    # Some regression tests intentionally use pytest fixtures (for example
+    # monkeypatch and tmp_path).  Calling those functions directly would turn
+    # a valid test suite into a false failure, so use pytest whenever such a
+    # test is present while retaining the dependency-free runner for the
+    # small plain-assert suite.
+    if any(
+        inspect.signature(function).parameters
+        for module in modules
+        for name, function in inspect.getmembers(module, inspect.isfunction)
+        if name.startswith("test_")
+    ):
+        try:
+            import pytest
+        except ModuleNotFoundError:
+            print("Pytest is required because the suite contains fixture-based tests.", file=sys.stderr)
+            return 2
+        # The cache is an optimization, not part of the test contract.  It
+        # can be left ACL-locked after an elevated Windows run, so disable
+        # the provider for deterministic local/CI execution.
+        return int(pytest.main(["-q", "-p", "no:cacheprovider", str(test_dir)]))
     tests = [
         (f"{module.__name__}.{name}", function)
         for module in modules

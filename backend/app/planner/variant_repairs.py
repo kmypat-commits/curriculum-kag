@@ -8,6 +8,27 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
+from app.models.bridge_module import BridgeModule
+
+
+def reduce_bridge_credit_excess(items: list[dict], target: int, db: Any) -> list[dict]:
+    """Reduce only flexible bridge credits when whole-course trim cannot fit."""
+    excess = max(0, sum(int(item.get("credits") or 0) for item in items) - target)
+    if not excess:
+        return items
+    for item in items:
+        if excess <= 0 or item.get("bridge_module_id") is None:
+            continue
+        current = int(item.get("credits") or 0)
+        reduction = min(excess, max(0, current - 1))
+        if reduction <= 0:
+            continue
+        item["credits"] = current - reduction
+        module = db.query(BridgeModule).filter(BridgeModule.id == item["bridge_module_id"]).first()
+        if module:
+            module.credits = item["credits"]
+        excess -= reduction
+    return items
 
 
 def top_up_with_credit_bridges(

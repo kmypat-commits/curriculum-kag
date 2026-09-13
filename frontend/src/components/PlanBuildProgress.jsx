@@ -8,29 +8,27 @@ export default function PlanBuildProgress({
     elapsedLabel,
     longRunningHint,
 }) {
-    if (!active) return null
+    const timedOut = status?.state === 'timed_out'
+    if (!active && !timedOut) return null
 
     const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0))
     return (
-        <div className="card" style={{ marginBottom: '20px', borderLeft: '5px solid #366092' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'center' }}>
-                <div>
-                    <h3 style={{ margin: '0 0 6px' }}>{title}</h3>
-                    <div style={{ color: '#566', fontSize: 14 }}>{stageLabel(status.stage)}</div>
-                    {stageDetail && <div style={{ color: '#789', fontSize: 13, marginTop: 4 }}>{stageDetail}</div>}
-                    {elapsedLabel && <div style={{ color: '#789', fontSize: 13, marginTop: 4 }}>{elapsedLabel}</div>}
+        <div className={`card build-progress-card${timedOut ? ' build-progress-card--timeout' : ''}`} role={timedOut ? 'alert' : 'status'} aria-live="polite">
+            <div className="build-progress-header">
+                <div className="build-progress-copy">
+                    <h3>{title}</h3>
+                    <div className="build-progress-stage">{stageLabel(status.stage)}</div>
+                    {stageDetail && <div className="build-progress-detail">{stageDetail}</div>}
+                    {elapsedLabel && <div className="build-progress-detail">{elapsedLabel}</div>}
                 </div>
-                <strong style={{ fontSize: 22, color: '#366092' }}>{safeProgress}%</strong>
+                <strong className="build-progress-value">
+                    {timedOut ? stageLabel(status.stage) : (stageDetail || `${safeProgress}%`)}
+                </strong>
             </div>
-            <div style={{ height: 10, background: '#e8edf5', borderRadius: 99, overflow: 'hidden', marginTop: 14 }}>
-                <div style={{
-                    width: `${Math.max(5, safeProgress)}%`,
-                    height: '100%',
-                    background: 'linear-gradient(90deg, #366092, #5fc3ff)',
-                    transition: 'width 300ms ease',
-                }} />
-            </div>
-            <p style={{ margin: '10px 0 0', color: '#667', fontSize: 13 }}>
+            {!timedOut && <div className="build-progress-meter" role="progressbar" aria-label={title} aria-valuemin="0" aria-valuemax="100" aria-valuenow={safeProgress}>
+                <div className="build-progress-meter-fill" style={{ width: `${Math.max(5, safeProgress)}%` }} />
+            </div>}
+            <p className="build-progress-hint">
                 {longRunningHint}
             </p>
         </div>

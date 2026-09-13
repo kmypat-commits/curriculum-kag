@@ -18,6 +18,12 @@ def read_pins(path: Path) -> dict[str, str]:
     pins: dict[str, str] = {}
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw.split("#", 1)[0].strip()
+        # pip-compile emits one requirement over several continuation lines:
+        # ``name==version \\`` followed by one or more ``--hash=...`` lines.
+        # Only the first line carries the package pin.
+        if line.startswith("--hash="):
+            continue
+        line = line.rstrip("\\").strip()
         if not line:
             continue
         match = PIN.match(line)

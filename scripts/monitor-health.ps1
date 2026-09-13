@@ -1,6 +1,7 @@
 param(
     [string]$BackendUrl = "http://127.0.0.1:8000/health",
-    [string]$FrontendUrl = "http://127.0.0.1:3001/"
+    [string]$FrontendUrl = "http://127.0.0.1:3001/",
+    [switch]$CheckDocker
 )
 $ErrorActionPreference = "Stop"
 $checks = @(
@@ -8,6 +9,45 @@ $checks = @(
     @{ Name = "frontend"; Url = $FrontendUrl }
 )
 $failed = @()
+
+function Test-DockerEngineBounded {
+    $docker = Get-Command docker.exe -ErrorAction SilentlyContinue
+    if (-not $docker) {
+        $candidate = Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe'
+        if (Test-Path -LiteralPath $candidate) { $docker = @{ Source = $candidate } }
+    }
+    if (-not $docker) { return 'docker CLI not found' }
+    $process = $null
+    try {
+        $info = [Diagnostics.ProcessStartInfo]::new()
+        $info.FileName = $docker.Source
+        $info.Arguments = 'version --format "{{.Server.Version}}"'
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardOutput = $true
+        $info.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $info
+        [void]$process.Start()
+        if (-not $process.WaitForExit(5000)) {
+            try { $process.Kill($true) } catch {}
+            return 'Docker engine probe timed out'
+        }
+        if ($process.ExitCode -ne 0) {
+            $errorText = $process.StandardError.ReadToEnd().Trim()
+            return if ($errorText) { "Docker engine unavailable: $errorText" } else { 'Docker engine unavailable' }
+        }
+        return $null
+    }
+    catch { return "Docker engine probe failed: $($_.Exception.Message)" }
+    finally { if ($process) { $process.Dispose() } }
+}
+
+if ($CheckDocker) {
+    $dockerError = Test-DockerEngineBounded
+    if ($dockerError) { $failed += "docker: $dockerError" }
+}
+
 foreach ($check in $checks) {
     try {
         $response = Invoke-WebRequest -UseBasicParsing -Uri $check.Url -TimeoutSec 15

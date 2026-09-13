@@ -1,4 +1,4 @@
-export function formatApiError(error, fallback = 'Неизвестная ошибка') {
+export function formatApiError(error, fallback = 'Unknown error') {
     const detail = error?.response?.data?.detail ?? error?.detail
     if (Array.isArray(detail)) {
         return detail.map(item => item?.msg || item?.message || JSON.stringify(item)).join('; ')

@@ -4,6 +4,8 @@ import { useLanguage } from './LanguageContext'
 
 const AuthContext = createContext(null)
 
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true'
+
 axios.defaults.withCredentials = true
 
 const csrfToken = () => {
@@ -21,6 +23,11 @@ export const AuthProvider = ({ children }) => {
         // JavaScript-readable tokens once without copying them to a new store.
         localStorage.removeItem('token')
         sessionStorage.removeItem('token')
+        if (DEMO_MODE) {
+            setUser({ id: 'demo', email: 'demo@curriculum-kag.local', full_name: 'Demo reviewer' })
+            setLoading(false)
+            return
+        }
         fetchCurrentUser()
     }, [])
 
@@ -66,6 +73,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     const login = async (email, password) => {
+        if (DEMO_MODE) return
         const params = new URLSearchParams()
         params.append('username', email)
         params.append('password', password)

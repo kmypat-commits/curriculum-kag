@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import func, or_, String, cast, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict
 from app.database import get_db
 from app.models.user import User
 from app.models.course import Course, CourseChunk, CourseLocalization
 from app.models.epvo import EpvoDisciplineNormalized
 from app.services.auth import get_current_user
+from app.services.rbac import require_permission
 from app.kag.indexing import index_course, index_all_courses
 from app.config import settings
 from app.services.content_localization import (
@@ -22,7 +23,9 @@ import json
 import logging
 import time
 
-router = APIRouter()
+# All repository reads are explicit policy decisions.  Mutations below add a
+# second repository:write dependency on top of this read gate.
+router = APIRouter(dependencies=[Depends(require_permission("repository", "read"))])
 logger = logging.getLogger(__name__)
 PREREQUISITE_EXEMPT_MARKER = "__prerequisite_exempt__"
 _STATS_CACHE = {"expires_at": 0.0, "payload": None}
@@ -102,11 +105,10 @@ class CourseResponse(BaseModel):
     postrequisites: List[Dict] = []
     prerequisite_exempt: bool = False
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
-@router.post("/courses/import")
+@router.post("/courses/import", dependencies=[Depends(require_permission("repository", "write"))])
 async def import_courses(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -293,7 +295,7 @@ async def list_courses(
     return results
 
 
-@router.post("/courses")
+@router.post("/courses", dependencies=[Depends(require_permission("repository", "write"))])
 async def create_course(
     course_data: CourseCreate,
     db: Session = Depends(get_db),
@@ -343,7 +345,7 @@ async def create_course(
     }
 
 
-@router.post("/reindex-epvo-scope")
+@router.post("/reindex-epvo-scope", dependencies=[Depends(require_permission("repository", "write"))])
 async def reindex_epvo_scope(
     request: ReindexEpvoScopeRequest,
     db: Session = Depends(get_db),
@@ -445,7 +447,7 @@ async def get_course(
         "prerequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title, "title_translations": relation_localizations.get(p.id, {}).get("title_translations", {})} for p in course.prerequisites],
         "postrequisites": [{"id": p.id, "course_id": p.course_id, "title": p.title, "title_translations": relation_localizations.get(p.id, {}).get("title_translations", {})} for p in course.postrequisites]
     }
-@router.put("/courses/{course_id}")
+@router.put("/courses/{course_id}", dependencies=[Depends(require_permission("repository", "write"))])
 async def update_course(
     course_id: int,
     course_data: Dict,
@@ -487,7 +489,7 @@ async def update_course(
     return course
 
 
-@router.delete("/courses/{course_id}")
+@router.delete("/courses/{course_id}", dependencies=[Depends(require_permission("repository", "write"))])
 async def delete_course(
     course_id: int,
     db: Session = Depends(get_db),
@@ -503,7 +505,7 @@ async def delete_course(
     return {"message": "Course deleted successfully"}
 
 
-@router.post("/generate-courses")
+@router.post("/generate-courses", dependencies=[Depends(require_permission("repository", "write"))])
 async def generate_courses_with_llm(
     request: GenerateCoursesRequest,
     db: Session = Depends(get_db),
@@ -654,7 +656,7 @@ Return ONLY valid JSON, no markdown."""
     return {"generated": len(created), "courses": created}
 
 
-@router.post("/auto-assign-requisites")
+@router.post("/auto-assign-requisites", dependencies=[Depends(require_permission("repository", "write"))])
 async def auto_assign_requisites(
     request: AutoAssignRequisitesRequest,
     db: Session = Depends(get_db),

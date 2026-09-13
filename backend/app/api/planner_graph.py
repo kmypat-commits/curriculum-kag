@@ -10,6 +10,7 @@ from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.schemas.planner import SemesterInsightRequest
 from app.services.content_localization import course_localization_map
 from app.kag.bridge_generator import call_llm
 
@@ -608,9 +609,7 @@ async def get_semester_competencies(
 @router.post("/version/{project_version_id}/semester-insight")
 async def generate_semester_insight(
     project_version_id: int,
-    semester: int = Body(..., ge=1, le=20),
-    variant: str = Body("A"),
-    language: str = Body("ru"),
+    payload: SemesterInsightRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -618,6 +617,7 @@ async def generate_semester_insight(
     import json
     from app.models.plan import Plan, PlanItem
 
+    semester, variant, language = payload.semester, payload.variant, payload.language
     plan = db.query(Plan).filter(
         Plan.project_version_id == project_version_id,
         Plan.variant_type == variant.upper(),
