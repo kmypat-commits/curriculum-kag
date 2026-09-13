@@ -1,5 +1,6 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import get_db
@@ -63,6 +64,7 @@ async def export_plan(
     project_version_id: int,
     format: str = "xlsx",
     language: str = "ru",
+    variant: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -80,11 +82,10 @@ async def export_plan(
         if not project_version:
             raise HTTPException(status_code=404, detail="Версия проекта не найдена")
         
-        # Get best plan (variant A)
-        plan = db.query(Plan).filter(
-            Plan.project_version_id == project_version_id,
-            Plan.variant_type == "A"
-        ).first()
+        # The active plan is the published methodist-facing result.  A caller
+        # can request B/C explicitly for comparison, but must never receive an
+        # arbitrary historical A because the table order happened to change.
+        plan = resolve_export_plan(db, project_version_id, variant)
         
         if not plan:
             raise HTTPException(status_code=404, detail="Учебный план не найден")
@@ -109,27 +110,40 @@ async def export_plan(
         # Get plan items
         items = db.query(PlanItem).filter(PlanItem.plan_id == plan.id).order_by(PlanItem.semester).all()
         course_ids = [item.course_id for item in items if item.course_id]
+        bridge_ids = [item.bridge_module_id for item in items if item.bridge_module_id]
         localizations = course_localization_map(db, course_ids)
+        courses_by_id = {
+            course.id: course
+            for course in db.query(Course).filter(Course.id.in_(course_ids)).all()
+        } if course_ids else {}
+        bridges_by_id = {
+            bridge.id: bridge
+            for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids)).all()
+        } if bridge_ids else {}
         
         for item in items:
             if item.course_id:
-                course = db.query(Course).filter(Course.id == item.course_id).first()
+                course = courses_by_id.get(item.course_id)
+                if not course:
+                    continue
                 ws1.append([
                     item.semester,
                     course.course_id,
                     localized_title(localizations, course, language),
-                    course.credits,
+                    item.credits,
                     course.domain,
                     item.course_type,
                     ", ".join([p.course_id for p in course.prerequisites]) if course.prerequisites else ""
                 ])
             elif item.bridge_module_id:
-                bm = db.query(BridgeModule).filter(BridgeModule.id == item.bridge_module_id).first()
+                bm = bridges_by_id.get(item.bridge_module_id)
+                if not bm:
+                    continue
                 ws1.append([
                     item.semester,
                     bm.course_id,
                     bm.title + " [BRIDGE]",
-                    bm.credits,
+                    item.credits,
                     "Interdisciplinary",
                     item.course_type,
                     ", ".join(bm.prerequisites) if bm.prerequisites else ""
@@ -143,25 +157,37 @@ async def export_plan(
         ws2.append(["Course Code", "Course Title"] + [lo.lo_code for lo in los])
         
         # Get all courses in plan
-        courses = db.query(Course).filter(Course.id.in_(course_ids)).all()
+        courses = list(courses_by_id.values())
+        lo_ids = [lo.id for lo in los]
+        match_scores = (
+            db.query(MatchScore.course_id, MatchScore.lo_id, func.max(MatchScore.score))
+            .filter(
+                MatchScore.project_version_id == project_version_id,
+                MatchScore.course_id.in_(course_ids),
+                MatchScore.lo_id.in_(lo_ids),
+            )
+            .group_by(MatchScore.course_id, MatchScore.lo_id)
+            .all()
+        ) if course_ids and lo_ids else []
+        score_by_course_lo = {
+            (course_id, lo_id): score
+            for course_id, lo_id, score in match_scores
+        }
         
         for course in courses:
             row = [course.course_id, localized_title(localizations, course, language)]
             for lo in los:
-                match = db.query(MatchScore).filter(
-                    MatchScore.course_id == course.id,
-                    MatchScore.lo_id == lo.id
-                ).first()
-                row.append(f"{match.score:.2f}" if match else "0.00")
+                score = score_by_course_lo.get((course.id, lo.id))
+                row.append(f"{score:.2f}" if score is not None else "0.00")
             ws2.append(row)
         
         # Sheet 3: Metrics
         ws3 = wb.create_sheet("Metrics")
         ws3.append(["Metric", "Value"])
         
-        metrics = plan.metrics_json
+        metrics = plan.metrics_json or {}
         for key, value in metrics.items():
-            ws3.append([key.replace("_", " ").title(), value])
+            ws3.append([key.replace("_", " ").title(), export_cell_value(value)])
         
         # Sheet 4: Deterministic verification details
         ws4 = wb.create_sheet("Verification")
@@ -179,8 +205,23 @@ async def export_plan(
 
         ws6 = wb.create_sheet("Audit Log")
         ws6.append(["Timestamp", "Action", "Entity Type", "Entity ID", "Details"])
-        for event in db.query(AuditEvent).order_by(AuditEvent.id.desc()).limit(200).all():
-            ws6.append([str(event.timestamp), event.action, event.entity_type, event.entity_id, str(event.details_json or {})])
+        audit_events = (
+            db.query(AuditEvent)
+            .filter(
+                or_(
+                    (AuditEvent.entity_type == "plan") & (AuditEvent.entity_id == plan.id),
+                    (AuditEvent.entity_type == "project_version") & (AuditEvent.entity_id == project_version_id),
+                )
+            )
+            .order_by(AuditEvent.id.desc())
+            .limit(200)
+            .all()
+        )
+        for event in audit_events:
+            ws6.append([
+                str(event.timestamp), event.action, event.entity_type,
+                event.entity_id, export_cell_value(event.details_json),
+            ])
 
         ws7 = wb.create_sheet("International Quality")
         ws7.append(["Framework Score", str((metrics or {}).get("international_quality", {}).get("score", ""))])
@@ -203,7 +244,9 @@ async def export_plan(
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f"attachment; filename=curriculum_plan_{project_version_id}.xlsx"
+                "Content-Disposition": (
+                    f"attachment; filename=curriculum_plan_{project_version_id}_{plan.variant_type}.xlsx"
+                )
             }
         )
         
