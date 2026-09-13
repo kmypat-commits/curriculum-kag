@@ -412,6 +412,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         _policy_frontier_admissible,
         is_project_domain=is_project_domain,
         strong_exact_scope_evidence=has_strong_exact_scope_evidence,
+        aggregates=aggregates,
     )
 
     admit_real_courses = partial(
@@ -701,7 +702,10 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         get_domain_quota_candidates,
         cache=domain_quota_candidate_cache,
         courses=quota_frontier_courses,
-        is_admissible=is_project_domain,
+        # Quota repair and final admission share the same evidence contract.
+        # Otherwise repair can insert a domain-labelled course that the next
+        # admission pass removes for lacking a credible programme LO.
+        is_admissible=is_frontier_admissible,
         domain_share=project_domain_share,
         course_depth=course_depth,
         max_depth=num_semesters,
@@ -895,7 +899,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
             num_semesters=num_semesters,
             selected_variant=variant_type,
         )
-    result = _promote_epvo_priority_courses(result, courses, prereq_ids_by_course, is_project_domain, course_depth, num_semesters, priority_rank, target, maximum)
+    result = _promote_epvo_priority_courses(result, courses, prereq_ids_by_course, is_frontier_admissible, course_depth, num_semesters, priority_rank, target, maximum)
     if not interdisciplinary:
         result = _limit_general_course_items(
             result,
@@ -929,7 +933,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         result,
         courses,
         prereq_ids_by_course,
-        lambda course: is_project_domain(course)
+        lambda course: is_frontier_admissible(course)
         and _course_curriculum_role(course, project_domains) != "general",
         course_depth,
         num_semesters,
@@ -1071,10 +1075,11 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # and let the verifier judge the resulting plan.
     result = close_professional_lo_gaps(result)
     if interdisciplinary:
-        for item in result:
-            course = courses.get(item.get("course_id"))
-            if course is not None and project_domain_index(course) == 1:
-                item["domain_quota_reserve"] = 2
+        # Keep only the explicit reservations created by reserve_domain_quota.
+        # Marking *every* secondary-domain course as reserved made an
+        # overfilled secondary domain impossible to exchange for a missing
+        # primary-domain course, even though the verifier still required the
+        # primary quota.
         for bridge in secondary_bridges:
             result = _force_bridge_item(result, bridge, variant_type, target)
         # Re-assert the structural integration bridge after the final quota
@@ -1090,4 +1095,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         # Restore only an evidence-backed real replacement at the boundary;
         # bridges must never be used to hide this loss.
         result = close_professional_lo_gaps(result)
-    return result
+    # Every late mutation (quota repair, bridge replacement and LO recovery)
+    # must pass through the same admission contract before it can leave the
+    # selector.  Without this boundary a quota-labelled row lacking credible
+    # LO evidence reached the scheduler, where the final audit rejected the
+    # whole otherwise usable plan.
+    return admit_real_courses(result)

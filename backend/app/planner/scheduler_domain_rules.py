@@ -123,6 +123,13 @@ def has_foreign_professional_title(course, project_domains: list[str]) -> bool:
         (("маркетинг", "marketing", "бизнес коммуникац", "business communication", "цифровая экономика", "digital economy", "экономик", "предприяти", "enterprise management", "комплексная логистика", "логистика", "logistics", "бухгалтер", "accounting", "финанс", "finance"), ("бизнес", "управлен", "эконом", "менедж", "маркет", "логист", "финанс", "account", "business", "management", "econom", "marketing", "logistics", "finance")),
         (("промышленная безопасность", "industrial safety"), ("промышлен", "производ", "инженер", "безопасность труда", "industrial", "manufactur", "engineering", "occupational safety")),
         (("эмоциональн", "эмоциональный интеллект", "emotional intelligence"), ("психолог", "человеческ ресурс", "hr", "управлен", "psycholog", "human resource", "management")),
+        # A course can belong to the broad legal catalogue yet still teach a
+        # separate regulated sector.  Keep that sector out unless it is
+        # explicitly named in the programme fields; otherwise generic group
+        # membership lets customs or labour-law subjects fill a cyber/legal
+        # curriculum credit slot.
+        (("тамож", "customs", "внешнеэкономическ", "foreign trade"), ("тамож", "customs", "внешнеэкономическ", "foreign trade")),
+        (("трудов", "социального обеспеч", "labor law", "social security"), ("трудов", "социального обеспеч", "labor", "social security")),
     )
     return any(_has_domain_term(title, title_markers) and not _has_domain_term(domains, allowed) for title_markers, allowed in context_groups)
 from collections.abc import Callable, Mapping, Sequence

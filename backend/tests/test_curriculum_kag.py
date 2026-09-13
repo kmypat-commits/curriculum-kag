@@ -431,6 +431,14 @@ def test_foreign_professional_context_is_not_hidden_by_ai_or_digital_words():
         SimpleNamespace(title="Маркетинговый менеджмент", domain="it"),
         ["7M061", "M094"],
     )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Экспертные учреждения в таможенной системе", domain="law"),
+        ["Право", "Информационно-коммуникационные технологии"],
+    )
+    assert _has_foreign_professional_title(
+        SimpleNamespace(title="Трудовое право и право социального обеспечения", domain="law"),
+        ["Право", "Информационно-коммуникационные технологии"],
+    )
 
 
 def test_load_shift_never_splits_real_epvo_course_credits():
@@ -572,6 +580,10 @@ def test_final_admission_evidence_excludes_weak_and_goso_only_matches():
         SimpleNamespace(course_id=10, lo_id=1, score=0.61, evidence_json={}),
         SimpleNamespace(course_id=11, lo_id=1, score=0.39, evidence_json={}),
         SimpleNamespace(course_id=12, lo_id=2, score=0.95, evidence_json={}),
+        # Retrieval confidence can be high because of generic lexical boosts.
+        # It must not become professional-LO evidence when the raw semantic
+        # signal remains below the publication threshold.
+        SimpleNamespace(course_id=13, lo_id=1, score=0.95, evidence_json={"semantic_score": 0.31}),
     ]
     db = MagicMock()
     db.query.return_value.filter.return_value.all.return_value = matches

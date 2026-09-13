@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.planner.match_aggregation import aggregate_match_scores
+from app.planner.match_aggregation import aggregate_match_scores, semantic_evidence_score
 
 
 class _Query:
@@ -59,3 +59,13 @@ def test_aggregate_match_scores_keeps_expert_evidence_and_separates_goso():
     assert item["credible_lo_codes"] == {"LO1", "LO-GOSO-B1"}
     assert item["professional_lo_codes"] == {"LO1"}
     assert item["lo_scores"] == {"LO1": 0.8, "LO-GOSO-B1": 0.9}
+    assert item["semantic_max"] == 0.9
+
+
+def test_semantic_evidence_score_ignores_retrieval_confidence_lift():
+    match = SimpleNamespace(
+        score=0.98,
+        evidence_json={"semantic_score": 0.31, "heuristic_score": 0.98},
+    )
+
+    assert semantic_evidence_score(match) == 0.31

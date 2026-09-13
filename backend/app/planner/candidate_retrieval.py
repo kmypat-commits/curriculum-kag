@@ -518,6 +518,14 @@ def _promote_epvo_priority_courses(
         for prerequisite_id in (item.get("prerequisites") or [])
         if prerequisite_id in selected_ids
     }
+    # A quota reservation is an explicit feasibility commitment.  Priority
+    # promotion may improve ranking, but it must not replace the courses that
+    # were reserved to meet a declared programme-domain minimum.
+    protected_ids.update(
+        int(item["course_id"])
+        for item in result
+        if item.get("course_id") is not None and item.get("domain_quota_reserve")
+    )
     total = sum(int(item.get("credits") or 0) for item in result)
     priority_courses = sorted(
         (

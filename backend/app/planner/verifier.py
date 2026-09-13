@@ -13,6 +13,7 @@ from app.kag.embedding_service import embedding_service
 from app.planner.goso import GOSO_COURSE_LO_CODES, evaluate_goso_compliance
 from app.planner.bridge_policy import bridge_can_close_program_lo, bridge_module_limit, scheduled_bridge_count
 from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.match_aggregation import semantic_evidence_score
 LOAD_TOLERANCE = 3
 TOTAL_CREDIT_TOLERANCE = 5
 MATCH_THRESHOLD = 0.4
@@ -523,7 +524,10 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
                 (float((row.evidence_json or {}).get("epvo_expert_score") or 0.0) for row in rows),
                 default=0.0,
             )
-            model_score = max((float(row.score or 0.0) for row in rows), default=0.0)
+            # MatchScore.score is optimized for retrieval and may be lifted
+            # by generic keywords.  The publication gate must use the raw
+            # semantic signal recorded with the prediction instead.
+            model_score = max((semantic_evidence_score(row) for row in rows), default=0.0)
             max_score = max(model_score, expert_score)
             if max_score < 0.4 and expert_score < 0.5:
                 evidence = {

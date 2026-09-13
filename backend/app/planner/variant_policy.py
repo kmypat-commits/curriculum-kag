@@ -14,6 +14,7 @@ from app.models.course import Course
 from app.planner.course_policy import course_role_rank
 from app.planner.domain_evidence import domain_label_matches
 from app.planner.scheduler_utils import title_key
+from app.planner.scheduler_domain_rules import has_foreign_professional_title
 
 
 def project_domain_index(
@@ -40,9 +41,23 @@ def project_domain_share(
     domain_index: int,
     epvo_domain_shares: Mapping[int, tuple[float, float]],
     project_domain_index_fn,
+    project_domains: list[str],
 ) -> float:
     if course is None:
         return 0.0
+    # The selector and verifier must account for domain credits in exactly
+    # the same way.  A catalogue discipline explicitly labelled with one
+    # declared programme domain is full evidence for that domain; an EPVO
+    # row linked to two scopes must not silently dilute it to (0.5, 0.5).
+    # Keep fractional evidence only for a genuinely ambiguous/unlabelled
+    # catalogue row, where the scoped EPVO mapping is the sole provenance.
+    explicit_matches = [
+        index
+        for index, project_domain in enumerate(project_domains)
+        if domain_label_matches(course.domain, [project_domain])
+    ]
+    if len(explicit_matches) == 1:
+        return 1.0 if explicit_matches[0] == domain_index else 0.0
     shares = epvo_domain_shares.get(course.id)
     if shares is not None:
         return shares[domain_index]
@@ -72,6 +87,7 @@ def build_domain_policy_callbacks(
         project_domain_share,
         epvo_domain_shares=epvo_domain_shares,
         project_domain_index_fn=domain_index,
+        project_domains=project_domains,
     )
     return domain_index, domain_share
 
@@ -117,6 +133,12 @@ def role_rank(course: Course | None, project_domains: list[str]) -> int:
 
 
 def foreign_scope_conflict(course: Course, domain_text: str) -> bool:
+    # Keep cross-sector rejection in one shared policy.  This must apply
+    # before the exact-EPVO-scope exception below; catalogue membership is
+    # evidence of provenance, not proof that a sectoral course belongs to
+    # this programme's professional profile.
+    if has_foreign_professional_title(course, [domain_text]):
+        return True
     text = title_key(" ".join(str(value or "") for value in (
         course.title, course.description, course.domain,
     )))
@@ -203,8 +225,17 @@ def frontier_admissible(
     *,
     is_project_domain,
     strong_exact_scope_evidence,
+    aggregates: Mapping[int, Mapping[str, object]],
 ) -> bool:
-    """Keep strongly scoped EPVO rows available to the optimizer."""
+    """Keep only evidence-backed rows available to the selector.
+
+    The final admission boundary requires a credible professional LO link.
+    Applying the same contract to quota reservations prevents a discipline
+    from temporarily filling a domain quota and then being removed later by
+    admission, which used to leave a valid-looking but unpublishable plan.
+    """
+    if not bool(aggregates.get(course.id, {}).get("professional_lo_codes")):
+        return False
     return bool(is_project_domain(course)) or (
         str(course.course_id or "").startswith("EPVO-")
         and bool(strong_exact_scope_evidence(course))

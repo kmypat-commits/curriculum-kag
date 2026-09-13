@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from app.planner.variant_policy import (
     build_domain_policy_callbacks,
+    frontier_admissible,
     foreign_scope_conflict,
     project_domain_index,
     scope_rank,
@@ -43,6 +44,29 @@ def test_domain_callbacks_use_loaded_epvo_scope_evidence():
     assert domain_index(course) == 1
     assert domain_share(course, 0) == 0.25
     assert domain_share(course, 1) == 0.75
+
+
+def test_domain_callbacks_keep_explicit_catalogue_domain_whole():
+    """A single explicit domain must not be diluted by a dual EPVO scope."""
+    course = _course(id=43, domain="Law")
+    _domain_index, domain_share = build_domain_policy_callbacks(
+        project_domains=["Law", "Information technologies"],
+        epvo_domain_index={43: 2},
+        epvo_domain_shares={43: (0.5, 0.5)},
+    )
+
+    assert domain_share(course, 0) == 1.0
+    assert domain_share(course, 1) == 0.0
+
+
+def test_frontier_rejects_domain_course_without_credible_outcome_evidence():
+    course = _course(id=44, domain="Law")
+    assert not frontier_admissible(
+        course,
+        is_project_domain=lambda _course: True,
+        strong_exact_scope_evidence=lambda _course: True,
+        aggregates={44: {"professional_lo_codes": set()}},
+    )
 
 
 def test_policy_scope_rank_prefers_stable_course_id_evidence():

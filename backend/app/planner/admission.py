@@ -26,6 +26,7 @@ from app.planner.scheduler_catalogue import (
 )
 from app.planner.scheduler_utils import title_key
 from app.services.epvo_repository import epvo_row_matches_education_level
+from app.planner.match_aggregation import semantic_evidence_score
 
 
 def minimum_appropriate_semester(item: Dict, course: Course, num_semesters: int) -> int:
@@ -54,7 +55,11 @@ def credible_professional_lo_by_course(
     ).all():
         expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
         code = lo_codes.get(match.lo_id, "")
-        if code and not code.startswith("LO-GOSO-") and max(float(match.score or 0.0), expert) >= 0.4:
+        # Ranking confidence can be raised by generic lexical terms.  A real
+        # curriculum admission requires raw semantic evidence or an EPVO
+        # expert decision, otherwise a formally scoped but unrelated subject
+        # can occupy a professional credit slot.
+        if code and not code.startswith("LO-GOSO-") and max(semantic_evidence_score(match), expert) >= 0.4:
             credible_professional.setdefault(int(match.course_id), set()).add(code)
     return credible_professional
 
