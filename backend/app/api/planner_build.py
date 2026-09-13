@@ -96,6 +96,7 @@ def get_generation_readiness(
         project.constraints_json,
         goal=project.goal,
         learning_outcomes_count=len(version.learning_outcomes or []),
+        learning_outcomes=[outcome.lo_text for outcome in (version.learning_outcomes or [])],
     )
 
 

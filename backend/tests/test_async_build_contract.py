@@ -70,6 +70,25 @@ def test_generation_readiness_keeps_small_lo_set_as_warning_not_false_success():
     assert result["warnings"]
 
 
+def test_generation_readiness_explains_duplicate_and_too_short_outcomes():
+    result = generation_readiness(
+        {
+            "education_level": "bachelor", "education_area": "6B06",
+            "direction_code": "6B061", "group_code": "B057",
+            "instruction_language": "ru", "duration_years": 4,
+            "total_semesters": 8, "total_credits": 240,
+            "max_credits_per_semester": 30,
+        },
+        goal="Цель", learning_outcomes_count=3,
+        learning_outcomes=["Анализировать данные", "Анализировать данные", "Проектировать"],
+    )
+
+    assert result["ready"] is True
+    assert result["checks"]["unique_learning_outcomes"] == 2
+    assert any("краткие" in warning for warning in result["warnings"])
+    assert any("Повторяющиеся" in warning for warning in result["warnings"])
+
+
 def test_async_build_enqueues_worker_without_recursive_spawn():
     import app.api.planner_build as module
     from app.schemas.planner import PlannerBuildRequest

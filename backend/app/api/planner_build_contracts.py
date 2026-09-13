@@ -52,7 +52,8 @@ def partition_publishable_variants(
 
 
 def generation_readiness(
-    constraints: dict | None, *, goal: str | None, learning_outcomes_count: int,
+    constraints: dict | None, *, goal: str | None,
+    learning_outcomes_count: int, learning_outcomes: list[str] | None = None,
 ) -> dict:
     """Return a cheap, deterministic preflight before expensive scoring.
 
@@ -95,8 +96,28 @@ def generation_readiness(
             blocking.append("Сумма минимальных долей двух областей не может превышать 100%.")
 
     warnings = []
+    clean_goal = " ".join(str(goal or "").split())
+    clean_outcomes = [" ".join(str(value or "").split()) for value in (learning_outcomes or [])]
     if 0 < learning_outcomes_count < 4:
         warnings.append("Указано менее четырёх результатов обучения: план можно построить, но методическая проверка будет слабее.")
+    if clean_goal and len(clean_goal) < 30:
+        warnings.append("Цель сформулирована очень кратко: уточните профессиональный контекст и ожидаемый результат подготовки.")
+    short_outcomes = [index + 1 for index, value in enumerate(clean_outcomes) if value and len(value) < 25]
+    if short_outcomes:
+        warnings.append("Слишком краткие РО: " + ", ".join(f"РО{index}" for index in short_outcomes) + ". Добавьте наблюдаемое действие и предметный контекст.")
+    seen_outcomes: dict[str, int] = {}
+    duplicate_outcomes = []
+    for index, value in enumerate(clean_outcomes, start=1):
+        key = value.casefold()
+        if not key:
+            continue
+        if key in seen_outcomes:
+            duplicate_outcomes.append((seen_outcomes[key], index))
+        else:
+            seen_outcomes[key] = index
+    if duplicate_outcomes:
+        pairs = ", ".join(f"РО{first}/РО{second}" for first, second in duplicate_outcomes)
+        warnings.append("Повторяющиеся результаты обучения: " + pairs + ". Объедините или разведите их, иначе подбор дисциплин будет дублироваться.")
     if not constraints.get("group_code"):
         warnings.append("Без группы ОП ЕПВО подбор дисциплин будет слишком широким.")
     return {
@@ -107,6 +128,7 @@ def generation_readiness(
         "checks": {
             "goal": bool(str(goal or "").strip()),
             "learning_outcomes": learning_outcomes_count,
+            "unique_learning_outcomes": len(seen_outcomes) if clean_outcomes else learning_outcomes_count,
             "catalogue_scope": bool(constraints.get("direction_code") and constraints.get("group_code")),
             "volume": {
                 "target_credits": total_credits,
