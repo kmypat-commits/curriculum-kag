@@ -260,6 +260,15 @@ function Start-DockerDesktopIfNeeded([string]$DockerCli) {
                 # decode UTF-8 source without a BOM as mojibake and break the
                 # entire launcher before Docker is even started.
                 $probeKind = if ($probeError -match 'E_ACCESSDENIED|ACCESS.?DENIED') { 'E_ACCESSDENIED' } else { 'WSL_SERVICE_ERROR' }
+                if ($probeKind -eq 'E_ACCESSDENIED') {
+                    # Docker Desktop cannot create its Linux daemon while the
+                    # current Windows session is denied access to WSL. Starting
+                    # it anyway only recreates the stale runtime sockets that
+                    # caused the next failure. Do not touch data; require one
+                    # clean Windows restart before a new Desktop attempt.
+                    Write-Warning 'WSL access is denied in this Windows session. Docker Desktop was not started, and Docker data was not changed. Restart Windows once, then run start.bat again.'
+                    return $false
+                }
                 Write-Warning "WSL service preflight reported $probeKind; continuing with Docker Desktop startup. Docker data was not changed."
             }
         }
