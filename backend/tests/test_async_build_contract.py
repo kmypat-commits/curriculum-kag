@@ -28,6 +28,20 @@ def test_valid_a_is_publishable_when_an_explicit_comparison_variant_fails():
     assert rejected == {"B"}
 
 
+def test_build_response_preserves_partial_publication_diagnostics():
+    from app.schemas.planner import PlannerBuildResponse
+
+    response = PlannerBuildResponse.model_validate({
+        "variants": {"A": {"plan_id": 10}},
+        "active_variant": "A",
+        "publication_status": "partial",
+        "rejected_variants": [{"variant": "B", "hard": 1}],
+    })
+
+    assert response.publication_status == "partial"
+    assert response.rejected_variants == [{"variant": "B", "hard": 1}]
+
+
 def test_no_variant_is_publishable_when_each_failed_verification():
     published, rejected = partition_publishable_variants(
         {"A": {"plan_id": 10}},

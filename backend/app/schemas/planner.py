@@ -112,6 +112,8 @@ class PlanFeedbackRequest(BaseModel):
 class PlannerBuildResponse(BaseModel):
     variants: dict
     active_variant: str | None = None
+    publication_status: str = "complete"
+    rejected_variants: list[dict] = Field(default_factory=list)
     goso_ruleset_version: str | None = None
     epvo_repository: dict = Field(default_factory=dict)
     change_report: dict = Field(default_factory=dict)
