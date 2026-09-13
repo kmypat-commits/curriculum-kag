@@ -51,6 +51,71 @@ def partition_publishable_variants(
     )
 
 
+def generation_readiness(
+    constraints: dict | None, *, goal: str | None, learning_outcomes_count: int,
+) -> dict:
+    """Return a cheap, deterministic preflight before expensive scoring.
+
+    This validates only the inputs a methodist controls. It intentionally does
+    not claim that the catalogue will satisfy LO evidence or final regulatory
+    rules; those remain strict planner/verifier responsibilities.
+    """
+    constraints = constraints or {}
+    labels = {
+        "education_level": "уровень образования",
+        "education_area": "область образования ЕПВО",
+        "direction_code": "направление подготовки ЕПВО",
+        "group_code": "группа образовательных программ ЕПВО",
+        "instruction_language": "язык обучения",
+        "duration_years": "срок обучения",
+        "total_semesters": "количество семестров",
+        "total_credits": "объём кредитов",
+        "max_credits_per_semester": "максимальная нагрузка семестра",
+    }
+    missing = [label for key, label in labels.items() if constraints.get(key) in (None, "", 0)]
+    if not str(goal or "").strip():
+        missing.append("цель программы")
+    if learning_outcomes_count <= 0:
+        missing.append("минимум один результат обучения")
+
+    blocking = []
+    total_credits = int(constraints.get("total_credits") or 0)
+    semesters = int(constraints.get("total_semesters") or 0)
+    max_per_semester = int(constraints.get("max_credits_per_semester") or 0)
+    tolerance = int(constraints.get("credit_tolerance") or 0)
+    if total_credits and semesters and max_per_semester and total_credits > semesters * max_per_semester + tolerance:
+        blocking.append("Заданное число кредитов не помещается в установленную семестровую нагрузку.")
+
+    programme_type = str(constraints.get("program_type") or "standard").lower()
+    if programme_type in {"interdisciplinary", "joint"}:
+        secondary = ("secondary_education_area", "secondary_direction_code", "secondary_group_code")
+        if any(constraints.get(key) in (None, "", 0) for key in secondary):
+            blocking.append("Для междисциплинарной программы нужно заполнить второе направление ЕПВО.")
+        if int(constraints.get("min_domain1_percent") or 0) + int(constraints.get("min_domain2_percent") or 0) > 100:
+            blocking.append("Сумма минимальных долей двух областей не может превышать 100%.")
+
+    warnings = []
+    if 0 < learning_outcomes_count < 4:
+        warnings.append("Указано менее четырёх результатов обучения: план можно построить, но методическая проверка будет слабее.")
+    if not constraints.get("group_code"):
+        warnings.append("Без группы ОП ЕПВО подбор дисциплин будет слишком широким.")
+    return {
+        "ready": not missing and not blocking,
+        "missing": missing,
+        "blocking": blocking,
+        "warnings": warnings,
+        "checks": {
+            "goal": bool(str(goal or "").strip()),
+            "learning_outcomes": learning_outcomes_count,
+            "catalogue_scope": bool(constraints.get("direction_code") and constraints.get("group_code")),
+            "volume": {
+                "target_credits": total_credits,
+                "capacity_credits": semesters * max_per_semester,
+            },
+        },
+    }
+
+
 def must_reject_variant(verification: dict | None) -> bool:
     """Return whether a generated variant is unsafe to persist."""
     verification = verification or {}

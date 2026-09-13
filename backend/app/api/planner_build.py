@@ -45,6 +45,7 @@ from app.api.planner_state import (
 from app.api.planner_build_contracts import (
     activate_only_plan,
     build_request_hash,
+    generation_readiness,
     must_reject_variant,
     normalize_requested_variants,
     partition_publishable_variants,
@@ -78,6 +79,24 @@ class BuildInfeasible(ValueError):
     def __init__(self, message: str, *, details: list[dict] | None = None):
         super().__init__(message)
         self.details = details or []
+
+
+@router.get("/{project_version_id}/generation-readiness")
+def get_generation_readiness(
+    project_version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Report user-correctable input gaps before starting scoring/selection."""
+    version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Версия проекта не найдена")
+    project = version.project
+    return generation_readiness(
+        project.constraints_json,
+        goal=project.goal,
+        learning_outcomes_count=len(version.learning_outcomes or []),
+    )
 
 
 class BuildTimedOut(TimeoutError):

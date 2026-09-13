@@ -37,6 +37,7 @@ export default function PlanBuilder() {
     const localizedCourseField = (translations, fallback = '') =>
         formatLocalizedCourseField(translations, fallback, localize)
     const [project, setProject] = useState(null)
+    const [generationReadiness, setGenerationReadiness] = useState(null)
     const [loading, setLoading] = useState(true)
     const [building, setBuilding] = useState(false)
     const [buildProgress, setBuildProgress] = useState(0)
@@ -134,6 +135,9 @@ export default function PlanBuilder() {
             ))
 
             if (projRes.data.latest_version?.id) {
+                axios.get(`/api/planner/${projRes.data.latest_version.id}/generation-readiness`)
+                    .then(response => setGenerationReadiness(response.data))
+                    .catch(() => setGenerationReadiness(null))
                 await fetchVariants(projRes.data.latest_version.id)
                 startBuildStatusPolling(projRes.data.latest_version.id)
             }
@@ -159,6 +163,14 @@ export default function PlanBuilder() {
     const handleBuild = async () => {
         const versionId = project?.latest_version?.id
         if (!versionId) return
+        if (generationReadiness && !generationReadiness.ready) {
+            const reasons = [...(generationReadiness.missing || []), ...(generationReadiness.blocking || [])]
+            setBuildNotice({
+                type: 'error',
+                text: `Построение не начато: ${reasons.join('; ')}`,
+            })
+            return
+        }
         let handedToAsyncWorker = false
 
         try {
@@ -669,6 +681,14 @@ export default function PlanBuilder() {
                                 {t('regenerate_abc')}
                             </button>
                         </div>
+                    </div>
+                )}
+                {generationReadiness && !building && (
+                    <div className="card" style={{ marginBottom: '20px', borderTop: `2px solid ${generationReadiness.ready ? '#2e7d32' : '#c62828'}` }}>
+                        <strong>{generationReadiness.ready ? 'Исходные условия готовы к построению' : 'Перед построением нужно исправить исходные условия'}</strong>
+                        {(generationReadiness.missing || []).length > 0 && <p style={{ margin: '8px 0 0', color: '#b71c1c' }}>Заполните: {generationReadiness.missing.join(', ')}.</p>}
+                        {(generationReadiness.blocking || []).map((item, index) => <p key={`block-${index}`} style={{ margin: '8px 0 0', color: '#b71c1c' }}>{item}</p>)}
+                        {(generationReadiness.warnings || []).map((item, index) => <p key={`warning-${index}`} style={{ margin: '8px 0 0', color: '#7a5700' }}>{item}</p>)}
                     </div>
                 )}
                 <PlanBuildProgress

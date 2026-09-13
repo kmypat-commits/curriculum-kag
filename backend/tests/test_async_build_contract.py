@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.api.planner_build_contracts import (
+    generation_readiness,
     normalize_requested_variants,
     partition_publishable_variants,
 )
@@ -35,6 +36,38 @@ def test_no_variant_is_publishable_when_each_failed_verification():
 
     assert published == {}
     assert rejected == {"A"}
+
+
+def test_generation_readiness_blocks_impossible_volume_before_scoring():
+    result = generation_readiness(
+        {
+            "education_level": "bachelor", "education_area": "6B06",
+            "direction_code": "6B061", "group_code": "B057",
+            "instruction_language": "ru", "duration_years": 4,
+            "total_semesters": 8, "total_credits": 240,
+            "max_credits_per_semester": 20, "credit_tolerance": 0,
+        },
+        goal="Подготовить специалистов", learning_outcomes_count=5,
+    )
+
+    assert result["ready"] is False
+    assert "не помещается" in result["blocking"][0]
+
+
+def test_generation_readiness_keeps_small_lo_set_as_warning_not_false_success():
+    result = generation_readiness(
+        {
+            "education_level": "bachelor", "education_area": "6B06",
+            "direction_code": "6B061", "group_code": "B057",
+            "instruction_language": "ru", "duration_years": 4,
+            "total_semesters": 8, "total_credits": 240,
+            "max_credits_per_semester": 30, "credit_tolerance": 0,
+        },
+        goal="Подготовить специалистов", learning_outcomes_count=2,
+    )
+
+    assert result["ready"] is True
+    assert result["warnings"]
 
 
 def test_async_build_enqueues_worker_without_recursive_spawn():
