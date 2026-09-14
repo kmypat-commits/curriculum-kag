@@ -14,7 +14,6 @@ from app.config import settings
 from app.models.bridge_module import BridgeModule
 from app.models.course import Course, course_prerequisites
 from app.models.embedding import MatchScore
-from app.models.plan import Plan, PlanItem
 from app.models.project import LearningOutcome, ProjectVersion
 from app.models.epvo import EpvoDirection, EpvoDisciplineLoLink, EpvoDisciplineNormalized, EpvoGroup
 from app.services.epvo_repository import epvo_row_matches_education_level, epvo_row_relevance_score
@@ -108,6 +107,7 @@ from app.planner.admission import (
 )
 from app.planner.final_schedule_checks import audit_final_schedule_boundary, late_schedule_snapshot
 from app.planner.selection_evidence import build_selection_evidence_snapshot
+from app.planner.plan_result_assembly import persist_plan_result
 
 
 # Canonical implementations live in the pure semester-rules module.  The
@@ -1370,93 +1370,13 @@ def build_curriculum_plan(
     metrics["selection_evidence_snapshot"] = build_selection_evidence_snapshot(
         schedule, project_version_id, db
     )
-    plan = Plan(project_version_id=project_version_id, variant_type=variant_type, metrics_json=metrics)
-    db.add(plan); db.flush()
-    for semester, courses in schedule.items():
-        for item in courses:
-            db.add(PlanItem(plan_id=plan.id, semester=semester, course_id=item.get("course_id"), bridge_module_id=item.get("bridge_module_id"), credits=item["credits"], course_type=item.get("type", "mandatory"), prerequisites_snapshot=item.get("prerequisites", [])))
-    if commit:
-        db.commit()
-        db.refresh(plan)
-    else:
-        db.flush()
-    semester_los = {}
-    semester_lo_details = {}
-    lo_by_id = {
-        lo.id: lo
-        for lo in db.query(LearningOutcome)
-        .filter(LearningOutcome.project_version_id == project_version_id)
-        .all()
-    }
-    lo_by_code = {lo.lo_code: lo for lo in lo_by_id.values()}
-    # Build the semester evidence from one bounded read instead of querying
-    # MatchScore once per course in every semester (N+1 on the hot path).
-    schedule_course_ids = {
-        int(item["course_id"])
-        for courses in schedule.values()
-        for item in courses
-        if item.get("course_id")
-    }
-    match_rows_by_course = {}
-    if schedule_course_ids:
-        for row in (
-            db.query(MatchScore)
-            .filter(
-                MatchScore.project_version_id == project_version_id,
-                MatchScore.course_id.in_(schedule_course_ids),
-            )
-            .order_by(MatchScore.course_id, MatchScore.score.desc())
-            .all()
-        ):
-            match_rows_by_course.setdefault(int(row.course_id), []).append(row)
-    schedule_bridge_ids = {
-        int(item["bridge_module_id"])
-        for courses in schedule.values()
-        for item in courses
-        if item.get("bridge_module_id")
-    }
-    bridge_by_id = {
-        int(module.id): module
-        for module in db.query(BridgeModule).filter(
-            BridgeModule.id.in_(schedule_bridge_ids or {-1})
-        ).all()
-    }
-    for semester, courses in schedule.items():
-        evidence = {}
-        for item in courses:
-            if item.get("course_id"):
-                all_rows = match_rows_by_course.get(int(item["course_id"]), [])
-                rows = [row for row in all_rows if row.score >= 0.4] or all_rows[:1]
-                for row in rows:
-                    lo = lo_by_id.get(row.lo_id)
-                    if lo:
-                        detail = evidence.setdefault(lo.lo_code, {
-                            "code": lo.lo_code,
-                            "text": lo.lo_text,
-                            "score": 0.0,
-                            "courses": [],
-                            "kind": "programme",
-                        })
-                        detail["score"] = max(detail["score"], round(float(row.score), 3))
-                        if item.get("title") not in detail["courses"]:
-                            detail["courses"].append(item.get("title"))
-            elif item.get("bridge_module_id"):
-                bridge = bridge_by_id.get(int(item["bridge_module_id"]))
-                for code in (bridge.target_los or []) if bridge else []:
-                    lo = lo_by_code.get(code)
-                    if lo:
-                        detail = evidence.setdefault(code, {
-                            "code": code,
-                            "text": lo.lo_text,
-                            "score": 0.75,
-                            "courses": [],
-                            "kind": "programme",
-                        })
-                        detail["score"] = max(detail["score"], 0.75)
-                        if item.get("title") not in detail["courses"]:
-                            detail["courses"].append(item.get("title"))
-        details = sorted(evidence.values(), key=lambda row: row["code"])
-        semester_lo_details[semester] = details
-        semester_los[semester] = ", ".join(row["code"] for row in details) if details else "-"
     trace("plan_ready")
-    return {"plan_id": plan.id, "variant_type": variant_type, "schedule": schedule, "metrics": metrics, "verification": verification, "semester_los": semester_los, "semester_lo_details": semester_lo_details}
+    return persist_plan_result(
+        db=db,
+        project_version_id=project_version_id,
+        variant_type=variant_type,
+        schedule=schedule,
+        metrics=metrics,
+        verification=verification,
+        commit=commit,
+    )
