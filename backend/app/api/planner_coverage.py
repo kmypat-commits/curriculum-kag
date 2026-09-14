@@ -16,6 +16,7 @@ from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.models.user import User
 from app.planner.goso import GOSO_COURSE_LO_CODES
+from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.planner_utils import (
     compact_lo_label as _compact_lo_label,
     course_display_title as _course_display_title,
@@ -323,11 +324,11 @@ async def get_variants(
                 else:
                     domain_breakdown["other"]["credits"] += int(item.credits or 0)
                 match_rows = matches_by_course.get(item.course_id, [])
-                max_score = max((float(row.score or 0) for row in match_rows), default=0.0)
+                max_score = max((semantic_evidence_score(row) for row in match_rows), default=0.0)
                 top_match = max(
                     match_rows,
                     key=lambda row: max(
-                        float(row.score or 0),
+                        semantic_evidence_score(row),
                         float((row.evidence_json or {}).get("epvo_expert_score") or 0),
                     ),
                     default=None,
@@ -412,13 +413,13 @@ async def get_variants(
                     expert_score = float(evidence.get("epvo_expert_score") or 0)
                     if feedback and feedback.verdict == "incorrect":
                         continue
-                    if float(row.score or 0) >= 0.4 or expert_score >= 0.5 or (feedback and feedback.verdict == "confirmed"):
+                    if semantic_evidence_score(row) >= 0.4 or expert_score >= 0.5 or (feedback and feedback.verdict == "confirmed"):
                         trustworthy_matches.append(row)
                 def effective_match_score(row):
                     evidence = row.evidence_json or {}
                     feedback = latest_feedback_by_pair.get((row.course_id, row.lo_id))
                     corrected = float(feedback.corrected_score or 0) if feedback and feedback.verdict == "corrected" else 0.0
-                    return max(float(row.score or 0), float(evidence.get("epvo_expert_score") or 0), corrected)
+                    return max(semantic_evidence_score(row), float(evidence.get("epvo_expert_score") or 0), corrected)
 
                 trustworthy_matches.sort(key=effective_match_score, reverse=True)
                 display_matches = trustworthy_matches[:3]
@@ -440,7 +441,7 @@ async def get_variants(
                         continue
                     evidence = row.evidence_json or {}
                     feedback = latest_feedback_by_pair.get((row.course_id, row.lo_id))
-                    ai_score = round(float(row.score or 0), 3)
+                    ai_score = round(semantic_evidence_score(row), 3)
                     expert_score = evidence.get("epvo_expert_score")
                     corrected_score = float(feedback.corrected_score or 0) if feedback and feedback.verdict == "corrected" else 0.0
                     effective_score = round(max(ai_score, float(expert_score or 0), corrected_score), 3)
@@ -629,7 +630,7 @@ async def get_variants(
                         expert_score = float((row.evidence_json or {}).get("epvo_expert_score") or 0)
                         if feedback and feedback.verdict == "incorrect":
                             continue
-                        if float(row.score or 0) >= 0.4 or expert_score >= 0.5 or (feedback and feedback.verdict == "confirmed"):
+                        if semantic_evidence_score(row) >= 0.4 or expert_score >= 0.5 or (feedback and feedback.verdict == "confirmed"):
                             matches.append(row)
                     for m in matches:
                         lo = lo_by_id.get(m.lo_id)
@@ -638,7 +639,7 @@ async def get_variants(
                                 "code": lo.lo_code, "text": lo.lo_text,
                                 "score": 0.0, "courses": [], "kind": "programme",
                             })
-                            row["score"] = max(row["score"], round(float(m.score), 3))
+                            row["score"] = max(row["score"], round(semantic_evidence_score(m), 3))
                             if c["title"] not in row["courses"]:
                                 row["courses"].append(c["title"])
                 elif c.get("bridge_module_id"):
