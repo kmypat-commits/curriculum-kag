@@ -98,6 +98,12 @@ def build_plan_pdf(*, project_version, plan, items, courses_by_id, bridges_by_id
     project = project_version.project
     constraints = project.constraints_json or {}
     verification = (plan.metrics_json or {}).get("verification") or {}
+    target_credits = verification.get("target_credits", constraints.get("total_credits", "—"))
+    total_credits = verification.get("total_credits", "—")
+    maximum_credits = verification.get("maximum_total_credits")
+    credit_volume = f"{total_credits} / {target_credits}"
+    if maximum_credits is not None:
+        credit_volume += f" (допустимо до {maximum_credits})"
     story = [
         _paragraph("ПРОЕКТ ОБРАЗОВАТЕЛЬНОЙ ПРОГРАММЫ", center),
         _paragraph(project.title or "Учебный план", title),
@@ -122,7 +128,7 @@ def build_plan_pdf(*, project_version, plan, items, courses_by_id, bridges_by_id
             [_paragraph("Статус", small), _paragraph("Пройдена" if verification.get("feasible") else "Требует доработки", small)],
             [_paragraph("Жёсткие нарушения", small), _paragraph(str(verification.get("hard_violation_count", "—")), small)],
             [_paragraph("Покрытие LO", small), _paragraph(str(verification.get("min_lo_coverage", "—")), small)],
-            [_paragraph("Объём кредитов", small), _paragraph(f"{verification.get('total_credits', '—')} / {verification.get('target_credits', constraints.get('total_credits', '—'))}", small)],
+            [_paragraph("Объём кредитов", small), _paragraph(credit_volume, small)],
         ], colWidths=[65 * mm, 105 * mm], style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E6F0F7")),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),
