@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "purpose": "Заполняется методистом до запуска 20-case acceptance. Не подставляйте ICT-коды для неродственных направлений.",
+  "source_briefs_sha256": "f4643c20b9ff6c0710e736562c1833e1532ee7a2cf133a7b090745a388fc26ab",
+  "instructions": {
+    "resolution_status": "Укажите resolved только после сверки с актуальным каталогом ЕПВО; иначе оставьте unresolved или unsupported_scope.",
+    "primary": "Заполните education_area, direction_code и group_code для основной области программы.",
+    "secondary": "Для междисциплинарной программы заполните вторую область и заранее согласованные доли доменов.",
+    "rationale": "Кратко поясните, почему scope соответствует профессиональной цели, а не только похожему ключевому слову."
+  },
+  "cases": [
+    {"case_id":"P01","title":"Информационные системы здравоохранения","education_level":"bachelor","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P02","title":"Дәлме-дәл егіншілік және агродеректер","education_level":"bachelor","language":"kk","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P03","title":"Cybersecurity and Digital Forensics","education_level":"bachelor","language":"en","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P04","title":"Бухгалтерский учёт и аудит предприятий","education_level":"bachelor","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P05","title":"Инклюзивті білім беру және оқу дизайны","education_level":"bachelor","language":"kk","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P06","title":"Автоматизация промышленных процессов","education_level":"bachelor","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P07","title":"Управление водными ресурсами и экологический мониторинг","education_level":"bachelor","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P08","title":"Translation and Software Localisation","education_level":"bachelor","language":"en","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P09","title":"Аналитика городского транспорта","education_level":"master","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P10","title":"Trustworthy AI for Healthcare Data","education_level":"master","language":"en","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P11","title":"Оқу аналитикасы және білім беру зерттеулері","education_level":"master","language":"kk","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P12","title":"Цифровое государственное управление","education_level":"master","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P13","title":"Управление финансовыми рисками и аналитика","education_level":"master","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P14","title":"Resilient Supply Chain Management","education_level":"master","language":"en","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P15","title":"Интеграция возобновляемой энергетики","education_level":"master","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P16","title":"Корпусная лингвистика казахского языка","education_level":"master","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P17","title":"Robust and Reproducible Medical AI Research","education_level":"doctorate","language":"en","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P18","title":"Климатқа бейімделген агрожүйелерді зерттеу","education_level":"doctorate","language":"kk","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P19","title":"Причинный анализ образовательных вмешательств","education_level":"doctorate","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""},
+    {"case_id":"P20","title":"Безопасность распределённых критических систем","education_level":"doctorate","language":"ru","resolution_status":"unresolved","primary":{},"secondary":{},"rationale":""}
+  ]
+}
