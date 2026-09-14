@@ -6,7 +6,9 @@
     "22d3ff9 fix: align evidence preflight with final admission",
     "ae635af fix: align plan explanations with admission evidence",
     "c5b1a75 fix: rank planner candidates by raw evidence",
-    "e6e56ec fix: stop complete local worker process tree"
+    "e6e56ec fix: stop complete local worker process tree",
+    "ac200ef fix: show actionable planner rejection guidance",
+    "2092c31 fix: make semester load tolerance explicit"
   ],
   "build": {
     "transport": "authenticated local API and durable worker",
@@ -23,6 +25,14 @@
     "cache": {
       "epvo_repository_cached": true,
       "scoring_cached": true
+    },
+    "recent_warm_a_observations": {
+      "sample_size": 7,
+      "elapsed_seconds": [17.4, 18.6, 14.4, 17.0, 13.8, 20.5, 82.5],
+      "median_seconds": 17.4,
+      "minimum_seconds": 13.8,
+      "maximum_seconds": 82.5,
+      "note": "Local audit-event telemetry for successful A builds of ProjectVersion 15. This is a small diagnostic sample, not a p95 or production SLO."
     }
   },
   "published_plan": {
@@ -37,6 +47,21 @@
     "feasible": true,
     "hard_violation_count": 0,
     "minimum_lo_coverage": 1.0
+  },
+  "load_policy": {
+    "configured_target_credits_per_semester": 30,
+    "verified_allowed_range": [27, 33],
+    "actual_semester_loads": {
+      "1": 30,
+      "2": 30,
+      "3": 30,
+      "4": 33,
+      "5": 32,
+      "6": 31,
+      "7": 27,
+      "8": 27
+    },
+    "note": "The verifier applies an explicit +/- 3-credit balancing tolerance; the UI now displays this range. It is not evidence of a regulatory approval."
   },
   "methodist_contract": {
     "generation_readiness": {
@@ -71,7 +96,7 @@
     }
   },
   "limits": [
-    "This is one controlled local programme, not a success rate or p95 claim.",
+    "This is one controlled local programme, not a success rate or production p95 claim.",
     "Independent expert acceptance and the 20-programme cohort remain outstanding.",
     "The evidence does not prove public-service readiness or production deployment."
   ]
