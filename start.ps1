@@ -109,6 +109,19 @@ function Test-TcpPort([string]$HostName, [int]$Port, [int]$TimeoutMilliseconds =
     }
 }
 
+function Stop-ProjectProcessTree([int]$ProcessId) {
+    # On Windows a venv launcher can leave its base Python child alive when
+    # only the launcher PID receives Stop-Process.  That orphan continues to
+    # poll the durable planner queue with an old import set.  `/T` is scoped
+    # to the exact already-identified project PID and its descendants.
+    $taskKill = Join-Path $env:WINDIR "System32\taskkill.exe"
+    if (Test-Path -LiteralPath $taskKill) {
+        & $taskKill /PID $ProcessId /T /F *> $null
+        if ($LASTEXITCODE -eq 0) { return }
+    }
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 function Wait-TcpPort([string]$HostName, [int]$Port, [int]$Seconds = 60) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
@@ -575,7 +588,7 @@ if ($RestartBackend -and $savedBackendPid) {
     $savedProcess = Get-Process -Id ([int]$savedBackendPid) -ErrorAction SilentlyContinue
     if ($savedProcess -and $savedProcess.ProcessName -in @("python", "pythonw")) {
         Write-Host "Restarting project backend PID $savedBackendPid..." -ForegroundColor Yellow
-        Stop-Process -Id ([int]$savedBackendPid) -Force -ErrorAction SilentlyContinue
+        Stop-ProjectProcessTree ([int]$savedBackendPid)
         Start-Sleep -Milliseconds 500
         $existingBackendHealth = $null
     }
@@ -602,7 +615,7 @@ if ($RestartBackend) {
     $workerPids += @($matchingWorkers | ForEach-Object { [int]$_.ProcessId })
     foreach ($workerPid in ($workerPids | Select-Object -Unique)) {
         Write-Host "Restarting project planner worker PID $workerPid..." -ForegroundColor Yellow
-        Stop-Process -Id $workerPid -Force -ErrorAction SilentlyContinue
+        Stop-ProjectProcessTree $workerPid
     }
     $staleHeartbeat = Join-Path $runtime "planner-worker.heartbeat"
     if (Test-Path -LiteralPath $staleHeartbeat) {
@@ -622,7 +635,7 @@ if ($backendPortBusy -and -not $existingBackendHealth) {
         }
     foreach ($staleBackend in $projectBackendProcesses) {
         Write-Host "Stopping stale project backend PID $($staleBackend.ProcessId)..." -ForegroundColor Yellow
-        Stop-Process -Id ([int]$staleBackend.ProcessId) -Force -ErrorAction SilentlyContinue
+        Stop-ProjectProcessTree ([int]$staleBackend.ProcessId)
     }
     if ($projectBackendProcesses) {
         Start-Sleep -Milliseconds 500
