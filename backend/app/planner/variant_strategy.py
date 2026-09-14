@@ -963,9 +963,9 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
         num_semesters,
         replace_redundant_bridge,
     )
-    result = rebalance_domain_quotas(result)
     # Expert replacements are applied late and can change the domain envelope.
-    # Recheck quotas once more while keeping those confirmed courses protected.
+    # One quota pass is sufficient here: the former two consecutive calls had
+    # identical inputs and repeated the same expensive candidate scan.
     result = rebalance_domain_quotas(result)
     # Quota repair and variant diversification may remove the only real source
     # of an LO. Close those gaps again at the true end of selection, then
