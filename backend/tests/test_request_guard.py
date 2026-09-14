@@ -23,6 +23,24 @@ def test_expensive_global_operations_are_rate_limited(monkeypatch):
     assert limited.headers["Retry-After"] == "600"
 
 
+def test_build_limit_allows_a_normal_methodist_review_session(monkeypatch):
+    """A user must be able to retry and compare plans before being throttled."""
+    app = FastAPI()
+    app.add_middleware(RequestGuardMiddleware)
+
+    @app.post("/planner/15/build")
+    def build():
+        return {"ok": True}
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_BUILD_PER_TEN_MINUTES", 8)
+    RequestGuardMiddleware._events.clear()
+    client = TestClient(app)
+
+    for _ in range(8):
+        assert client.post("/planner/15/build").status_code == 200
+    assert client.post("/planner/15/build").status_code == 429
+
+
 def test_production_security_headers_are_present(monkeypatch):
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)

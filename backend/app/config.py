@@ -117,7 +117,11 @@ class Settings(BaseSettings):
     BUILD_DEADLINE_SECONDS: int = 3600
     MAX_REQUEST_BYTES: int = 2 * 1024 * 1024
     RATE_LIMIT_LOGIN_PER_MINUTE: int = 10
-    RATE_LIMIT_BUILD_PER_TEN_MINUTES: int = 3
+    # A methodologist may reasonably retry after correcting inputs, build A,
+    # and explicitly compare alternatives in one review session. Three
+    # submissions made a healthy local session hit a 429 before any build was
+    # running. Eight still bounds expensive work to a small per-client rate.
+    RATE_LIMIT_BUILD_PER_TEN_MINUTES: int = 8
     RATE_LIMIT_EXPENSIVE_PER_TEN_MINUTES: int = 10
     # Local/test remains process-local; production Compose explicitly opts
     # into the PostgreSQL bucket after Alembic has created its table.
