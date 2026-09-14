@@ -663,6 +663,16 @@ if (-not (Test-LocalService "127.0.0.1" 8000 "http://127.0.0.1:8000/health")) {
 }
 else {
     Write-Host "Backend is already running."
+    # Preserve the known backend owner when this launcher is only refreshing
+    # another local service. Otherwise the PID manifest may be overwritten
+    # with the worker alone and a later `-RestartBackend` cannot restart the
+    # matching API process.
+    if ($savedBackendPid) {
+        $savedBackend = Get-Process -Id ([int]$savedBackendPid) -ErrorAction SilentlyContinue
+        if ($savedBackend -and $savedBackend.ProcessName -in @("python", "pythonw")) {
+            $pids.backend = [int]$savedBackendPid
+        }
+    }
 }
 
 Wait-Endpoint "backend" "http://127.0.0.1:8000/health"
