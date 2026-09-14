@@ -336,7 +336,8 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
                 aggregates[course.id] = {
                     "sum": 0.0, "los": set(), "lo_codes": set(),
                     "credible_lo_codes": set(), "professional_lo_codes": set(),
-                    "lo_scores": {}, "max": 0.0, "expert": 0.0,
+                    "lo_scores": {}, "max": 0.0, "evidence_sum": 0.0,
+                    "evidence_max": 0.0, "expert": 0.0,
                 }
 
     # In professional EPVO projects an unscored catalogue row cannot pass the

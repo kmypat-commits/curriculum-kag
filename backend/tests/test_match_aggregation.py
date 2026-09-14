@@ -60,6 +60,8 @@ def test_aggregate_match_scores_keeps_expert_evidence_and_separates_goso():
     assert item["professional_lo_codes"] == {"LO1"}
     assert item["lo_scores"] == {"LO1": 0.8, "LO-GOSO-B1": 0.9}
     assert item["semantic_max"] == 0.9
+    assert item["evidence_sum"] == 2.5
+    assert item["evidence_max"] == 0.9
 
 
 def test_semantic_evidence_score_ignores_retrieval_confidence_lift():

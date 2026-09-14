@@ -32,7 +32,7 @@ def aggregate_match_scores(db, match_model, project_version_id: int, learning_ou
         data = aggregates.setdefault(match.course_id, {
             "sum": 0.0, "los": set(), "lo_codes": set(), "credible_lo_codes": set(),
             "professional_lo_codes": set(), "lo_scores": {}, "max": 0.0, "semantic_max": 0.0,
-            "expert": 0.0,
+            "evidence_sum": 0.0, "evidence_max": 0.0, "expert": 0.0,
         })
         data["sum"] += match.score * weights.get(match.lo_id, 1.0)
         data["los"].add(match.lo_id)
@@ -49,6 +49,8 @@ def aggregate_match_scores(db, match_model, project_version_id: int, learning_ou
         # unchanged; only a course's right to fill a professional LO is
         # protected from a generic heuristic boost.
         admission_value = max(semantic_value, expert_value)
+        data["evidence_sum"] += admission_value * weights.get(match.lo_id, 1.0)
+        data["evidence_max"] = max(data["evidence_max"], admission_value)
         if lo_code and admission_value >= 0.4:
             data["credible_lo_codes"].add(lo_code)
             if not lo_code.startswith("LO-GOSO-"):

@@ -190,6 +190,15 @@ def variant_candidate_key(
 ) -> tuple:
     """Return the canonical sort key used by frontier ranking and assembly."""
     data = aggregates[course_id]
+    # Retrieval scores can include calibrated confidence and lexical/domain
+    # lifts.  They stay available as a deterministic tie-breaker, but must
+    # not make a generic in-scope title outrank a more direct course-to-LO
+    # semantic or expert link.  Legacy aggregates intentionally fall back to
+    # the former score so historical callers remain compatible.
+    evidence_sum = float(data.get("evidence_sum", data.get("sum", 0.0)) or 0.0)
+    evidence_max = float(data.get("evidence_max", data.get("max", 0.0)) or 0.0)
+    retrieval_sum = float(data.get("sum", 0.0) or 0.0)
+    retrieval_max = float(data.get("max", 0.0) or 0.0)
     course = courses.get(course_id)
     credits = max(1, int(getattr(course, "credits", 1) or 1))
     semester_preference = -int(getattr(course, "recommended_semester", 99) or 99)
@@ -203,10 +212,10 @@ def variant_candidate_key(
     depth = course_depth(course_id)
     prereq_count = len(prerequisite_ids_by_course.get(course_id, []))
     if variant_type == "B":
-        return common + (-depth, -prereq_count, data["max"], -credits, course.id)
+        return common + (-depth, -prereq_count, evidence_max, retrieval_max, -credits, course.id)
     if variant_type == "C":
         domain = str(getattr(course, "domain", "") or "").lower()
         domains = {str(value or "").lower() for value in project_domains}
         domain_bonus = int(any(value and (value in domain or domain in value) for value in domains))
-        return common + (-prereq_count, domain_bonus, data["sum"] / credits, -depth, -course.id)
-    return common + (len(data["los"]), data["sum"], data["max"], -depth, -course.id)
+        return common + (-prereq_count, domain_bonus, evidence_sum / credits, retrieval_sum / credits, -depth, -course.id)
+    return common + (len(data["los"]), evidence_sum, evidence_max, retrieval_sum, retrieval_max, -depth, -course.id)

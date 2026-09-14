@@ -250,6 +250,33 @@ def test_variant_ranking_stage_preserves_variant_specific_ordering():
     assert result == [1, 2]
 
 
+def test_variant_ranking_prefers_raw_evidence_before_retrieval_lift():
+    from app.planner.variant_ranking import rank_variant_candidates
+
+    courses = {
+        1: SimpleNamespace(id=1, credits=5, recommended_semester=1, domain="IT", title="Broad"),
+        2: SimpleNamespace(id=2, credits=5, recommended_semester=1, domain="IT", title="Direct"),
+    }
+    result = rank_variant_candidates(
+        [1, 2],
+        aggregates={
+            # Candidate 1 has the stronger search rank only because of lifts.
+            1: {"max": 1.0, "sum": 1.0, "evidence_max": 0.41, "evidence_sum": 0.41, "los": {"LO1"}},
+            2: {"max": 0.79, "sum": 0.79, "evidence_max": 0.72, "evidence_sum": 0.72, "los": {"LO1"}},
+        },
+        courses=courses,
+        prerequisite_ids_by_course={1: [], 2: []},
+        course_depth=lambda _course_id: 0,
+        role_rank=lambda _course: 1,
+        scope_rank=lambda _course: 1,
+        priority_rank=lambda _course: 1,
+        semester_stability_rank=lambda _course: 1,
+        variant_type="A",
+        title_for=lambda course_id: courses[course_id].title,
+    )
+    assert result == [2, 1]
+
+
 def test_variant_ranking_retrieves_only_admissible_depth_frontier():
     from app.planner.variant_ranking import rank_admissible_frontier
 
