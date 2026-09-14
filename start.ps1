@@ -1,6 +1,7 @@
 param(
     [switch]$NoBrowser,
     [switch]$RestartBackend,
+    [switch]$RestartFrontend,
     [switch]$Rebuild,
     [ValidateSet("auto", "sqlite", "postgres-shadow", "postgres")]
     # PostgreSQL is the primary data store. SQLite is an explicit rollback
@@ -504,6 +505,10 @@ if ($requestedSbertDevice -match '^(cuda|gpu)$') {
     Write-Host "SBERT GPU: $($cudaProbe[1])" -ForegroundColor Green
 }
 
+# A frontend restart is explicitly requested by the local launcher whenever
+# start.bat is used.  Rebuild it as well so the static server receives a new
+# hashed asset manifest rather than potentially serving an older browser cache.
+if ($RestartFrontend) { $Rebuild = $true }
 Build-FrontendIfNeeded
 
 # Keep the one-click local launch usable when the optional PostgreSQL service is
@@ -573,15 +578,18 @@ $existingBackendHealth = if (Test-TcpPort "127.0.0.1" 8000 1000) {
 }
 $savedBackendPid = $null
 $savedPlannerWorkerPid = $null
+$savedFrontendPid = $null
 if (Test-Path $pidFile) {
     try {
         $savedPids = Get-Content $pidFile -Raw | ConvertFrom-Json
         $savedBackendPid = $savedPids.backend
         $savedPlannerWorkerPid = $savedPids.plannerWorker
+        $savedFrontendPid = $savedPids.frontend
     }
     catch {
         $savedBackendPid = $null
         $savedPlannerWorkerPid = $null
+        $savedFrontendPid = $null
     }
 }
 if ($RestartBackend -and $savedBackendPid) {
@@ -621,6 +629,28 @@ if ($RestartBackend) {
     if (Test-Path -LiteralPath $staleHeartbeat) {
         Remove-Item -LiteralPath $staleHeartbeat -Force -ErrorAction SilentlyContinue
     }
+}
+$frontendServerScript = Join-Path $root "frontend_server.py"
+if ($RestartFrontend) {
+    # The local frontend is a static Python server. Rebuilding dist while it
+    # is already running used to leave browsers on the old asset manifest.
+    # Stop only this launcher-owned server (and its child process), never an
+    # arbitrary listener on port 3001.
+    $frontendPids = @()
+    if ($savedFrontendPid) {
+        $savedFrontend = Get-Process -Id ([int]$savedFrontendPid) -ErrorAction SilentlyContinue
+        if ($savedFrontend -and $savedFrontend.ProcessName -in @("python", "pythonw")) {
+            $frontendPids += [int]$savedFrontendPid
+        }
+    }
+    $matchingFrontends = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine -like "*$frontendServerScript*" }
+    $frontendPids += @($matchingFrontends | ForEach-Object { [int]$_.ProcessId })
+    foreach ($frontendPid in ($frontendPids | Select-Object -Unique)) {
+        Write-Host "Restarting project frontend PID $frontendPid..." -ForegroundColor Yellow
+        Stop-ProjectProcessTree $frontendPid
+    }
+    if ($frontendPids) { Start-Sleep -Milliseconds 300 }
 }
 $backendPortBusy = Test-TcpPort "127.0.0.1" 8000 1000
 if ($backendPortBusy -and -not $existingBackendHealth) {
@@ -734,6 +764,20 @@ if (-not (Test-LocalService "127.0.0.1" 3001 "http://127.0.0.1:3001/api/health")
 }
 else {
     Write-Host "Frontend is already running."
+    # Preserve the owner PID whenever only backend/worker services are
+    # refreshed; otherwise a later -RestartFrontend has no precise target.
+    if ($savedFrontendPid) {
+        $savedFrontend = Get-Process -Id ([int]$savedFrontendPid) -ErrorAction SilentlyContinue
+        if ($savedFrontend -and $savedFrontend.ProcessName -in @("python", "pythonw")) {
+            $pids.frontend = [int]$savedFrontendPid
+        }
+    }
+    if (-not $pids.frontend) {
+        $existingFrontend = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -and $_.CommandLine -like "*$frontendServerScript*" } |
+            Select-Object -First 1
+        if ($existingFrontend) { $pids.frontend = [int]$existingFrontend.ProcessId }
+    }
 }
 
 Wait-Endpoint "frontend" "http://127.0.0.1:3001/api/health"

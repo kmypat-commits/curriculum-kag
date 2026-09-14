@@ -137,7 +137,7 @@ export default function PlanBuilder() {
     const [courseReplacementPreviews, setCourseReplacementPreviews] = useState({})
     const [loadingCourseReplacement, setLoadingCourseReplacement] = useState(null)
     const [applyingCourseReplacement, setApplyingCourseReplacement] = useState(null)
-    const applyBuildStatus = useCallback((status) => {
+    const applyBuildStatus = (status) => {
             setBuildStatus(status)
             setBuildProgress(status.progress || 0)
             setBuilding(status.state === 'running' || status.state === 'queued')
@@ -151,12 +151,12 @@ export default function PlanBuilder() {
                     })
                 }
             }
-        }, [])
-    const pollBuildStatus = useCallback(async (versionId) => {
+        }
+    const pollBuildStatus = async (versionId) => {
         const { data } = await axios.get(`/api/planner/${versionId}/build-status`)
         applyBuildStatus(data)
         return data
-    }, [applyBuildStatus])
+    }
     const { start: startBuildStatusPolling, stop: stopBuildStatusPolling } = usePlanBuildPolling({
         onStatus: applyBuildStatus,
         onComplete: async (versionId) => {
