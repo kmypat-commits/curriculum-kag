@@ -21,6 +21,20 @@ from reportlab.platypus import (
 _FONT_NAMES = ("CurriculumPDF", "CurriculumPDF-Bold")
 
 
+_SELECTION_METHOD_REASONS = {
+    "epvo_priority": "Приоритетная дисциплина выбранного профиля ЕПВО.",
+    "epvo_priority_replacement": "Приоритетная дисциплина ЕПВО заменила менее релевантную равнокредитную позицию.",
+    "domain_quota_reserve": "Сохранена для выполнения заявленной доли предметной области.",
+    "final_domain_quota_repair": "Добавлена при финальной проверке доли предметной области.",
+    "final_domain_quota_group_repair": "Добавлена при финальной проверке группы образовательных программ.",
+    "real_epvo_credit_top_up": "Добавлена как реальная дисциплина ЕПВО для закрытия объёма программы.",
+    "final_real_credit_fill": "Добавлена как реальная дисциплина для закрытия кредитного объёма.",
+    "credit_gap_real_course": "Добавлена как реальная дисциплина для закрытия кредитного дефицита.",
+    "epvo_lo_gap_repair": "Добавлена для закрытия непокрытого результата обучения реальной дисциплиной.",
+    "expert_confirmed_course_replacement": "Добавлена по подтверждённой экспертной замене.",
+}
+
+
 def _register_fonts() -> tuple[str, str]:
     """Register a Cyrillic-capable font, failing clearly if the runtime lacks one."""
     if all(name in pdfmetrics.getRegisteredFontNames() for name in _FONT_NAMES):
@@ -47,9 +61,13 @@ def _selection_reason(item, plan) -> str:
         return "Bridge-модуль: закрывает структурный, междисциплинарный или кредитный пробел; требует экспертной проверки содержания."
     snapshot = ((plan.metrics_json or {}).get("selection_evidence_snapshot") or {}).get("courses") or {}
     evidence = snapshot.get(str(item.course_id)) or {}
+    method_reason = _SELECTION_METHOD_REASONS.get(str(evidence.get("selection_method") or ""))
     top = (evidence.get("top_lo_matches") or [{}])[0]
     if top.get("lo_code"):
-        return f"Связь с {top['lo_code']}: {round(float(top.get('effective_score') or 0) * 100)}%. Снимок на момент публикации плана."
+        lo_reason = f"Связь с {top['lo_code']}: {round(float(top.get('effective_score') or 0) * 100)}%. Снимок на момент публикации плана."
+        return f"{method_reason} {lo_reason}" if method_reason else lo_reason
+    if method_reason:
+        return method_reason
     return "Включена для структуры, кредитного баланса или доменной целостности; проверьте связь с LO."
 
 

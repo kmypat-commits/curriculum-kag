@@ -179,3 +179,14 @@ def test_selection_evidence_snapshot_uses_raw_evidence_not_ranking_boost():
     assert item["max_score"] == 0.42
     assert item["top_lo_matches"][0]["effective_score"] == 0.42
     assert item["top_lo_matches"][0]["snapshot"] is True
+
+
+def test_selection_evidence_snapshot_retains_method_for_a_course_without_score():
+    payload = snapshot_payload([], {}, {19: "real_epvo_credit_top_up"})
+
+    assert payload["19"] == {
+        "max_score": 0.0,
+        "expert_supported": False,
+        "top_lo_matches": [],
+        "selection_method": "real_epvo_credit_top_up",
+    }

@@ -11,10 +11,14 @@ from app.models.project import LearningOutcome
 from app.planner.match_aggregation import semantic_evidence_score
 
 
-SELECTION_EVIDENCE_SNAPSHOT_VERSION = 1
+SELECTION_EVIDENCE_SNAPSHOT_VERSION = 2
 
 
-def snapshot_payload(rows: list[Any], lo_by_id: dict[int, Any]) -> dict[str, dict]:
+def snapshot_payload(
+    rows: list[Any],
+    lo_by_id: dict[int, Any],
+    selection_methods: dict[int, str] | None = None,
+) -> dict[str, dict]:
     """Make stable, small course-to-LO evidence from rows read at publish time.
 
     Ranking scores may be recomputed after a plan is published.  This payload
@@ -61,6 +65,18 @@ def snapshot_payload(rows: list[Any], lo_by_id: dict[int, Any]) -> dict[str, dic
             ),
             "top_lo_matches": top_matches,
         }
+    # Some valid selected disciplines (for example, a practice or a real
+    # credit top-up) have no direct MatchScore row. Preserve their immutable
+    # selection basis too, rather than making a later UI/PDF guess from the
+    # mutable catalogue.
+    for course_id, selection_method in (selection_methods or {}).items():
+        evidence = result.setdefault(str(course_id), {
+            "max_score": 0.0,
+            "expert_supported": False,
+            "top_lo_matches": [],
+        })
+        if selection_method:
+            evidence["selection_method"] = str(selection_method)
     return result
 
 
@@ -72,6 +88,12 @@ def build_selection_evidence_snapshot(schedule: dict, project_version_id: int, d
         for item in items
         if item.get("course_id") is not None
     })
+    selection_methods = {
+        int(item["course_id"]): str(item.get("selection_method") or "")
+        for items in schedule.values()
+        for item in items
+        if item.get("course_id") is not None
+    }
     if not course_ids:
         return {"version": SELECTION_EVIDENCE_SNAPSHOT_VERSION, "courses": {}}
     learning_outcomes = db.query(LearningOutcome).filter(
@@ -85,5 +107,5 @@ def build_selection_evidence_snapshot(schedule: dict, project_version_id: int, d
     ).all()
     return {
         "version": SELECTION_EVIDENCE_SNAPSHOT_VERSION,
-        "courses": snapshot_payload(rows, lo_by_id),
+        "courses": snapshot_payload(rows, lo_by_id, selection_methods),
     }
