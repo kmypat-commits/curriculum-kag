@@ -41,6 +41,9 @@ export default function PlanVerificationPanels({ currentPlan, compactToggleLabel
                         : t('quality_needs_corrections')}
                 </strong>
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: 13 }}>
+                    {verification.nominal_semester_load !== undefined && verification.allowed_semester_load && (
+                        <span>{t('semester_load_band')}: <b>{verification.nominal_semester_load} ({verification.allowed_semester_load.min}–{verification.allowed_semester_load.max})</b></span>
+                    )}
                     <span>{t('structural_prerequisites')}: <b>{audit.structural_foundations?.length || 0}</b></span>
                     <span>{t('los_without_real_course')}: <b>{audit.lo_without_real_course?.length || 0}</b></span>
                     <span>{t('weak_courses')}: <b>{audit.weak_courses?.length || 0}</b></span>
