@@ -559,8 +559,17 @@ $existingBackendHealth = if (Test-TcpPort "127.0.0.1" 8000 1000) {
     $null
 }
 $savedBackendPid = $null
+$savedPlannerWorkerPid = $null
 if (Test-Path $pidFile) {
-    try { $savedBackendPid = (Get-Content $pidFile -Raw | ConvertFrom-Json).backend } catch { $savedBackendPid = $null }
+    try {
+        $savedPids = Get-Content $pidFile -Raw | ConvertFrom-Json
+        $savedBackendPid = $savedPids.backend
+        $savedPlannerWorkerPid = $savedPids.plannerWorker
+    }
+    catch {
+        $savedBackendPid = $null
+        $savedPlannerWorkerPid = $null
+    }
 }
 if ($RestartBackend -and $savedBackendPid) {
     $savedProcess = Get-Process -Id ([int]$savedBackendPid) -ErrorAction SilentlyContinue
@@ -569,6 +578,35 @@ if ($RestartBackend -and $savedBackendPid) {
         Stop-Process -Id ([int]$savedBackendPid) -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 500
         $existingBackendHealth = $null
+    }
+}
+if ($RestartBackend) {
+    # The worker imports the planner once at process start. Restarting only
+    # Uvicorn leaves it executing an older scheduler while the API advertises
+    # newer behaviour. Reap only the PID recorded by this launcher and any
+    # unambiguously matching daemon, never an arbitrary Python process.
+    $workerScriptForRestart = Join-Path $backendDir "scripts\run_planner_build_worker.py"
+    $workerPids = @()
+    if ($savedPlannerWorkerPid) {
+        $savedWorker = Get-Process -Id ([int]$savedPlannerWorkerPid) -ErrorAction SilentlyContinue
+        if ($savedWorker -and $savedWorker.ProcessName -in @("python", "pythonw")) {
+            $workerPids += [int]$savedPlannerWorkerPid
+        }
+    }
+    $matchingWorkers = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and
+            $_.CommandLine -like "*$workerScriptForRestart*" -and
+            $_.CommandLine -match "--daemon"
+        }
+    $workerPids += @($matchingWorkers | ForEach-Object { [int]$_.ProcessId })
+    foreach ($workerPid in ($workerPids | Select-Object -Unique)) {
+        Write-Host "Restarting project planner worker PID $workerPid..." -ForegroundColor Yellow
+        Stop-Process -Id $workerPid -Force -ErrorAction SilentlyContinue
+    }
+    $staleHeartbeat = Join-Path $runtime "planner-worker.heartbeat"
+    if (Test-Path -LiteralPath $staleHeartbeat) {
+        Remove-Item -LiteralPath $staleHeartbeat -Force -ErrorAction SilentlyContinue
     }
 }
 $backendPortBusy = Test-TcpPort "127.0.0.1" 8000 1000
@@ -659,6 +697,11 @@ if (-not $existingPlannerWorker) {
 }
 else {
     Write-Host "Planner worker is already running (PID $($existingPlannerWorker.ProcessId))."
+    # Keep ownership of a healthy worker in the PID manifest.  Without this,
+    # a later launcher run that starts only another service can overwrite the
+    # manifest and make `-RestartBackend` unable to restart this worker with
+    # the matching application code.
+    $pids.plannerWorker = [int]$existingPlannerWorker.ProcessId
 }
 
 if (-not (Test-LocalService "127.0.0.1" 3001 "http://127.0.0.1:3001/api/health")) {

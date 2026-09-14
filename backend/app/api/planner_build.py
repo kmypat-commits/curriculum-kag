@@ -22,11 +22,13 @@ from app.models.course import Course
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
+from app.models.plan import Plan
 from app.models.plan_build_status import PlanBuildStatus
 from app.models.user import User
 from app.planner.scheduler import build_curriculum_plan, calculate_plan_metrics
 from app.planner.invariant_ledger import schedule_fingerprint
 from app.planner.evidence_preflight import assess_professional_evidence
+from app.planner.selection_evidence import build_selection_evidence_snapshot
 from app.services.auth import get_current_user
 from app.services.rbac import require_permission
 from app.services.access import require_plan_access, require_plan_object_access
@@ -125,6 +127,38 @@ def _infeasible_build_response() -> HTTPException:
         status_code=422,
         detail="Запрошенные варианты не прошли финальные ограничения. Проверьте кредиты, доказательства LO и настройки программы.",
     )
+
+
+def _persist_selection_evidence_snapshot(
+    db: Session,
+    project_version_id: int,
+    result: dict,
+) -> None:
+    """Make publication evidence durable even if a planner implementation omits it.
+
+    The scheduler is expected to attach the snapshot while it creates a
+    candidate plan.  Publication has a separate responsibility: it must never
+    commit a plan whose later explanation depends on mutable match scores.
+    Keeping this guard here makes that invariant survive worker/API version
+    skew during a local restart as well as future scheduler refactors.
+    """
+    plan_id = result.get("plan_id")
+    if not plan_id:
+        raise RuntimeError("Planner candidate has no durable plan identifier")
+    plan = db.query(Plan).filter(Plan.id == int(plan_id)).first()
+    if plan is None:
+        raise RuntimeError("Planner candidate disappeared before publication")
+
+    metrics = dict(plan.metrics_json or {})
+    snapshot = metrics.get("selection_evidence_snapshot")
+    if not isinstance(snapshot, dict) or "version" not in snapshot:
+        metrics["selection_evidence_snapshot"] = build_selection_evidence_snapshot(
+            result.get("schedule") or {}, project_version_id, db
+        )
+        # JSON columns do not track in-place dictionary changes.  Reassign the
+        # full value so SQLAlchemy writes the publication evidence atomically.
+        plan.metrics_json = metrics
+    result["metrics"] = metrics
 
 
 def _load_program_spec_for_command(db: Session | None, project_version_id: int) -> tuple[dict, str]:
@@ -658,6 +692,12 @@ def build_plan(
             results=variants,
         )
         timings.update(variant_timings)
+
+        # The plan rows are already flushed by the scheduler but are not yet
+        # committed.  Freeze their selection evidence at this single
+        # publication boundary before feasibility filtering and activation.
+        for result in variants.values():
+            _persist_selection_evidence_snapshot(db, project_version_id, result)
 
         rejected_variants = []
         # A/B/C are alternatives, not cosmetic labels.  Reject a build that
