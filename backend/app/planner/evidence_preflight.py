@@ -16,6 +16,7 @@ from app.models.course import Course
 from app.models.embedding import MatchScore
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
+from app.planner.match_aggregation import semantic_evidence_score
 from app.services.epvo_repository import epvo_row_matches_education_level
 
 
@@ -103,7 +104,10 @@ def assess_professional_evidence(version: ProjectVersion, db: Session) -> dict:
         if match.course_id not in course_ids:
             continue
         expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-        if max(float(match.score or 0.0), expert) >= 0.4:
+        # Use the same non-inflated semantic/evidence gate as final admission.
+        # The ranking score may include lexical boosts and is intentionally not
+        # proof that a discipline can satisfy a professional LO.
+        if max(semantic_evidence_score(match), expert) >= 0.4:
             credible_course_ids.add(int(match.course_id))
 
     scope_pairs = [
