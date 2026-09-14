@@ -4,19 +4,21 @@
   "changes": [
     "25b6df3 fix: preserve planner evidence and domain quotas",
     "22d3ff9 fix: align evidence preflight with final admission",
-    "ae635af fix: align plan explanations with admission evidence"
+    "ae635af fix: align plan explanations with admission evidence",
+    "c5b1a75 fix: rank planner candidates by raw evidence",
+    "e6e56ec fix: stop complete local worker process tree"
   ],
   "build": {
     "transport": "authenticated local API and durable worker",
-    "job_id": "build-54200d6c17fa5b98bc95cd8cd2c9d2c1",
+    "job_id": "build-a2f7f74675533a6261e0e8a2141e33c1",
     "requested_variants": ["A"],
     "state": "complete",
-    "elapsed_seconds": 20.5,
+    "elapsed_seconds": 17.4,
     "stage_timings_seconds": {
-      "epvo_repository": 8.49,
-      "scoring": 0.27,
-      "variant_A": 10.56,
-      "saving": 0.15
+      "epvo_repository": 6.89,
+      "scoring": 0.18,
+      "variant_A": 9.66,
+      "saving": 0.13
     },
     "cache": {
       "epvo_repository_cached": true,
@@ -24,7 +26,7 @@
     }
   },
   "published_plan": {
-    "id": 3282,
+    "id": 3290,
     "variant": "A",
     "is_active": true,
     "total_credits": 240,
@@ -46,10 +48,12 @@
     },
     "selection_explanations": {
       "checked": true,
-      "active_plan_id": 3282,
+      "active_plan_id": 3290,
       "selection_reason_present": true,
       "semester_reason_present": true,
-      "top_lo_matches_returned": 3
+      "top_lo_matches_returned": 3,
+      "frozen_evidence_snapshot_version": 1,
+      "frozen_evidence_course_count": 40
     },
     "xlsx_export": {
       "checked": true,
