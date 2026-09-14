@@ -29,6 +29,73 @@ import {
     localizedCourseField as formatLocalizedCourseField,
 } from '../utils/planBuilderFormatters'
 
+const diagnosticGuidance = {
+    prerequisites: {
+        ru: 'Есть конфликт обязательных пререквизитов. Проверьте порядок дисциплин или измените ограничения последовательности.',
+        kk: 'Міндетті пререквизиттерде қайшылық бар. Пәндер ретін немесе дәйектілік шектеулерін тексеріңіз.',
+        en: 'Required prerequisites conflict. Check course order or the sequencing constraints.',
+    },
+    semester_load: {
+        ru: 'Нагрузка хотя бы в одном семестре превышает заданный предел. Увеличьте допустимую нагрузку либо число семестров.',
+        kk: 'Кемінде бір семестрдегі жүктеме берілген шектен асады. Рұқсат етілген жүктемені не семестр санын өзгертіңіз.',
+        en: 'At least one semester exceeds the configured load. Adjust the load limit or number of semesters.',
+    },
+    credits: {
+        ru: 'План не набрал требуемый объём кредитов. Проверьте целевой объём и доступность дисциплин в выбранной группе ЕПВО.',
+        kk: 'Жоспар қажетті кредит көлеміне жетпеді. Мақсатты көлемді және таңдалған ЕПВО тобындағы пәндердің қолжетімділігін тексеріңіз.',
+        en: 'The plan did not reach the required credit volume. Check the target volume and course availability in the selected EPVO group.',
+    },
+    domain_quota: {
+        ru: 'Не выполнена доля одного из направлений. Уточните коды обоих направлений ЕПВО и минимальные доли.',
+        kk: 'Бағыттардың бірінің үлесі орындалмады. Екі ЕПВО бағытының кодтары мен ең төменгі үлестерін нақтылаңыз.',
+        en: 'One field quota was not met. Check both EPVO scope codes and the minimum shares.',
+    },
+    course_lo: {
+        ru: 'Не подтверждена связь дисциплин с результатами обучения. Уточните формулировки РО или область/группу ЕПВО.',
+        kk: 'Пәндер мен оқу нәтижелерінің байланысы расталмады. ОН тұжырымдарын немесе ЕПВО саласы мен тобын нақтылаңыз.',
+        en: 'Course-to-outcome evidence was not confirmed. Refine the outcomes or EPVO scope.',
+    },
+    real_lo: {
+        ru: 'Один или несколько РО не поддержаны реальной дисциплиной. Уточните РО либо профиль ЕПВО; bridge-модуль не заменяет такое подтверждение.',
+        kk: 'Бір немесе бірнеше ОН нақты пәнмен расталмады. ОН-ды не ЕПВО профилін нақтылаңыз; bridge-модуль мұндай растауды алмастырмайды.',
+        en: 'One or more outcomes lack support from a real course. Refine the outcomes or EPVO profile; a bridge module cannot replace this evidence.',
+    },
+    bridge_limit: {
+        ru: 'Для покрытия РО требуется слишком много новых дисциплин. Сузьте или уточните РО и проверьте профиль ЕПВО.',
+        kk: 'ОН жабу үшін тым көп жаңа пән қажет. ОН-ды нақтылап, ЕПВО профилін тексеріңіз.',
+        en: 'Too many new course proposals are needed to cover the outcomes. Refine the outcomes and check the EPVO profile.',
+    },
+    goso: {
+        ru: 'Нарушены обязательные нормативные компоненты. Проверьте выбранный нормативный профиль и заданный объём обязательных дисциплин.',
+        kk: 'Міндетті нормативтік компоненттер бұзылды. Таңдалған нормативтік профильді және міндетті пәндер көлемін тексеріңіз.',
+        en: 'Mandatory regulatory components are violated. Check the selected regulatory profile and required course volume.',
+    },
+    variant_not_distinct: {
+        ru: 'Альтернативы получились одинаковыми. Оставьте вариант A или скорректируйте критерии сравнения B/C.',
+        kk: 'Балама нұсқалар бірдей шықты. A нұсқасын қалдырыңыз немесе B/C салыстыру өлшемдерін түзетіңіз.',
+        en: 'The alternatives are identical. Keep variant A or adjust the B/C comparison criteria.',
+    },
+}
+
+function diagnosticActions(status, language) {
+    const details = status?.verification_summary || status?.rejected_variants || []
+    const reasons = new Set()
+    for (const variant of details) {
+        for (const item of variant?.hard_details || []) {
+            if (item?.reason && item.reason !== 'verifier_breakdown') reasons.add(item.reason)
+            if (item?.reason === 'verifier_breakdown') {
+                const counts = item.counts || {}
+                for (const [reason, count] of Object.entries(counts)) {
+                    if (Number(count) > 0) reasons.add(reason === 'bridge_overflow' ? 'bridge_limit' : reason)
+                }
+            }
+        }
+    }
+    return [...reasons]
+        .map(reason => ({ reason, text: diagnosticGuidance[reason]?.[language] || diagnosticGuidance[reason]?.ru }))
+        .filter(item => item.text)
+}
+
 export default function PlanBuilder() {
     const { notify } = useNotifications()
     const { id } = useParams()
@@ -70,8 +137,7 @@ export default function PlanBuilder() {
     const [courseReplacementPreviews, setCourseReplacementPreviews] = useState({})
     const [loadingCourseReplacement, setLoadingCourseReplacement] = useState(null)
     const [applyingCourseReplacement, setApplyingCourseReplacement] = useState(null)
-    const { start: startBuildStatusPolling, stop: stopBuildStatusPolling } = usePlanBuildPolling({
-        onStatus: (status) => {
+    const applyBuildStatus = useCallback((status) => {
             setBuildStatus(status)
             setBuildProgress(status.progress || 0)
             setBuilding(status.state === 'running' || status.state === 'queued')
@@ -85,7 +151,14 @@ export default function PlanBuilder() {
                     })
                 }
             }
-        },
+        }, [])
+    const pollBuildStatus = useCallback(async (versionId) => {
+        const { data } = await axios.get(`/api/planner/${versionId}/build-status`)
+        applyBuildStatus(data)
+        return data
+    }, [applyBuildStatus])
+    const { start: startBuildStatusPolling, stop: stopBuildStatusPolling } = usePlanBuildPolling({
+        onStatus: applyBuildStatus,
         onComplete: async (versionId) => {
             setBuilding(false)
             await fetchVariants(versionId)
@@ -259,7 +332,16 @@ export default function PlanBuilder() {
                 setBuildNotice({ type: 'error', text: buildAlreadyRunningText() })
             } else {
                 const message = errorMessage(err)
-                setBuildStatus({ state: 'failed', stage: 'failed', progress: 0, error: message })
+                // A queued worker persists an actionable verifier summary.
+                // Fetch it after a terminal HTTP error instead of replacing it
+                // with the generic response text from the synchronous route.
+                let terminalStatus = null
+                if (err.response?.status === 422) {
+                    try { terminalStatus = await pollBuildStatus(versionId) } catch (_) { /* preserve the HTTP error below */ }
+                }
+                if (!terminalStatus || !['rejected', 'failed', 'timed_out', 'cancelled'].includes(terminalStatus.state)) {
+                    setBuildStatus({ state: 'failed', stage: 'failed', progress: 0, error: message })
+                }
                 notify(t('build_error') + ': ' + message)
             }
         } finally {
@@ -774,6 +856,14 @@ export default function PlanBuilder() {
                     <div className="card inline-alert inline-alert-error" role="alert" style={{ marginBottom: '20px' }}>
                         <strong>{t('build_result_error')}</strong>
                         <p>{buildStatus.error}</p>
+                        {diagnosticActions(buildStatus, language).length > 0 && (
+                            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #f3c4c4' }}>
+                                <strong>{localize({ ru: 'Что исправить перед повтором', kk: 'Қайталау алдында нені түзету керек', en: 'What to fix before retrying' })}</strong>
+                                <ul style={{ margin: '7px 0 0', paddingLeft: 20, lineHeight: 1.45 }}>
+                                    {diagnosticActions(buildStatus, language).map(item => <li key={item.reason}>{item.text}</li>)}
+                                </ul>
+                            </div>
+                        )}
                     </div>
                 )}
                 {changeReport?.available && !building && (
