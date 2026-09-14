@@ -31,7 +31,12 @@ from app.planner.evidence_preflight import assess_professional_evidence
 from app.planner.selection_evidence import build_selection_evidence_snapshot
 from app.services.auth import get_current_user
 from app.services.rbac import require_permission
-from app.services.access import require_plan_access, require_plan_object_access
+from app.services.access import require_plan_access, require_plan_object_access, require_version_access
+from app.services.planner_drafts import (
+    build_rejected_draft_payloads,
+    draft_summary,
+    persist_rejected_drafts,
+)
 from app.services.plan_reporting import build_change_report as _build_change_report
 from app.services.plan_reporting import plan_snapshot as _plan_snapshot
 from app.services.program_spec_snapshot import build_program_spec_snapshot, program_spec_hash
@@ -78,9 +83,10 @@ class BuildCancelled(RuntimeError):
 class BuildInfeasible(ValueError):
     """The requested plan cannot pass final curriculum constraints."""
 
-    def __init__(self, message: str, *, details: list[dict] | None = None):
+    def __init__(self, message: str, *, details: list[dict] | None = None, drafts: list[dict] | None = None):
         super().__init__(message)
         self.details = details or []
+        self.drafts = drafts or []
 
 
 @router.get("/{project_version_id}/generation-readiness")
@@ -122,6 +128,50 @@ def get_generation_readiness(
             "message": "Связи дисциплина–РО будут рассчитаны в начале построения; предварительная проверка доказательств пока недоступна.",
         }
     return readiness
+
+
+@router.get("/{project_version_id}/drafts")
+def get_rejected_drafts(
+    project_version_id: int,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the owner's non-publishable working drafts."""
+    from app.models.planner_draft import PlannerBuildDraft
+
+    require_version_access(db, current_user, project_version_id)
+    rows = db.query(PlannerBuildDraft).filter(
+        PlannerBuildDraft.project_version_id == project_version_id,
+    ).order_by(PlannerBuildDraft.id.desc()).limit(max(1, min(int(limit), 20))).all()
+    return {"drafts": [draft_summary(row) for row in rows]}
+
+
+@router.get("/{project_version_id}/drafts/{draft_id}")
+def get_rejected_draft(
+    project_version_id: int,
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return one frozen working draft for review; it is never a Plan."""
+    from app.models.planner_draft import PlannerBuildDraft
+
+    require_version_access(db, current_user, project_version_id)
+    row = db.query(PlannerBuildDraft).filter(
+        PlannerBuildDraft.id == draft_id,
+        PlannerBuildDraft.project_version_id == project_version_id,
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Черновик не найден")
+    return {
+        **draft_summary(row),
+        "schedule": row.schedule_json or {},
+        "metrics": row.metrics_json or {},
+        "rejection": row.rejection_json or {},
+        "result_kind": "draft",
+        "review_state": "unreviewed",
+    }
 
 
 class BuildTimedOut(TimeoutError):
@@ -814,6 +864,11 @@ def build_plan(
         publishable_variants, rejected_variant_names = partition_publishable_variants(
             variants, rejected_variants,
         )
+        draft_payloads = build_rejected_draft_payloads(
+            variants,
+            rejected_variants,
+            job_id=(claimed or {}).get("job_id"),
+        )
         # A methodist can ask for A/B/C as a comparison, but an invalid
         # alternative must not discard a sound published A.  Keep the safety
         # boundary strict: only variants with zero hard violations are saved.
@@ -829,7 +884,18 @@ def build_plan(
                 "Новые варианты не прошли финальную проверку; старые планы сохранены. "
                 + summary,
                 details=rejected_variants,
+                drafts=draft_payloads,
             )
+
+        # Retain rejected comparison variants as isolated working drafts.
+        # They are never inserted into Plan and therefore cannot become active.
+        persisted_drafts = persist_rejected_drafts(
+            db,
+            project_version_id=project_version_id,
+            created_by_user_id=current_user.id,
+            payloads=draft_payloads,
+        )
+        draft_summaries = [draft_summary(row) for row in persisted_drafts]
 
         # build_curriculum_plan uses the surrounding transaction.  Remove
         # invalid candidates before committing, otherwise a rejected B/C could
@@ -894,6 +960,7 @@ def build_plan(
             "active_variant": best_variant,
             "publication_status": "partial" if rejected_variants else "complete",
             "rejected_variants": rejected_variants,
+            "drafts": draft_summaries,
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         })
@@ -910,6 +977,7 @@ def build_plan(
             "change_report": change_report,
             "publication_status": "partial" if rejected_variants else "complete",
             "rejected_variants": rejected_variants,
+            "drafts": draft_summaries,
             "descriptions": {
                 "A": "Максимальное покрытие результатов обучения",
                 "B": "Минимум новых дисциплин",
@@ -938,6 +1006,19 @@ def build_plan(
         if sql_query_count is None:
             sql_query_count = finish_sql_query_measurement(sql_measurement)
         db.rollback()
+        persisted_drafts = []
+        if exc.drafts:
+            try:
+                persisted_drafts = persist_rejected_drafts(
+                    db,
+                    project_version_id=project_version_id,
+                    created_by_user_id=current_user.id,
+                    payloads=exc.drafts,
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Could not persist rejected planner drafts for version %s", project_version_id)
         rejection_details = [
             {
                 "variant": item.get("variant"),
@@ -959,6 +1040,7 @@ def build_plan(
             # page and contains no traceback or model prompt.
             "error": str(exc)[:2000] or "Финальная проверка вариантов выявила невыполнимые ограничения.",
             "verification_summary": rejection_details,
+            "drafts": [draft_summary(row) for row in persisted_drafts],
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),
             "timings": timings,
         })

@@ -115,6 +115,8 @@ export default function PlanBuilder() {
     const [activationNotice, setActivationNotice] = useState(null)
     const [buildNotice, setBuildNotice] = useState(null)
     const [changeReport, setChangeReport] = useState(null)
+    const [drafts, setDrafts] = useState([])
+    const [selectedDraft, setSelectedDraft] = useState(null)
     const { variants, activeVariant, setActiveVariant, fetchVariants } = usePlanVariants()
     // A is the normal, publishable plan. Alternatives are an explicit choice
     // because comparison should not triple a methodist's waiting time.
@@ -142,6 +144,7 @@ export default function PlanBuilder() {
             setBuildProgress(status.progress || 0)
             setBuilding(status.state === 'running' || status.state === 'queued')
             if (status.change_report) setChangeReport(status.change_report)
+            if (Array.isArray(status.drafts)) setDrafts(status.drafts)
             if (status.publication_status === 'partial') {
                 const rejected = (status.rejected_variants || []).map(item => item.variant).filter(Boolean)
                 if (rejected.length) {
@@ -258,6 +261,9 @@ export default function PlanBuilder() {
                     .then(response => setGenerationReadiness(response.data))
                     .catch(() => setGenerationReadiness(null))
                 await fetchVariants(projRes.data.latest_version.id)
+                axios.get(`/api/planner/${projRes.data.latest_version.id}/drafts`)
+                    .then(response => setDrafts(response.data?.drafts || []))
+                    .catch(() => setDrafts([]))
                 startBuildStatusPolling(projRes.data.latest_version.id)
             }
         } catch (err) {
@@ -299,6 +305,17 @@ export default function PlanBuilder() {
         }
     }
 
+    const openDraft = async (draftId) => {
+        const versionId = project?.latest_version?.id
+        if (!versionId || !draftId) return
+        try {
+            const response = await axios.get(`/api/planner/${versionId}/drafts/${draftId}`)
+            setSelectedDraft(response.data)
+        } catch (err) {
+            notify(`Не удалось открыть черновик: ${errorMessage(err)}`)
+        }
+    }
+
     const handleBuild = async () => {
         const versionId = project?.latest_version?.id
         if (!versionId) return
@@ -328,7 +345,8 @@ export default function PlanBuilder() {
             await fetchVariants(versionId)
             setRequiresRegeneration(false)
             setBuildProgress(100)
-            setBuildStatus({ state: 'complete', stage: 'complete', progress: 100, change_report: buildResponse.data?.change_report, publication_status: buildResponse.data?.publication_status, rejected_variants: buildResponse.data?.rejected_variants })
+            setBuildStatus({ state: 'complete', stage: 'complete', progress: 100, change_report: buildResponse.data?.change_report, publication_status: buildResponse.data?.publication_status, rejected_variants: buildResponse.data?.rejected_variants, drafts: buildResponse.data?.drafts })
+            if (Array.isArray(buildResponse.data?.drafts)) setDrafts(buildResponse.data.drafts)
             setChangeReport(buildResponse.data?.change_report || null)
             const message = epvoSyncMessage(buildResponse.data?.epvo_repository)
             const rejected = (buildResponse.data?.rejected_variants || []).map(item => item.variant).filter(Boolean)
@@ -879,6 +897,39 @@ export default function PlanBuilder() {
                                 <ul style={{ margin: '7px 0 0', paddingLeft: 20, lineHeight: 1.45 }}>
                                     {diagnosticActions(buildStatus, language).map(item => <li key={item.reason}>{item.text}</li>)}
                                 </ul>
+                            </div>
+                        )}
+                    </div>
+                )}
+                {drafts.length > 0 && !building && (
+                    <div className="card" style={{ marginBottom: '20px', borderTop: '2px solid #ef6c00', background: '#fffaf2' }}>
+                        <strong>Рабочие черновики после финальной проверки</strong>
+                        <p style={{ margin: '8px 0', color: '#6d4c41', fontSize: 13 }}>
+                            Это сохранённые варианты для методической доработки. Они не опубликованы, не могут стать активным планом и не заменяют проверенный результат.
+                        </p>
+                        {drafts.map((draft) => (
+                            <div key={draft.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: '1px solid #f0d6b7', flexWrap: 'wrap' }}>
+                                <span>
+                                    <b>Вариант {draft.variant_type}</b>: {draft.total_credits ?? '—'} / {draft.target_credits ?? '—'} ECTS, жёстких ограничений: {draft.hard_violation_count ?? '—'}.
+                                </span>
+                                <button className="btn btn-secondary" onClick={() => openDraft(draft.id)}>Открыть состав черновика</button>
+                            </div>
+                        ))}
+                        {selectedDraft && (
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e9c9a5' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                                    <b>Черновик {selectedDraft.variant_type}: состав по семестрам</b>
+                                    <button className="btn btn-secondary" onClick={() => setSelectedDraft(null)}>Скрыть</button>
+                                </div>
+                                {Object.entries(selectedDraft.schedule || {}).sort(([left], [right]) => Number(left) - Number(right)).map(([semester, items]) => (
+                                    <div key={semester} style={{ marginTop: 10 }}>
+                                        <b>Семестр {semester}</b>
+                                        <ul style={{ margin: '5px 0 0', paddingLeft: 20 }}>
+                                            {(items || []).map((item, index) => <li key={`${semester}-${index}`}>{item.title || item.course_title || (item.bridge_module_id ? 'Проектный bridge-модуль' : `Дисциплина #${item.course_id || '—'}`)} — {item.credits || '—'} ECTS</li>)}
+                                        </ul>
+                                    </div>
+                                ))}
+                                <p style={{ margin: '10px 0 0', color: '#8a4b08', fontSize: 13 }}>Перед публикацией исправьте указанные выше ограничения и повторите построение.</p>
                             </div>
                         )}
                     </div>

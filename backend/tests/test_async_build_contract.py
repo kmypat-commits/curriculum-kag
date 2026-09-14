@@ -36,10 +36,12 @@ def test_build_response_preserves_partial_publication_diagnostics():
         "active_variant": "A",
         "publication_status": "partial",
         "rejected_variants": [{"variant": "B", "hard": 1}],
+        "drafts": [{"id": 2, "variant_type": "B"}],
     })
 
     assert response.publication_status == "partial"
     assert response.rejected_variants == [{"variant": "B", "hard": 1}]
+    assert response.drafts == [{"id": 2, "variant_type": "B"}]
 
 
 def test_no_variant_is_publishable_when_each_failed_verification():
@@ -50,6 +52,53 @@ def test_no_variant_is_publishable_when_each_failed_verification():
 
     assert published == {}
     assert rejected == {"A"}
+
+
+def test_rejected_variant_has_a_frozen_non_publishable_draft_payload():
+    from app.services.planner_drafts import build_rejected_draft_payloads
+
+    payloads = build_rejected_draft_payloads(
+        {
+            "A": {
+                "schedule": {1: [{"course_id": 7, "credits": 5, "title": "Evidence"}]},
+                "metrics": {"verification": {"hard_violation_count": 1, "total_credits": 235}},
+            },
+        },
+        [{"variant": "A", "hard": 1, "hard_details": [{"reason": "credits", "count": 1}]}],
+        job_id="build-draft-contract",
+    )
+
+    assert len(payloads) == 1
+    assert payloads[0]["job_id"] == "build-draft-contract"
+    assert payloads[0]["variant_type"] == "A"
+    assert payloads[0]["schedule_json"] == {"1": [{"course_id": 7, "credits": 5, "title": "Evidence"}]}
+    assert payloads[0]["rejection_json"]["hard_details"] == [{"reason": "credits", "count": 1}]
+
+
+def test_rejected_draft_persists_outside_the_rolled_back_plan_transaction():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.database import Base
+    from app.services.planner_drafts import build_rejected_draft_payloads, persist_rejected_drafts
+    from app.models.planner_draft import PlannerBuildDraft
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        payloads = build_rejected_draft_payloads(
+            {"A": {"schedule": {1: [{"course_id": 9, "credits": 5}]}, "verification": {"hard_violation_count": 1}}},
+            [{"variant": "A", "hard": 1}],
+            job_id="build-rollback-contract",
+        )
+        drafts = persist_rejected_drafts(db, project_version_id=77, created_by_user_id=None, payloads=payloads)
+        db.commit()
+
+        assert drafts[0].id is not None
+        assert db.query(PlannerBuildDraft).filter_by(job_id="build-rollback-contract", variant_type="A").one().schedule_json == {"1": [{"course_id": 9, "credits": 5}]}
+    finally:
+        db.close()
+        engine.dispose()
 
 
 def test_generation_readiness_blocks_impossible_volume_before_scoring():

@@ -31,7 +31,7 @@ from app.config import settings
 from app.api import auth, projects, repository, kag, planner, export_api, epvo as epvo_api, git_versions
 from app.database import engine, Base
 # Import all models to register them with Base
-from app.models import user, project, course, plan, embedding, audit, bridge_module, syllabus, epvo, plan_build_status, rate_limit
+from app.models import user, project, course, plan, embedding, audit, bridge_module, syllabus, epvo, plan_build_status, rate_limit, planner_draft
 
 logger = logging.getLogger("curriculum.performance")
 
