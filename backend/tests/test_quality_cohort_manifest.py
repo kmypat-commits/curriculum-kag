@@ -16,6 +16,7 @@ from scripts.audit_quality_cohort import (
     release_run_lock,
     validate_child_report,
 )
+from scripts.audit_cross_level_generation import load_exact_input
 
 
 def test_breadth_manifest_has_unique_contexts():
@@ -125,3 +126,38 @@ def test_reconcile_does_not_touch_terminal_report(tmp_path: Path):
     output.write_text(json.dumps({"run_id": "done", "status": "failed"}), encoding="utf-8")
     result = reconcile_running_report(output)
     assert result["status"] == "failed"
+
+
+def test_exact_programme_input_requires_resolved_scope_and_preserves_outcomes(tmp_path: Path):
+    source = tmp_path / "brief.json"
+    source.write_text(json.dumps({
+        "title": "Контрольная программа",
+        "goal": "Подготовить специалиста для проверяемой задачи.",
+        "domain1": "Информационно-коммуникационные технологии",
+        "constraints": {
+            "education_level": "bachelor", "education_area": "6B06",
+            "direction_code": "6B061", "group_code": "B057",
+            "instruction_language": "ru", "total_semesters": 8,
+            "total_credits": 240, "max_credits_per_semester": 30,
+        },
+        "learning_outcomes": [{"code": "LO-REAL-1", "text": "Спроектировать проверяемую информационную систему."}],
+    }, ensure_ascii=False), encoding="utf-8")
+    loaded, digest = load_exact_input(str(source))
+    assert len(digest) == 64
+    assert loaded["learning_outcomes"][0]["code"] == "LO-REAL-1"
+    assert loaded["constraints"]["group_code"] == "B057"
+
+
+def test_exact_programme_input_rejects_unresolved_catalogue_scope(tmp_path: Path):
+    source = tmp_path / "brief.json"
+    source.write_text(json.dumps({
+        "title": "Без scope", "goal": "Цель.",
+        "constraints": {"education_level": "bachelor"},
+        "learning_outcomes": [{"code": "LO1", "text": "Текст."}],
+    }, ensure_ascii=False), encoding="utf-8")
+    try:
+        load_exact_input(str(source))
+    except ValueError as exc:
+        assert "catalogue scope" in str(exc)
+    else:
+        raise AssertionError("unresolved scope must not be silently accepted")

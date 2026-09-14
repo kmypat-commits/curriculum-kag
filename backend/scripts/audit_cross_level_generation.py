@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import cProfile
 import faulthandler
+import hashlib
 import json
 import os
 import time
@@ -81,9 +82,69 @@ ICT_AGRO_LOS = [
 ]
 
 
+def load_exact_input(path: str) -> tuple[dict, str]:
+    """Load a frozen programme input for a disposable acceptance run.
+
+    The historic control runner deliberately used a few fixed ICT profiles.
+    That is useful for a regression check, but it must not be presented as an
+    evaluation of a real programme brief.  A real brief therefore has to
+    provide its exact scope and constraints explicitly; the runner never
+    guesses an EPVO code from a title or silently replaces an unsupported
+    direction with ICT.
+    """
+    source = Path(path)
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot read --input-json: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("--input-json must contain one JSON object")
+
+    constraints = payload.get("constraints")
+    outcomes = payload.get("learning_outcomes")
+    required_constraints = (
+        "education_level", "education_area", "direction_code", "group_code",
+        "instruction_language", "total_semesters", "total_credits",
+        "max_credits_per_semester",
+    )
+    missing = [key for key in required_constraints if not str((constraints or {}).get(key) or "").strip()]
+    if missing:
+        raise ValueError(
+            "Exact programme input is not runnable until its catalogue scope/constraints are resolved: "
+            + ", ".join(missing)
+        )
+    if not isinstance(outcomes, list) or not outcomes:
+        raise ValueError("Exact programme input must contain at least one learning outcome")
+    normalized_outcomes = []
+    seen_codes = set()
+    for row in outcomes:
+        if not isinstance(row, dict):
+            raise ValueError("Each learning outcome must be an object")
+        code = str(row.get("code") or "").strip()
+        text = str(row.get("text") or "").strip()
+        if not code or not text or code in seen_codes:
+            raise ValueError("Learning outcomes require unique non-empty code and text")
+        seen_codes.add(code)
+        normalized_outcomes.append({"code": code, "text": text, "taxonomy_level": row.get("taxonomy_level")})
+    if not str(payload.get("title") or "").strip() or not str(payload.get("goal") or "").strip():
+        raise ValueError("Exact programme input requires title and goal")
+
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        "title": str(payload["title"]).strip(),
+        "goal": str(payload["goal"]).strip(),
+        "constraints": dict(constraints),
+        "learning_outcomes": normalized_outcomes,
+        "domain1": str(payload.get("domain1") or "").strip(),
+        "domain2": str(payload.get("domain2") or "").strip(),
+        "audit_profile": str(payload.get("audit_profile") or "standard").strip(),
+        "quality_contract": dict(payload.get("quality_contract") or {}),
+    }, hashlib.sha256(canonical).hexdigest()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--level", choices=("bachelor", "master", "doctorate"), required=True)
+    parser.add_argument("--level", choices=("bachelor", "master", "doctorate"))
     parser.add_argument("--profile", choices=("standard", "ict-medicine", "ict-agro"), default="standard")
     parser.add_argument("--jurisdiction", choices=("KZ", "INTERNATIONAL"), default="KZ")
     parser.add_argument("--output", required=True)
@@ -92,7 +153,29 @@ def main() -> None:
     parser.add_argument("--profile-stats", action="store_true", help="collect cProfile stats for plan building")
     parser.add_argument("--case-index", type=int, default=0, help="Stable unique input number for a breadth cohort")
     parser.add_argument("--focus", default="general information systems", help="Domain focus used to make breadth-cohort inputs distinct")
+    parser.add_argument(
+        "--input-json",
+        help="Frozen real-programme input with resolved EPVO scope; incompatible with guessed catalogue codes.",
+    )
     args = parser.parse_args()
+    exact_input = None
+    input_sha256 = None
+    if args.input_json:
+        try:
+            exact_input, input_sha256 = load_exact_input(args.input_json)
+        except ValueError as exc:
+            parser.error(str(exc))
+        args.level = str(exact_input["constraints"]["education_level"])
+        args.jurisdiction = str(exact_input["constraints"].get("jurisdiction") or args.jurisdiction)
+        args.profile = exact_input["audit_profile"]
+        if args.level not in {"bachelor", "master", "doctorate"}:
+            parser.error("Exact programme input has unsupported education_level")
+        if args.jurisdiction not in {"KZ", "INTERNATIONAL"}:
+            parser.error("Exact programme input has unsupported jurisdiction")
+        if args.profile not in {"standard", "ict-medicine", "ict-agro"}:
+            parser.error("Exact programme input has unsupported audit_profile")
+    elif not args.level:
+        parser.error("--level is required unless --input-json is supplied")
     # A cohort worker can spend minutes inside a native/ML call.  Emit a
     # periodic Python traceback to stderr so the parent can identify the
     # blocked phase instead of recording an opaque timeout only.
@@ -174,6 +257,30 @@ def main() -> None:
         "master_track": "scientific_pedagogical",
         "doctorate_track": "scientific_pedagogical",
     }
+    professional_lo_specs = [
+        {"code": f"LO{index}", "text": text, "taxonomy_level": "create" if index in {1, 5} else "evaluate"}
+        for index, text in enumerate(professional_los, start=1)
+    ]
+    project_title = f"AUTOTEST ГОСО {args.level} {args.profile} CASE-{args.case_index:03d}"
+    project_goal = f"Подготовка специалистов для задач: {args.focus}."
+    if exact_input:
+        constraints.update(exact_input["constraints"])
+        total_credits = int(constraints["total_credits"])
+        semesters = int(constraints["total_semesters"])
+        direction = str(constraints["direction_code"])
+        group = str(constraints["group_code"])
+        area = str(constraints["education_area"])
+        secondary_direction = str(constraints.get("secondary_direction_code") or "")
+        secondary_group = str(constraints.get("secondary_group_code") or "")
+        secondary_area = str(constraints.get("secondary_education_area") or "")
+        domain1 = exact_input["domain1"] or area
+        domain2 = exact_input["domain2"]
+        professional_lo_specs = exact_input["learning_outcomes"]
+        project_title = exact_input["title"]
+        project_goal = exact_input["goal"]
+        contract = exact_input["quality_contract"]
+        max_allowed_bridges = int(contract.get("max_allowed_bridges", max_allowed_bridges))
+        min_prerequisite_edges = int(contract.get("min_prerequisite_edges", min_prerequisite_edges))
     db = SessionLocal()
     # Keep disposable cohort audits bounded even when a planner query becomes
     # pathological; this is local to the audit session and never changes the
@@ -184,22 +291,22 @@ def main() -> None:
     report = {"level": args.level, "status": "running"}
     try:
         project = Project(
-            title=f"AUTOTEST ГОСО {args.level} {args.profile} CASE-{args.case_index:03d}",
+            title=project_title,
             domain1=domain1,
             domain2=domain2,
-            goal=f"Подготовка специалистов для задач: {args.focus}.",
+            goal=project_goal,
             constraints_json={**constraints, "acceptance_case_index": args.case_index},
         )
         version = ProjectVersion(project=project, version_number=1, status="draft")
         db.add(project)
         db.flush()
         project_id = project.id
-        for index, text in enumerate(professional_los, start=1):
+        for index, outcome in enumerate(professional_lo_specs, start=1):
             db.add(LearningOutcome(
                 project_version=version,
-                lo_code=f"LO{index}",
-                lo_text=f"{text} Контекст применения: {args.focus}.",
-                taxonomy_level="create" if index in {1, 5} else "evaluate",
+                lo_code=outcome["code"],
+                lo_text=outcome["text"],
+                taxonomy_level=outcome.get("taxonomy_level") or ("create" if index in {1, 5} else "evaluate"),
                 order_index=index,
             ))
         db.commit()
@@ -548,6 +655,7 @@ def main() -> None:
             "jurisdiction": args.jurisdiction,
             "status": "complete",
             "elapsed_seconds": round(time.perf_counter() - started, 2),
+            "input_sha256": input_sha256,
             "scope": {"direction": direction, "group": group},
             "repository": {key: repository.get(key) for key in ("created", "linked", "scope")},
             "scoring": {key: scoring.get(key) for key in ("total_matches", "total_los")},
@@ -580,6 +688,7 @@ def main() -> None:
             "profile": args.profile,
             "jurisdiction": args.jurisdiction,
             "elapsed_seconds": round(time.perf_counter() - started, 2),
+            "input_sha256": input_sha256,
             "error": f"{type(error).__name__}: {error}",
         })
         raise
