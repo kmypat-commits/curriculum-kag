@@ -15,6 +15,7 @@ from app.models.embedding import MatchScore
 from app.models.audit import AuditEvent
 from app.services.content_localization import course_localization_map
 from app.services.language import normalize_language
+from app.services.plan_pdf_export import build_plan_pdf
 from app.kag.knowledge_graph import get_graph_stats
 from app.kag.embedding_service import embedding_service
 import openpyxl
@@ -68,10 +69,11 @@ async def export_plan(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Export curriculum plan to XLSX"""
+    """Export the selected published curriculum plan to XLSX or PDF."""
     
-    if format != "xlsx":
-        raise HTTPException(status_code=400, detail="Сейчас поддерживается только формат XLSX")
+    format = format.strip().lower()
+    if format not in {"xlsx", "pdf"}:
+        raise HTTPException(status_code=400, detail="Поддерживаются форматы XLSX и PDF")
     
     try:
         # Get project version
@@ -120,6 +122,26 @@ async def export_plan(
             bridge.id: bridge
             for bridge in db.query(BridgeModule).filter(BridgeModule.id.in_(bridge_ids)).all()
         } if bridge_ids else {}
+
+        if format == "pdf":
+            output = build_plan_pdf(
+                project_version=project_version,
+                plan=plan,
+                items=items,
+                courses_by_id=courses_by_id,
+                bridges_by_id=bridges_by_id,
+                localizations=localizations,
+                language=normalize_language(language),
+            )
+            return StreamingResponse(
+                output,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": (
+                        f"attachment; filename=curriculum_plan_{project_version_id}_{plan.variant_type}.pdf"
+                    )
+                },
+            )
         
         for item in items:
             if item.course_id:
@@ -250,6 +272,6 @@ async def export_plan(
             }
         )
         
-    except (SQLAlchemyError, OSError, ValueError, TypeError) as e:
+    except (SQLAlchemyError, OSError, RuntimeError, ValueError, TypeError) as e:
         raise HTTPException(status_code=500, detail=f"Не удалось выполнить экспорт: {e.__class__.__name__}") from e
 

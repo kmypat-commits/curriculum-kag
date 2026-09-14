@@ -160,6 +160,26 @@ export default function PlanBuilder() {
         if (versionId) await fetchVariants(versionId, showCourseDescriptions, checked)
     }
 
+    const downloadMethodistPackage = async (format) => {
+        const versionId = project?.latest_version?.id
+        if (!versionId || !currentPlan?.plan_id) return
+        try {
+            const response = await axios.post(
+                `/api/export/${versionId}`,
+                null,
+                { params: { format, variant: activeVariant, language }, responseType: 'blob' },
+            )
+            const url = URL.createObjectURL(response.data)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `curriculum_plan_${versionId}_${activeVariant}.${format}`
+            link.click()
+            URL.revokeObjectURL(url)
+        } catch (err) {
+            notify(`Не удалось выгрузить ${format.toUpperCase()}: ${errorMessage(err)}`)
+        }
+    }
+
     const handleBuild = async () => {
         const versionId = project?.latest_version?.id
         if (!versionId) return
@@ -808,6 +828,12 @@ export default function PlanBuilder() {
                         </div>
 
                         <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+                            <button className="btn btn-secondary" onClick={() => downloadMethodistPackage('pdf')}>
+                                Скачать PDF-пакет
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => downloadMethodistPackage('xlsx')}>
+                                Скачать XLSX
+                            </button>
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#4f5d6b', cursor: 'pointer' }}>
                                 <input
                                     type="checkbox"
