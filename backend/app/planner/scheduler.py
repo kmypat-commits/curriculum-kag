@@ -107,6 +107,7 @@ from app.planner.admission import (
     minimum_appropriate_semester as _minimum_appropriate_semester,
 )
 from app.planner.final_schedule_checks import audit_final_schedule_boundary, late_schedule_snapshot
+from app.planner.selection_evidence import build_selection_evidence_snapshot
 
 
 # Canonical implementations live in the pure semester-rules module.  The
@@ -1363,6 +1364,12 @@ def build_curriculum_plan(
         metrics["goso_ruleset_checksum"] = GOSO_RULESET_CHECKSUM
         metrics["goso_ruleset_source"] = "https://adilet.zan.kz/rus/docs/V2200028916"
     metrics["course_admission"] = admission_audit
+    # Persist compact evidence at the publication boundary.  Later rescoring
+    # may improve the catalogue, but must not rewrite why an older plan chose
+    # these particular disciplines.
+    metrics["selection_evidence_snapshot"] = build_selection_evidence_snapshot(
+        schedule, project_version_id, db
+    )
     plan = Plan(project_version_id=project_version_id, variant_type=variant_type, metrics_json=metrics)
     db.add(plan); db.flush()
     for semester, courses in schedule.items():

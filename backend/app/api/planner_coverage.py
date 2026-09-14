@@ -129,6 +129,8 @@ async def get_variants(
         items = items_by_plan.get(plan.id, [])
         project = plan.project_version.project
         constraints = project.constraints_json or {}
+        selection_snapshot = (plan.metrics_json or {}).get("selection_evidence_snapshot") or {}
+        frozen_course_evidence = selection_snapshot.get("courses") or {}
         confirmed_suspicious_course_ids = {
             int(value) for value in (constraints.get("confirmed_suspicious_course_ids") or [])
             if str(value).isdigit()
@@ -500,6 +502,14 @@ async def get_variants(
                             if (row.course_id, row.lo_id) in latest_feedback_by_pair else None
                         ),
                     })
+                # Prefer the evidence captured together with this published
+                # plan.  Existing plans without a snapshot retain the legacy
+                # dynamic explanation path for backward compatibility.
+                frozen_evidence = frozen_course_evidence.get(str(item.course_id))
+                if frozen_evidence:
+                    max_score = float(frozen_evidence.get("max_score") or 0)
+                    expert_supported = bool(frozen_evidence.get("expert_supported"))
+                    top_matches = list(frozen_evidence.get("top_lo_matches") or [])
                 sem = item.semester
                 domain_name = course_obj.domain if course_obj else None
                 domain_ru = domain_name or 'не указан'

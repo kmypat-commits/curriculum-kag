@@ -2,6 +2,7 @@ import json
 import os
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from scripts.audit_quality_cohort import (
     CohortRunLockedError,
@@ -17,6 +18,7 @@ from scripts.audit_quality_cohort import (
     validate_child_report,
 )
 from scripts.audit_cross_level_generation import load_exact_input
+from app.planner.selection_evidence import snapshot_payload
 
 
 def test_breadth_manifest_has_unique_contexts():
@@ -161,3 +163,19 @@ def test_exact_programme_input_rejects_unresolved_catalogue_scope(tmp_path: Path
         assert "catalogue scope" in str(exc)
     else:
         raise AssertionError("unresolved scope must not be silently accepted")
+
+
+def test_selection_evidence_snapshot_uses_raw_evidence_not_ranking_boost():
+    lo = SimpleNamespace(id=7, lo_code="LO1", lo_text="Проверяемый результат")
+    row = SimpleNamespace(
+        course_id=11,
+        lo_id=7,
+        score=0.99,
+        evidence_json={"semantic_score": 0.42, "epvo_expert_score": 0.0, "source": "EPVO"},
+        model_name="sbert",
+    )
+    payload = snapshot_payload([row], {7: lo})
+    item = payload["11"]
+    assert item["max_score"] == 0.42
+    assert item["top_lo_matches"][0]["effective_score"] == 0.42
+    assert item["top_lo_matches"][0]["snapshot"] is True
