@@ -1,0 +1,74 @@
+{
+  "checked_on": "2026-09-14",
+  "scope": "Local authenticated pilot acceptance for ProjectVersion 15 / variant A; not a public-release or multi-programme acceptance.",
+  "changes": [
+    "25b6df3 fix: preserve planner evidence and domain quotas",
+    "22d3ff9 fix: align evidence preflight with final admission",
+    "ae635af fix: align plan explanations with admission evidence"
+  ],
+  "build": {
+    "transport": "authenticated local API and durable worker",
+    "job_id": "build-54200d6c17fa5b98bc95cd8cd2c9d2c1",
+    "requested_variants": ["A"],
+    "state": "complete",
+    "elapsed_seconds": 20.5,
+    "stage_timings_seconds": {
+      "epvo_repository": 8.49,
+      "scoring": 0.27,
+      "variant_A": 10.56,
+      "saving": 0.15
+    },
+    "cache": {
+      "epvo_repository_cached": true,
+      "scoring_cached": true
+    }
+  },
+  "published_plan": {
+    "id": 3282,
+    "variant": "A",
+    "is_active": true,
+    "total_credits": 240,
+    "domain_credits": {
+      "domain1": 120.5,
+      "domain2": 119.5
+    },
+    "feasible": true,
+    "hard_violation_count": 0,
+    "minimum_lo_coverage": 1.0
+  },
+  "methodist_contract": {
+    "generation_readiness": {
+      "ready": true,
+      "missing": [],
+      "blocking": [],
+      "learning_outcomes": 9,
+      "unique_learning_outcomes": 9
+    },
+    "selection_explanations": {
+      "checked": true,
+      "active_plan_id": 3282,
+      "selection_reason_present": true,
+      "semester_reason_present": true,
+      "top_lo_matches_returned": 3
+    },
+    "xlsx_export": {
+      "checked": true,
+      "variant": "A",
+      "plan_rows": 45,
+      "sheets": [
+        "Curriculum Plan",
+        "LO Coverage",
+        "Metrics",
+        "Verification",
+        "Knowledge Graph",
+        "Audit Log",
+        "International Quality"
+      ]
+    }
+  },
+  "limits": [
+    "This is one controlled local programme, not a success rate or p95 claim.",
+    "Independent expert acceptance and the 20-programme cohort remain outstanding.",
+    "The evidence does not prove public-service readiness or production deployment."
+  ]
+}
