@@ -193,6 +193,7 @@ export default function PlanBuilder() {
     const compactToggleLabel = t('open_collapse')
     const epvoApplied = searchParams.get('epvoApplied') === '1'
     const readinessChecks = generationReadiness?.checks || {}
+    const evidenceReadiness = generationReadiness?.evidence_preflight
     const readinessChecklist = [
         {
             label: localize({ ru: 'Цель программы', kk: 'Бағдарлама мақсаты', en: 'Programme goal' }),
@@ -224,6 +225,17 @@ export default function PlanBuilder() {
             label: localize({ ru: 'Объём и нагрузка', kk: 'Көлемі және жүктеме', en: 'Volume and workload' }),
             value: `${readinessChecks.volume?.target_credits || 0} / ${readinessChecks.volume?.capacity_credits || 0} ECTS`,
             passed: Number(readinessChecks.volume?.target_credits || 0) > 0 && Number(readinessChecks.volume?.target_credits || 0) <= Number(readinessChecks.volume?.capacity_credits || 0),
+        },
+        {
+            label: localize({ ru: 'Доказательства ЕПВО/РО', kk: 'ЕПВО/ОН дәлелдері', en: 'EPVO/LO evidence' }),
+            value: !evidenceReadiness?.checked
+                ? localize({ ru: 'будут проверены при построении', kk: 'құру кезінде тексеріледі', en: 'will be checked during build' })
+                : evidenceReadiness.blocking
+                    ? localize({ ru: 'требуют уточнения', kk: 'нақтылауды қажет етеді', en: 'need clarification' })
+                    : localize({ ru: 'предварительно достаточны', kk: 'алдын ала жеткілікті', en: 'provisionally sufficient' }),
+            // This is deliberately advisory: a fresh build may recalculate
+            // stale MatchScore rows before the worker applies the hard gate.
+            passed: !evidenceReadiness?.blocking,
         },
     ]
 
@@ -840,6 +852,11 @@ export default function PlanBuilder() {
                         {(generationReadiness.missing || []).length > 0 && <p style={{ margin: '8px 0 0', color: '#b71c1c' }}>Заполните: {generationReadiness.missing.join(', ')}.</p>}
                         {(generationReadiness.blocking || []).map((item, index) => <p key={`block-${index}`} style={{ margin: '8px 0 0', color: '#b71c1c' }}>{item}</p>)}
                         {(generationReadiness.warnings || []).map((item, index) => <p key={`warning-${index}`} style={{ margin: '8px 0 0', color: '#7a5700' }}>{item}</p>)}
+                        {evidenceReadiness?.message && (
+                            <p style={{ margin: '8px 0 0', color: evidenceReadiness.blocking ? '#7a5700' : '#566' }}>
+                                {evidenceReadiness.blocking ? '⚠ ' : ''}{evidenceReadiness.message}
+                            </p>
+                        )}
                     </div>
                 )}
                 <PlanBuildProgress

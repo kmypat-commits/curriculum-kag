@@ -94,12 +94,34 @@ def get_generation_readiness(
     if not version:
         raise HTTPException(status_code=404, detail="Версия проекта не найдена")
     project = version.project
-    return generation_readiness(
+    readiness = generation_readiness(
         project.constraints_json,
         goal=project.goal,
         learning_outcomes_count=len(version.learning_outcomes or []),
         learning_outcomes=[outcome.lo_text for outcome in (version.learning_outcomes or [])],
     )
+    # Existing MatchScore rows are useful early warning evidence, but are not
+    # a safe hard gate here: a user may have just changed the programme and a
+    # fresh build is allowed to recompute them. The worker remains the only
+    # authority that can reject a build after it has refreshed the evidence.
+    has_existing_evidence = db.query(MatchScore.id).filter(
+        MatchScore.project_version_id == version.id
+    ).first() is not None
+    if has_existing_evidence:
+        evidence = assess_professional_evidence(version, db)
+        readiness["evidence_preflight"] = {
+            **evidence,
+            "checked": True,
+            "advisory": True,
+        }
+    else:
+        readiness["evidence_preflight"] = {
+            "checked": False,
+            "advisory": True,
+            "blocking": False,
+            "message": "Связи дисциплина–РО будут рассчитаны в начале построения; предварительная проверка доказательств пока недоступна.",
+        }
+    return readiness
 
 
 class BuildTimedOut(TimeoutError):
