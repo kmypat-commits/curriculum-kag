@@ -125,7 +125,7 @@ from app.planner.variant_domain_repair import (
     rebalance_domain_quotas as _rebalance_domain_quotas,
     reserve_domain_quota as _reserve_domain_quota,
 )
-from app.planner.variant_diversification import _diversify_variant_items
+from app.planner.variant_diversification import _diversify_variant_items, should_diversify_variant
 from app.planner.variant_replacements import (
     apply_confirmed_variant_replacements,
     replace_redundant_bridges_with_real_courses as _replace_redundant_bridges,
@@ -977,9 +977,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # Run diversification after all priority-promotion passes.  Previously B
     # was diversified earlier and then the final EPVO promotion restored the
     # same courses as A.  Recheck hard quotas and LO gaps after the late swap.
-    if variant_type in {"A", "B", "C"} and not (
-        interdisciplinary and variant_type in {"B", "C"}
-    ):
+    if should_diversify_variant(variant_type, interdisciplinary=interdisciplinary):
         result = _diversify_variant_items(result, version, db, variant_type)
         result = rebalance_domain_quotas(result)
         result = close_professional_lo_gaps(result)
@@ -1026,9 +1024,7 @@ def select_courses_for_variant(project_version_id: int, db: Session, variant_typ
     # variant identity. The helper preserves same-credit courses, professional
     # LO coverage, core competencies and prerequisite safety; the verifier
     # remains the final authority for hard constraints.
-    if variant_type in {"A", "B", "C"} and not (
-        interdisciplinary and variant_type in {"B", "C"}
-    ):
+    if should_diversify_variant(variant_type, interdisciplinary=interdisciplinary):
         result = _diversify_variant_items(result, version, db, variant_type)
     if (
         variant_type == "C"

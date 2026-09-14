@@ -10,6 +10,7 @@ from app.planner.variant_policy import (
     scope_rank,
     semester_stability_rank,
 )
+from app.planner.variant_diversification import should_diversify_variant
 
 
 def _course(**values):
@@ -82,3 +83,10 @@ def test_policy_rejects_foreign_professional_scope():
 def test_policy_semester_stability_rewards_narrow_epvo_range():
     course = _course(course_id="EPVO-17")
     assert semester_stability_rank(course, {17: [2, 2, 3]}) > semester_stability_rank(course, {17: [1, 6]})
+
+
+def test_only_explicit_standard_alternatives_run_diversification():
+    assert not should_diversify_variant("A", interdisciplinary=False)
+    assert should_diversify_variant("B", interdisciplinary=False)
+    assert should_diversify_variant("C", interdisciplinary=False)
+    assert not should_diversify_variant("B", interdisciplinary=True)

@@ -93,6 +93,18 @@ from app.planner.candidate_retrieval import (
 from app.planner.variant_assembly import add_bundle_if_fits
 from app.planner.variant_ranking import ranked_unique_candidate_ids
 
+
+def should_diversify_variant(variant_type: str, *, interdisciplinary: bool) -> bool:
+    """Only explicit alternatives need a costly distinctness search.
+
+    A is the default methodist-facing plan and should retain the highest-ranked
+    admissible disciplines.  Running B/C diversification over A adds repeated
+    score/catalogue reads and can replace a stronger course without delivering
+    any user-visible benefit.  Interdisciplinary alternatives follow their
+    dedicated quota path instead.
+    """
+    return str(variant_type or "").upper() in {"B", "C"} and not interdisciplinary
+
 def _diversify_variant_items(
     items: List[Dict],
     project_version: ProjectVersion,
