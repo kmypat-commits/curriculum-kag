@@ -1254,18 +1254,26 @@ def build_curriculum_plan(
     # Credit-gap/load balancing can add or move a secondary-domain bridge.
     # Reconcile the domain quota at the true validation boundary so the
     # verifier sees the same invariant that the repair stage established.
-    schedule = _repair_final_domain_quotas(
-        schedule,
-        domain_repair_candidates,
-        project_version,
-        db,
-        is_admissible=is_project_domain,
+    is_kz_regulatory = (
+        str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
     )
-    # Domain replacement can change the credit weight of the affected
-    # semester.  Balance only after the last replacement; otherwise the
-    # verifier can reject a plan that was balanced immediately beforehand.
-    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
-    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    if not is_kz_regulatory:
+        schedule = _repair_final_domain_quotas(
+            schedule,
+            domain_repair_candidates,
+            project_version,
+            db,
+            is_admissible=is_project_domain,
+        )
+        # Domain replacement can change the credit weight of the affected
+        # semester. Balance only after the last replacement; otherwise the
+        # verifier can reject a plan that was balanced immediately beforehand.
+        schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+        schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    # KZ finalization below reconstructs the schedule from the regulatory
+    # block and then runs the same quota repair against that *final* shape.
+    # Repairing quotas before the reconstruction was discarded work and was
+    # the dominant cost for scoped KZ programmes.
     trace("final_domain_quota_done")
 
     # Final regulatory boundary.  Several late quality repairs legitimately
@@ -1274,7 +1282,7 @@ def build_curriculum_plan(
     # plus the canonical ruleset block, then trim only non-regulatory courses
     # as whole units to the requested total.  This is deliberately explicit:
     # the verifier must validate the same mandatory block that is persisted.
-    if str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ":
+    if is_kz_regulatory:
         final_items = [item for rows in schedule.values() for item in rows]
         # Domain repair may have replaced an evidence-bearing professional
         # course. Re-run the existing evidence-backed LO repair at this final
