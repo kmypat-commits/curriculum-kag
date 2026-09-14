@@ -119,6 +119,40 @@ export default function PlanBuilder() {
 
     const compactToggleLabel = t('open_collapse')
     const epvoApplied = searchParams.get('epvoApplied') === '1'
+    const readinessChecks = generationReadiness?.checks || {}
+    const readinessChecklist = [
+        {
+            label: localize({ ru: 'Цель программы', kk: 'Бағдарлама мақсаты', en: 'Programme goal' }),
+            value: readinessChecks.goal
+                ? localize({ ru: 'заполнена', kk: 'толтырылған', en: 'provided' })
+                : localize({ ru: 'не заполнена', kk: 'толтырылмаған', en: 'missing' }),
+            passed: Boolean(readinessChecks.goal),
+        },
+        {
+            label: localize({ ru: 'Результаты обучения', kk: 'Оқу нәтижелері', en: 'Learning outcomes' }),
+            value: readinessChecks.learning_outcomes
+                ? `${readinessChecks.learning_outcomes} ${localize({ ru: 'шт.', kk: 'дана', en: 'items' })}`
+                : localize({ ru: 'не заданы', kk: 'берілмеген', en: 'missing' }),
+            passed: Number(readinessChecks.learning_outcomes || 0) > 0,
+        },
+        {
+            label: localize({ ru: 'Уникальные РО', kk: 'Бірегей ОН', en: 'Unique LOs' }),
+            value: `${Number(readinessChecks.unique_learning_outcomes || 0)} / ${Number(readinessChecks.learning_outcomes || 0)}`,
+            passed: Number(readinessChecks.unique_learning_outcomes || 0) === Number(readinessChecks.learning_outcomes || 0) && Number(readinessChecks.learning_outcomes || 0) > 0,
+        },
+        {
+            label: localize({ ru: 'Область и группа ЕПВО', kk: 'ЕПВО саласы және тобы', en: 'EPVO area and group' }),
+            value: readinessChecks.catalogue_scope
+                ? localize({ ru: 'заданы', kk: 'берілген', en: 'provided' })
+                : localize({ ru: 'требуют уточнения', kk: 'нақтылау қажет', en: 'needs clarification' }),
+            passed: Boolean(readinessChecks.catalogue_scope),
+        },
+        {
+            label: localize({ ru: 'Объём и нагрузка', kk: 'Көлемі және жүктеме', en: 'Volume and workload' }),
+            value: `${readinessChecks.volume?.target_credits || 0} / ${readinessChecks.volume?.capacity_credits || 0} ECTS`,
+            passed: Number(readinessChecks.volume?.target_credits || 0) > 0 && Number(readinessChecks.volume?.target_credits || 0) <= Number(readinessChecks.volume?.capacity_credits || 0),
+        },
+    ]
 
     useEffect(() => {
         fetchProjectData()
@@ -706,6 +740,21 @@ export default function PlanBuilder() {
                 {generationReadiness && !building && (
                     <div className="card" style={{ marginBottom: '20px', borderTop: `2px solid ${generationReadiness.ready ? '#2e7d32' : '#c62828'}` }}>
                         <strong>{generationReadiness.ready ? 'Исходные условия готовы к построению' : 'Перед построением нужно исправить исходные условия'}</strong>
+                        {generationReadiness.ready && (
+                            <>
+                                <p style={{ margin: '8px 0 0', color: '#356244', fontSize: 13 }}>
+                                    {localize({ ru: 'Проверка перед запуском: цель, РО, область ЕПВО и объём программы. Это не заменяет финальную проверку дисциплин и нагрузки.', kk: 'Іске қосар алдындағы тексеріс: мақсат, ОН, ЕПВО саласы және бағдарлама көлемі. Бұл пәндер мен жүктеменің қорытынды тексерісін алмастырмайды.', en: 'Pre-build check: goal, LOs, EPVO scope and programme volume. It does not replace final course and workload verification.' })}
+                                </p>
+                                <div className="quick-grid" style={{ marginTop: 12 }}>
+                                    {readinessChecklist.map((item) => (
+                                        <div key={item.label} style={{ fontSize: 13 }}>
+                                            <b>{item.passed ? '✓' : '!' } {item.label}</b><br />
+                                            <span style={{ color: item.passed ? '#356244' : '#9b1c1c' }}>{item.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                         {(generationReadiness.missing || []).length > 0 && <p style={{ margin: '8px 0 0', color: '#b71c1c' }}>Заполните: {generationReadiness.missing.join(', ')}.</p>}
                         {(generationReadiness.blocking || []).map((item, index) => <p key={`block-${index}`} style={{ margin: '8px 0 0', color: '#b71c1c' }}>{item}</p>)}
                         {(generationReadiness.warnings || []).map((item, index) => <p key={`warning-${index}`} style={{ margin: '8px 0 0', color: '#7a5700' }}>{item}</p>)}
