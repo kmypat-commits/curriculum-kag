@@ -1212,6 +1212,7 @@ def build_curriculum_plan(
                 schedule = _repair_semester_appropriateness(
                     schedule, num_semesters, nominal_load, db
                 )
+    trace("final_competency_boundary_done")
 
     # The final competency replacement can legitimately move a course to a
     # different semantic window. Re-establish the load envelope once more at
@@ -1240,6 +1241,7 @@ def build_curriculum_plan(
         ]
         for semester, items in schedule.items()
     }
+    trace("final_bridge_budget_done")
     # Removing an over-budget bridge can leave a small credit/load gap. Close
     # it only through the bounded repair path, which flexes retained bridges
     # before considering a new module and therefore cannot reintroduce the
@@ -1264,6 +1266,7 @@ def build_curriculum_plan(
     # verifier can reject a plan that was balanced immediately beforehand.
     schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
     schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    trace("final_domain_quota_done")
 
     # Final regulatory boundary.  Several late quality repairs legitimately
     # replace ordinary courses, but none of them may be allowed to erase a
@@ -1297,11 +1300,13 @@ def build_curriculum_plan(
         final_items = merge_goso_items(final_items, project_version, db)
         final_items = _trim_to_target_credits(final_items, target_credits, db)
         schedule = schedule_courses(final_items, num_semesters, nominal_load, db)
+    trace("regulatory_finalization_done")
 
     # The KZ regulatory branch performs its own final merge/trim/schedule
     # sequence.  Rebalance after that branch as well, at the actual verifier
     # boundary, so the last mutation cannot reintroduce a semester-load error.
     schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    trace("final_credit_rebalance_done")
 
     # The KZ branch rebuilds the schedule after quota repair and can erase a
     # previously closed credit gap.  Restore the exact credit contract at the
@@ -1325,6 +1330,7 @@ def build_curriculum_plan(
         is_project_domain=is_project_domain,
         is_general_course=lambda course: _course_curriculum_role(course, project_domains) == "general",
     )
+    trace("publication_boundary_audit_done")
     invalid_domain_courses = boundary_audit["invalid_domain_courses"]
     if invalid_domain_courses:
         raise ValueError(
