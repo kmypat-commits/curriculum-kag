@@ -34,6 +34,7 @@ from app.planner.domain_evidence import domain_credit_shares, domain_label_match
 from app.planner.evidence_preflight import evaluate_scoped_evidence
 from app.planner.verifier import (
     _ict_competency_audit,
+    _independent_lo_evidence_scores,
     _semantic_max_semester,
     _semantic_min_semester,
     verify_curriculum_plan,
@@ -568,6 +569,16 @@ def test_ict_competency_audit_accepts_automated_information_systems():
     assert "systems_and_networks" not in audit["missing"]
 
 
+def test_doctoral_competency_audit_recognizes_model_driven_architecture():
+    audit = _ict_competency_audit(
+        [SimpleNamespace(title="Модельно-ориентированная архитектура")],
+        {"education_level": "doctorate", "direction_code": "8D061", "group_code": "D094"},
+    )
+    assert audit["covered"]["systems_modelling"] == [
+        "Модельно-ориентированная архитектура"
+    ]
+
+
 def test_final_admission_evidence_excludes_weak_and_goso_only_matches():
     version = SimpleNamespace(
         id=7,
@@ -589,6 +600,15 @@ def test_final_admission_evidence_excludes_weak_and_goso_only_matches():
     db.query.return_value.filter.return_value.all.return_value = matches
     evidence = _credible_professional_lo_by_course(version, {10, 11, 12}, db)
     assert evidence == {10: {"LO1"}}
+
+
+def test_verifier_lo_coverage_uses_semantic_or_expert_evidence_not_boosted_rank():
+    rows = [
+        SimpleNamespace(score=1.0, evidence_json={"semantic_score": 0.336, "epvo_expert_score": 0.0}),
+        SimpleNamespace(score=0.95, evidence_json={"semantic_score": 0.31, "epvo_expert_score": 0.8}),
+        SimpleNamespace(score=0.65, evidence_json={}),
+    ]
+    assert _independent_lo_evidence_scores(rows) == [0.336, 0.8, 0.65]
 
 
 def test_meaningful_bridge_fills_credit_gap_before_replacing_real_course():

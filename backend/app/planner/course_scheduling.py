@@ -94,6 +94,25 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
         value = 0 if not children else 1 + max(tail_depth(child, path | {cid}) for child in children)
         tail_cache[cid] = value
         return value
+    deadline_cache = {}
+    def successor_deadline(cid, path=None):
+        """Reserve time before each descendant's actual semester deadline."""
+        if cid in deadline_cache:
+            return deadline_cache[cid]
+        path = path or set()
+        if cid in path:
+            return num_semesters  # Cyclic prerequisites remain verifier errors.
+        item = course_map[cid]
+        recommended = item.get("variant_preferred_semester") or item.get("recommended_semester")
+        semantic_upper = _foundation_max_semester(item.get("title"), num_semesters)
+        if item.get("prerequisites") and recommended:
+            semantic_upper = max(semantic_upper, min(num_semesters, int(recommended) + 2))
+        deadline = min(int(item.get("latest_semester") or num_semesters), semantic_upper)
+        for child in dependents.get(cid, []):
+            if child in course_map:
+                deadline = min(deadline, successor_deadline(child, path | {cid}) - 1)
+        deadline_cache[cid] = deadline
+        return deadline
     ordered = sorted(courses, key=lambda item: (depth(item.get("course_id")) if item.get("course_id") else 0, 0 if item.get("course_id") in required_ids else 1, -(item.get("credits") or 0)))
     placed = {}
     for item in ordered:
@@ -120,10 +139,11 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
             semantic_upper = max(
                 semantic_upper, min(num_semesters, int(recommended) + 2)
             )
-        recommended_lower = max(1, int(recommended) - 1) if recommended else 1
-        if recommended_lower <= semantic_upper:
-            earliest = max(earliest, recommended_lower)
         cid = item.get("course_id")
+        dependency_latest = successor_deadline(cid) if cid in course_map else num_semesters
+        recommended_lower = max(1, int(recommended) - 1) if recommended else 1
+        if recommended_lower <= min(semantic_upper, dependency_latest):
+            earliest = max(earliest, recommended_lower)
         bridge_id = item.get("bridge_module_id")
         if bridge_id is not None:
             bridge = db.query(BridgeModule).filter(BridgeModule.id == bridge_id).first()
@@ -138,6 +158,7 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
         latest = max(earliest, min(
             int(item.get("latest_semester") or num_semesters),
             semantic_upper,
+            dependency_latest,
             num_semesters - (tail_depth(cid) if cid is not None else 0),
         ))
         item["latest_semester"] = latest
@@ -188,6 +209,10 @@ def schedule_courses(courses: List[Dict], num_semesters: int, nominal_load: int,
                     if target_semester < _item_minimum_appropriate_semester(
                         item, num_semesters
                     ):
+                        continue
+                    # Placement computed this upper bound before balancing.
+                    # Filling an underloaded term must not erase that contract.
+                    if target_semester > int(item.get("latest_semester") or num_semesters):
                         continue
                     if loads[donor_semester] - credits < lower or loads[target_semester] + credits > upper: continue
                     parent_semesters = [semester_by_course.get(p, 0) for p in item.get("prerequisites", []) or []]

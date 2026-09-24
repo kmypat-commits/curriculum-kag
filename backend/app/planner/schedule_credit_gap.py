@@ -11,6 +11,33 @@ from app.models.bridge_module import BridgeModule
 from app.models.project import ProjectVersion
 from app.planner.bridge_policy import bridge_module_limit
 from app.planner.course_selection import _bridge_item, ensure_credit_bridge_modules
+from app.planner.semester_rules import foundation_max_semester, minimum_appropriate_semester
+
+
+def eligible_real_course_semesters(schedule: Dict[int, List[Dict]], candidate: Dict, upper: int) -> List[int]:
+    """Respect placement and dependency constraints when restoring an atomic course."""
+    count = max(schedule, default=0)
+    if not count:
+        return []
+    earliest = minimum_appropriate_semester(candidate, count)
+    latest = foundation_max_semester(candidate.get("title"), count)
+    recommended = int(candidate.get("recommended_semester") or 0)
+    if candidate.get("prerequisites") and recommended:
+        latest = max(latest, min(count, recommended + 2))
+    latest = min(latest, int(candidate.get("latest_semester") or count))
+    by_id = {row.get("course_id"): term for term, rows in schedule.items()
+             for row in rows if row.get("course_id") is not None}
+    parents = candidate.get("prerequisites") or []
+    if any(parent not in by_id for parent in parents):
+        return []
+    children = [term for term, rows in schedule.items() for row in rows
+                if candidate.get("course_id") in (row.get("prerequisites") or [])]
+    credits = int(candidate.get("credits") or 0)
+    return [term for term, rows in schedule.items()
+            if earliest <= term <= latest
+            and all(by_id[parent] < term for parent in parents)
+            and all(term < child for child in children)
+            and sum(int(row.get("credits") or 0) for row in rows) + credits <= upper]
 
 
 def fill_schedule_credit_gap(
@@ -42,8 +69,12 @@ def fill_schedule_credit_gap(
         credits = int(candidate.get("credits") or 0)
         if course_id is None or int(course_id) in used_ids or credits <= 0 or credits > gap:
             continue
-        target = min(schedule, key=lambda semester: sum(int(row.get("credits") or 0) for row in schedule[semester]))
-        schedule[target].append(dict(candidate, recommended_semester=target, selection_method="credit_gap_real_course"))
+        upper = int((project_version.project.constraints_json or {}).get("max_credits_per_semester", 30)) + 3
+        eligible = eligible_real_course_semesters(schedule, candidate, upper)
+        if not eligible:
+            continue
+        target = min(eligible, key=lambda semester: (sum(int(row.get("credits") or 0) for row in schedule[semester]), semester))
+        schedule[target].append(dict(candidate, selection_method="credit_gap_real_course"))
         used_ids.add(int(course_id))
         gap -= credits
     if gap <= 0:

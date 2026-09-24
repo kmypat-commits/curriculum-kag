@@ -29,6 +29,30 @@ def _tokens(value: str | None) -> set[str]:
     }
 
 
+def is_required_catalogue_anchor(row: EpvoDisciplineNormalized, constraints: dict) -> bool:
+    """Keep a real course for a declared non-negotiable competency block.
+
+    Semantic ranking is intentionally broad, but it may rank a programme-
+    leadership course below topical AI courses for a doctoral ICT brief.  Such
+    a course is still needed to make the separately declared leadership LO
+    feasible.  This is a narrow catalogue-admission rule, not a selection
+    override: the planner must still score, schedule, and verify the course.
+    """
+    level = str(constraints.get("education_level") or "").casefold()
+    scope = " ".join(str(constraints.get(key) or "").upper() for key in (
+        "direction_code", "group_code",
+    ))
+    if level not in {"doctorate", "doctoral", "phd"} or not any(
+        code in scope for code in ("8D061", "D094")
+    ):
+        return False
+    text = _key(epvo_row_text(row))
+    return (
+        ("управлен" in text and "проект" in text)
+        or "project management" in text
+    )
+
+
 def _overlap(left: set[str], right: set[str]) -> float:
     if not left or not right:
         return 0.0
@@ -135,7 +159,7 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
     def scoped_rows(column, code: str, row_limit: int):
         return db.query(EpvoDisciplineNormalized).filter(
             cast(column, String).like(f'%"{code}"%')
-        ).limit(row_limit).all()
+        ).order_by(EpvoDisciplineNormalized.id.asc()).limit(row_limit).all()
 
     rows_with_source = []
     per_scope_limit = max(500, limit // max(1, len(scopes)))
@@ -174,6 +198,7 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
         source_count = len(row.source_programs or [])
         return (
             scope_score,
+            int(is_required_catalogue_anchor(row, constraints)),
             semantic_score,
             min(source_count, 50) / 50,
             bool(row.typical_credits),
@@ -201,7 +226,7 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
     }
     if unlinked_titles:
         existing_conditions.append(Course.title.in_(unlinked_titles))
-    existing_courses = db.query(Course).filter(or_(*existing_conditions)).all()
+    existing_courses = db.query(Course).filter(or_(*existing_conditions)).order_by(Course.id.asc()).all()
     by_title = {_key(course.title): course for course in existing_courses if course.title}
     by_code = {course.course_id: course for course in existing_courses}
     translations, created, linked = {}, 0, 0
@@ -214,7 +239,10 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
     for row, group_code, direction_code, source_domain_index, scope_name in rows_with_source:
         if created + linked >= overall_limit:
             break
-        if not epvo_row_is_relevant(row, project_version, group_code, direction_code):
+        if not (
+            epvo_row_is_relevant(row, project_version, group_code, direction_code)
+            or is_required_catalogue_anchor(row, constraints)
+        ):
             continue
         content = row.content_json or {}
         titles = {"ru": row.title_ru, "kk": row.title_kk, "en": row.title_en}

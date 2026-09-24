@@ -9,6 +9,7 @@ from typing import Any
 from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchScore
 from app.planner.course_policy import course_role_rank
+from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.variant_coverage import coverage_objective, coverage_state
 
 
@@ -61,7 +62,7 @@ def close_professional_lo_gaps(
         if not lo:
             continue
         expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-        effective = max(float(match.score or 0.0), expert)
+        effective = max(semantic_evidence_score(match), expert)
         score_by_course.setdefault(int(match.course_id), {})[lo.lo_code] = max(
             score_by_course.setdefault(int(match.course_id), {}).get(lo.lo_code, 0.0),
             effective,
@@ -95,7 +96,6 @@ def close_professional_lo_gaps(
         for match in db.query(MatchScore).filter(
             MatchScore.project_version_id == project_version_id,
             MatchScore.lo_id.in_(missing_lo_ids),
-            MatchScore.score >= 0.3,
         ).all():
             course = courses.get(int(match.course_id))
             if (
@@ -109,7 +109,9 @@ def close_professional_lo_gaps(
             # real LO repair even when the imported EPVO scope stamp is absent
             # on that catalogue row.  Domain admission remains mandatory, so
             # this cannot admit a foreign professional discipline.
-            if scope_rank(course) <= 0 and float(match.score or 0.0) < 0.55:
+            expert_value = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+            effective_score = max(semantic_evidence_score(match), expert_value)
+            if scope_rank(course) <= 0 and effective_score < 0.55:
                 continue
             lo = lo_by_id.get(match.lo_id)
             if not lo:
@@ -118,8 +120,6 @@ def close_professional_lo_gaps(
                 course.id,
                 {"los": set(), "max": 0.0, "expert": 0.0, "scores": {}},
             )
-            expert_value = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-            effective_score = max(float(match.score or 0.0), expert_value)
             if effective_score < 0.4:
                 continue
             evidence["los"].add(lo.lo_code)
@@ -249,10 +249,10 @@ def close_professional_lo_gaps(
         for match in db.query(MatchScore).filter(
             MatchScore.project_version_id == project_version_id,
             MatchScore.course_id.in_(selected_course_ids),
-            MatchScore.score >= 0.4,
         ).all():
             lo = lo_by_id.get(match.lo_id)
-            if lo:
+            expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+            if lo and max(semantic_evidence_score(match), expert) >= 0.4:
                 support_by_course.setdefault(int(match.course_id), []).append(lo.lo_code)
     replacement_indexes = []
     modules = []

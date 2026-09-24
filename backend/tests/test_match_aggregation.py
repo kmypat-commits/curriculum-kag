@@ -71,3 +71,12 @@ def test_semantic_evidence_score_ignores_retrieval_confidence_lift():
     )
 
     assert semantic_evidence_score(match) == 0.31
+
+
+def test_quota_preservation_scores_use_evidence_not_rank():
+    row = SimpleNamespace(course_id=10, lo_id=1, score=1.0,
+                          evidence_json={"semantic_score": 0.31})
+    los = [SimpleNamespace(id=1, lo_code="LO1", weight=1.0)]
+    _, _, aggregate = aggregate_match_scores(_DB([row]), _Match, 7, los)
+    assert aggregate[10]["lo_scores"] == {"LO1": 0.31}
+    assert aggregate[10]["max"] == 1.0

@@ -43,7 +43,10 @@ def aggregate_match_scores(db, match_model, project_version_id: int, learning_ou
         semantic_value = semantic_evidence_score(match)
         lo_code = str(lo_codes_by_id.get(match.lo_id) or "")
         if lo_code:
-            data["lo_scores"][lo_code] = max(float(data["lo_scores"].get(lo_code) or 0.0), effective_value)
+            # Quota repairs use this map to preserve evidence, not retrieval rank.
+            data["lo_scores"][lo_code] = max(
+                float(data["lo_scores"].get(lo_code) or 0.0), max(semantic_value, expert_value)
+            )
         # Use semantic/expert evidence for admission.  ``effective_value``
         # remains the retrieval/ranking score above, so candidate ordering is
         # unchanged; only a course's right to fill a professional LO is

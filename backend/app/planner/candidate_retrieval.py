@@ -37,6 +37,7 @@ from app.planner.candidate_quality import (
     remap_equivalent_prerequisites as _remap_equivalent_prerequisites,
 )
 from app.planner.goso import merge_goso_items
+from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.scheduler_catalogue import (
     foundation_equivalent_title_key as _foundation_equivalent_title_key,
@@ -746,7 +747,7 @@ def _fit_real_professional_block_after_goso(
         MatchScore.lo_id.in_(list(lo_bit) or [-1]),
     ).all():
         expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-        score = max(float(match.score or 0.0), expert)
+        score = max(semantic_evidence_score(match), expert)
         if score < 0.4:
             continue
         mask, value = evidence.get(int(match.course_id), (0, 0.0))

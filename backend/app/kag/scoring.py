@@ -342,6 +342,11 @@ def calculate_match_score(
 
 
 def _domain_matches(course: Course, domain_filter: List[str]) -> bool:
+    # Cross-domain regulatory subjects (e.g. languages) may support the
+    # programme's own LOs as well as LO-GOSO codes. Retain them for scoring;
+    # this grants no score or exemption from final evidence verification.
+    if str(getattr(course, "course_id", "") or "").startswith("GOSO-KZ-"):
+        return True
     if not domain_filter:
         return True
     return domain_label_matches(course.domain, domain_filter)
@@ -361,17 +366,15 @@ def _lightweight_candidate_courses(
     the strongest candidates with the normal KAG formula.
     """
     lo_keywords = set(_extract_keywords(lo.lo_text, top_n=16))
-    # Keep the lexical frontier bounded even when a broad EPVO scope maps to
-    # tens of thousands of canonical rows.  Interdisciplinary callers invoke
-    # this function separately for each scoped set, so domain representation is
-    # preserved without an unbounded Python scan.
-    courses = courses[:LARGE_CATALOG_RETRIEVAL_LIMIT]
+    # Scan the selected scope before bounding the expensive embedding frontier.
+    # A database-order prefix can silently discard the only relevant course.
+    # nlargest below retains at most ``limit`` candidates in memory.
 
     def rank(course: Course):
-        # Retrieval is only a coarse frontier selection.  Avoid parsing large
-        # descriptions/topics for every row in the EPVO catalogue; the full
-        # text is still used by calculate_match_score for the selected top-K.
-        text = " ".join(filter(None, [course.title, course.domain or ""])).lower()
+        # Use the same content as semantic scoring. Title-only overlap drops
+        # valid candidates whose learning outcomes are in their descriptions.
+        # Pass an explicit localization map to avoid per-course legacy reads.
+        text = _course_match_text(course, (localizations or {}).get(course.id, {})).lower()
         hits = sum(1 for keyword in lo_keywords if keyword in text)
         exact_title = any(keyword in (course.title or "").lower() for keyword in lo_keywords)
         return (
@@ -379,6 +382,7 @@ def _lightweight_candidate_courses(
             1 if exact_title else 0,
             -(course.recommended_semester or 99),
             -(course.credits or 0),
+            -int(course.id),
         )
 
     # nlargest avoids materializing and sorting the entire EPVO catalogue.

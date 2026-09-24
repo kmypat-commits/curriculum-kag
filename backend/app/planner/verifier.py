@@ -14,11 +14,23 @@ from app.planner.goso import GOSO_COURSE_LO_CODES, evaluate_goso_compliance
 from app.planner.bridge_policy import bridge_can_close_program_lo, bridge_module_limit, scheduled_bridge_count
 from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
 from app.planner.match_aggregation import semantic_evidence_score
+from app.planner.scheduler_text import has_domain_term
 LOAD_TOLERANCE = 3
 TOTAL_CREDIT_TOLERANCE = 5
 MATCH_THRESHOLD = 0.4
 REDUNDANCY_THRESHOLD = 0.45
 FALLBACK_REDUNDANCY_THRESHOLD = 0.65
+
+
+def _independent_lo_evidence_scores(rows: List[MatchScore]) -> List[float]:
+    """Use raw semantic or expert evidence, never boosted retrieval rank, for LO coverage."""
+    return [
+        max(0.0, min(1.0, max(
+            semantic_evidence_score(row),
+            float((row.evidence_json or {}).get("epvo_expert_score") or 0.0),
+        )))
+        for row in rows
+    ]
 
 
 def _semantic_min_semester(title: str | None, num_semesters: int) -> int:
@@ -46,7 +58,7 @@ def _semantic_min_semester(title: str | None, num_semesters: int) -> int:
         "методология науч", "scientific methodology", "доказательная медицина",
         "evidence based medicine", "научных исследований", "research methods",
     )
-    if any(marker in text for marker in clinical):
+    if has_domain_term(text, clinical):
         return max(2, min(num_semesters, -(-num_semesters * 55 // 100)))
     if any(marker in text for marker in research):
         if num_semesters <= 6:
@@ -68,7 +80,7 @@ def _semantic_max_semester(title: str | None, num_semesters: int) -> int:
             text = repaired
             break
     text = text.casefold().strip()
-    if any(marker in text for marker in (
+    if has_domain_term(text, (
         "клиническ", "диагност", "врачебн", "хирург", "терапи",
         "педиатр", "акуш", "гинек", "онколог", "кардио",
         "clinical", "diagnostic", "surgery",
@@ -114,6 +126,7 @@ def _ict_competency_requirements(constraints: Dict) -> Dict:
             "experimental_validation": (("эксперимент",), ("валидац",), ("validation",)),
             "systems_modelling": (
                 ("модел", "систем"),
+                ("модельн", "архитектур"),
                 ("информацион", "ресурс"),
                 ("информацион", "систем"),
                 ("системн", "анализ"),
@@ -238,11 +251,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         )
         for semester, items in schedule.items()
     }
-    goso_load_exemptions = {
-        semester
-        for semester, credits in regulatory_credits_by_semester.items()
-        if education_level in {"doctorate", "doctoral", "phd"} and credits >= 20
-    }
+    goso_load_exemptions = set()
     load_violations = [
         {
             "semester": s,
@@ -254,11 +263,8 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         }
         for s in range(1, num_semesters + 1)
         if (
-            s not in goso_load_exemptions
-            and (
-                semester_loads.get(s, 0) < min_load
-                or semester_loads.get(s, 0) - regulatory_credits_by_semester.get(s, 0) > max_load
-            )
+            semester_loads.get(s, 0) < min_load
+            or semester_loads.get(s, 0) > max_load
         )
     ]
     credit_violations = []
@@ -440,13 +446,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     lo_without_real_course = []
     for lo in project_version.learning_outcomes:
         rows = matches_by_lo.get(int(lo.id), [])
-        scores = [
-            max(0.0, min(1.0, max(
-                float(row.score or 0.0),
-                float((row.evidence_json or {}).get("epvo_expert_score") or 0.0),
-            )))
-            for row in rows
-        ]
+        scores = _independent_lo_evidence_scores(rows)
         if lo.lo_code in selected_goso_lo_codes:
             scores.append(1.0)
         real_max = max(scores) if scores else 0.0
@@ -588,9 +588,8 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
             explicit_foundation = title_key.startswith(
                 ("основы ", "введение ", "fundamentals", "introduction")
             )
-            clinical_foundation = any(
-                marker in title_key
-                for marker in (
+            clinical_foundation = has_domain_term(
+                title_key, (
                     "хирург", "surgery", "кардио", "гастро", "онколог",
                     "уролог", "невролог", "терапи", "педиатр", "клиническ",
                 )

@@ -208,7 +208,30 @@ def validate_child_report(path: Path, started_at: float, returncode: int | None)
     return report, None
 
 
-def build_cohort_cases(count: int, cohort: str) -> list[dict]:
+def failed_child_details(path: Path) -> dict:
+    """Retain a failed child's diagnostics without treating it as a pass."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict) or payload.get("passed") is not False:
+        return {}
+    return {key: payload[key] for key in (
+        "level", "profile", "status", "error", "elapsed_seconds",
+        "input_sha256", "variants_are_distinct", "variants",
+    ) if key in payload}
+
+
+def build_cohort_cases(count: int, cohort: str, *, case_offset: int = 0) -> list[dict]:
+    """Build a deterministic cohort manifest.
+
+    ``case_offset`` lets separate batch runs form one larger non-overlapping
+    breadth cohort.  It changes both the durable case identity and the focus
+    text, so a 50 + 30 run cannot accidentally be presented as 80 distinct
+    programmes when the second run merely repeats the first 30 inputs.
+    """
+    if case_offset < 0:
+        raise ValueError("case_offset must not be negative")
     profiles = [
         ("bachelor", "standard"),
         ("master", "standard"),
@@ -229,10 +252,13 @@ def build_cohort_cases(count: int, cohort: str) -> list[dict]:
         "облачные вычисления и распределённые системы",
     )
     cases = [{
-        "case_index": index + 1,
-        "level": profiles[index % len(profiles)][0],
-        "profile": profiles[index % len(profiles)][1],
-        "focus": f"{focus_families[index % len(focus_families)]} — контрольный контекст {index + 1}",
+        "case_index": case_offset + index + 1,
+        "level": profiles[(case_offset + index) % len(profiles)][0],
+        "profile": profiles[(case_offset + index) % len(profiles)][1],
+        "focus": (
+            f"{focus_families[(case_offset + index) % len(focus_families)]} "
+            f"— контрольный контекст {case_offset + index + 1}"
+        ),
     } for index in range(count)]
     if cohort == "stability":
         for case in cases:
@@ -261,6 +287,10 @@ def database_preflight() -> str | None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--count", type=int, default=30)
+    parser.add_argument(
+        "--case-offset", type=int, default=0,
+        help="Начальный сдвиг identity входов для непересекающихся breadth-серий.",
+    )
     parser.add_argument("--output", default=".runtime/quality-cohort.json")
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument(
@@ -279,15 +309,44 @@ def main() -> int:
     )
     parser.add_argument("--cohort", choices=("stability", "breadth"), default="stability",
                         help="stability повторяет профили; breadth фиксирует уникальные входы")
+    parser.add_argument("--real-input-manifest", type=Path,
+                        help="Frozen, checksum-verified real-programme inputs; use 50+30 non-overlapping slices")
     args = parser.parse_args()
     if not 1 <= args.count <= 50:
         parser.error("count must be between 1 and 50")
-    cases = build_cohort_cases(args.count, args.cohort)
-    if args.cohort == "breadth" and len({json.dumps(case, ensure_ascii=False, sort_keys=True) for case in cases}) != args.count:
+    if args.case_offset < 0:
+        parser.error("--case-offset must not be negative")
+    if args.real_input_manifest:
+        input_manifest = json.loads(args.real_input_manifest.read_text(encoding="utf-8"))
+        prepared = input_manifest.get("prepared") or []
+        if input_manifest.get("excluded_count") or input_manifest.get("prepared_count") != 80 or len(prepared) != 80:
+            parser.error("real input manifest must contain 80 prepared programmes and no unresolved inputs")
+        if len({str(row.get("program_id")) for row in prepared}) != 80:
+            parser.error("real input manifest has duplicate programme IDs")
+        if args.case_offset + args.count > len(prepared):
+            parser.error("requested real-programme slice extends beyond the frozen 80 inputs")
+        cases = []
+        for index, entry in enumerate(prepared[args.case_offset:args.case_offset + args.count], args.case_offset + 1):
+            input_path = Path(entry["input"])
+            if hashlib.sha256(input_path.read_bytes()).hexdigest() != entry["sha256"]:
+                parser.error(f"real programme {entry['program_id']} input SHA-256 mismatch")
+            cases.append({
+                "case_index": index, "program_id": str(entry["program_id"]),
+                "level": entry["level"], "profile": entry["profile"],
+                "input_json": str(input_path), "input_sha256": entry["canonical_sha256"],
+                "input_file_sha256": entry["sha256"],
+                "split": entry["split"],
+            })
+    else:
+        cases = build_cohort_cases(args.count, args.cohort, case_offset=args.case_offset)
+    if (args.cohort == "breadth" or args.real_input_manifest) and len({json.dumps(case, ensure_ascii=False, sort_keys=True) for case in cases}) != args.count:
         parser.error("breadth cohort manifest must contain unique inputs")
     manifest_bytes = json.dumps(cases, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    manifest = {"cohort": args.cohort, "cases": cases,
+    manifest = {"cohort": "real" if args.real_input_manifest else args.cohort, "cases": cases,
                 "sha256": hashlib.sha256(manifest_bytes).hexdigest()}
+    if args.real_input_manifest:
+        manifest["source_sha256"] = input_manifest["source_sha256"]
+        manifest["selection"] = input_manifest["selection"]
     output = (ROOT / args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     run_id = uuid.uuid4().hex
@@ -321,7 +380,7 @@ def main() -> int:
         try:
             previous = json.loads(output.read_text(encoding="utf-8"))
             if (
-                previous.get("status") in {"running", "failed"}
+                previous.get("status") in {"running", "failed", "interrupted", "stale"}
                 and previous.get("requested") == args.count
                 and (previous.get("manifest") or {}).get("sha256") == manifest["sha256"]
             ):
@@ -359,16 +418,15 @@ def main() -> int:
                         "started_at": time.time(), "timeout_seconds": args.timeout},
             "reports": reports,
         })
-        command = [
-            sys.executable,
-            str(ROOT / "backend/scripts/audit_cross_level_generation.py"),
-            "--level", level,
-            "--profile", profile,
-            "--jurisdiction", "KZ",
-            "--case-index", str(cases[index]["case_index"]),
-            "--focus", cases[index]["focus"],
-            "--variants", *args.variants,
-        ]
+        command = [sys.executable, str(ROOT / "backend/scripts/audit_cross_level_generation.py")]
+        if args.real_input_manifest:
+            command.extend(["--input-json", cases[index]["input_json"]])
+        else:
+            command.extend([
+                "--level", level, "--profile", profile,
+                "--jurisdiction", "KZ", "--focus", cases[index]["focus"],
+            ])
+        command.extend(["--case-index", str(cases[index]["case_index"]), "--variants", *args.variants])
         try:
             child_env = os.environ.copy()
             # Keep native BLAS/tokenizer runtimes bounded across the long
@@ -431,7 +489,9 @@ def main() -> int:
                             stdout = stdout_file.read()
                             stderr = stderr_file.read()
                             completed = subprocess.CompletedProcess(
-                                child.args, child.returncode, stdout=stdout, stderr=stderr,
+                                child.args, child.returncode,
+                                stdout=stdout.decode("utf-8", errors="replace"),
+                                stderr=stderr.decode("utf-8", errors="replace"),
                             )
                             break
                         time.sleep(min(15.0, max(1.0, args.timeout - elapsed)))
@@ -464,11 +524,15 @@ def main() -> int:
                         stdout = stdout_file.read()
                         stderr = stderr_file.read()
                         completed = subprocess.CompletedProcess(
-                            child.args, child.returncode, stdout=stdout, stderr=stderr,
+                            child.args, child.returncode,
+                            stdout=stdout.decode("utf-8", errors="replace"),
+                            stderr=stderr.decode("utf-8", errors="replace"),
                         )
                     stdout_artifact.write_bytes(stdout[-1_000_000:])
                     stderr_artifact.write_bytes(stderr[-1_000_000:])
                 report, report_error = validate_child_report(child_output, started_at, completed.returncode)
+                if report is not None and args.real_input_manifest and report.get("input_sha256") != cases[index]["input_sha256"]:
+                    report, report_error = None, "child_input_sha256_mismatch"
                 attempt_record = {
                     "attempt_id": attempt_id,
                     "output": str(child_output),
@@ -487,9 +551,17 @@ def main() -> int:
                 if not is_retryable_infrastructure_failure(completed.returncode, completed.stderr, timed_out=timed_out):
                     break
             if report is None:
-                report = {"passed": False, "error": report_error or "child_report_unavailable"}
+                report = {
+                    "passed": False,
+                    "error": report_error or "child_report_unavailable",
+                    **failed_child_details(child_output),
+                }
             report["cohort_index"] = index + 1
             report["case_index"] = cases[index]["case_index"]
+            if args.real_input_manifest:
+                report["program_id"] = cases[index]["program_id"]
+                report["source_split"] = cases[index]["split"]
+                report["expected_input_sha256"] = cases[index]["input_sha256"]
             report["process_returncode"] = attempts[-1]["returncode"]
             report["process_attempts"] = len(attempts)
             report["attempts"] = attempts
@@ -518,7 +590,7 @@ def main() -> int:
         "requested": args.count,
         "completed": len(reports),
         "distinct_input_count": len({json.dumps(case, ensure_ascii=False, sort_keys=True) for case in cases}),
-        "breadth_requirement_met": args.cohort != "breadth" or len({json.dumps(case, ensure_ascii=False, sort_keys=True) for case in cases}) == args.count,
+        "breadth_requirement_met": (args.cohort != "breadth" and not args.real_input_manifest) or len({json.dumps(case, ensure_ascii=False, sort_keys=True) for case in cases}) == args.count,
         "passed": len(passed),
         "failed": len(reports) - len(passed),
         "infrastructure_failures": infrastructure_failures,

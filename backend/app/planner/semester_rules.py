@@ -69,6 +69,11 @@ def foundation_max_semester(title: str | None, num_semesters: int) -> int:
 
 def minimum_appropriate_semester(item: Dict, num_semesters: int) -> int:
     recommended = int(item.get("recommended_semester") or 0)
+    if item.get("regulatory_required") and str(item.get("type") or "").startswith("goso_"):
+        # The regulated component's explicit semester takes precedence over
+        # lexical heuristics (notably the generic "practice" late-stage rule).
+        # Its latest bound and prerequisite ordering are enforced by scheduling.
+        return max(1, min(num_semesters, recommended or 1))
     semantic_upper = foundation_max_semester(item.get("title"), num_semesters)
     if item.get("prerequisites") and recommended:
         semantic_upper = max(semantic_upper, min(num_semesters, recommended + 2))

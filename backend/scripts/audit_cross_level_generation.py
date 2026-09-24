@@ -35,6 +35,8 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.database import SessionLocal
 from app.kag.scoring import compute_all_matches
+from app.planner.match_aggregation import semantic_evidence_score
+from app.planner.course_policy import project_domain_terms
 from app.models.project import LearningOutcome, Project, ProjectVersion
 from app.models.course import Course
 from app.models.bridge_module import BridgeModule
@@ -80,6 +82,20 @@ ICT_AGRO_LOS = [
     "Интегрировать датчики, геоинформационные системы и информационные платформы в агропромышленные процессы.",
     "Оценивать экономические, экологические и этические последствия внедрения интеллектуальных агротехнологий.",
 ]
+
+
+def has_real_cross_domain_course(titles: list[str], profile: str) -> bool:
+    """Require one real course to name both ICT and the secondary domain."""
+    digital = ("искусственн", "цифров", "данн", "информационн", "геоинформацион", "автоматиз")
+    secondary = {
+        "ict-medicine": ("медицин", "здравоохран", "клиническ", "пациент"),
+        "ict-agro": ("агр", "сельск", "почв", "растен", "ландшафт", "землед"),
+    }.get(profile, ())
+    return any(
+        any(marker in title.casefold() for marker in digital)
+        and any(marker in title.casefold() for marker in secondary)
+        for title in titles
+    )
 
 
 def load_exact_input(path: str) -> tuple[dict, str]:
@@ -336,12 +352,13 @@ def main() -> None:
             top = db.query(MatchScore, Course).join(Course, Course.id == MatchScore.course_id).filter(
                 MatchScore.project_version_id == version.id,
                 MatchScore.lo_id == lo.id,
-            ).order_by(MatchScore.score.desc()).limit(5).all()
+            ).order_by(MatchScore.score.desc(), Course.id.asc()).limit(5).all()
             match_diagnostics[lo.lo_code] = [{
                 "course_id": course.id,
                 "title": course.title,
                 "domain": course.domain,
                 "score": round(float(match.score or 0), 4),
+                "semantic_score": round(semantic_evidence_score(match), 4),
                 "expert_score": round(float((match.evidence_json or {}).get("epvo_expert_score") or 0), 4),
             } for match, course in top]
         variants = {}
@@ -400,10 +417,9 @@ def main() -> None:
                 and int(item.get("credits") or 0)
                 != int(selected_real_courses[int(item["course_id"])].credits or 5)
             ]
-            project_domains = [
-                str(project.domain1 or ""),
-                str(project.domain2 or ""),
-            ]
+            # Registry groups refine broad fields such as Service Industry.
+            # Use the same declared scope as admission, including group labels.
+            project_domains = project_domain_terms(version, db)
             foreign_professional_titles = [
                 {
                     "course_id": int(item["course_id"]),
@@ -595,18 +611,8 @@ def main() -> None:
                     and item.get("mode") == "core_interdisciplinary_bridge"
                 )
             ]
-            real_titles = " ".join(
-                str(title or "").casefold()
-                for title in (row.get("real_courses") or [])
-            )
-            has_real_integration = (
-                any(marker in real_titles for marker in (
-                    "искусственн интеллект", "цифров", "данн",
-                    "информационн технолог",
-                ))
-                and any(marker in real_titles for marker in (
-                    "медицин", "здравоохран", "клиническ",
-                ))
+            has_real_integration = has_real_cross_domain_course(
+                row.get("real_courses") or [], args.profile
             )
             meaningful = [
                 item for item in details

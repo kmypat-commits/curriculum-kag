@@ -34,6 +34,58 @@ def _semantic_latest(item: Dict, num_semesters: int) -> int:
     )
 
 
+def _relocate_two_courses_for_overload(
+    schedule: Dict[int, List[Dict]], num_semesters: int, lower: int, upper: int
+) -> bool:
+    """Free a legal destination by relocating one course already there.
+
+    Covers both a blocking prerequisite and a capacity blocker. Validate the
+    complete two-move assignment before mutation; no credits or edges change.
+    """
+    loads = _schedule_loads(schedule)
+    by_course = _semester_by_course(schedule)
+    items_by_id = {
+        item["course_id"]: item
+        for rows in schedule.values() for item in rows
+        if item.get("course_id") is not None
+    }
+    for donor in sorted((s for s in schedule if loads[s] > upper), key=lambda s: -loads[s]):
+        for target in sorted((s for s in schedule if s != donor), key=lambda s: loads[s]):
+            for child in list(schedule[donor]):
+                if child.get("regulatory_required") or child.get("course_id") is None:
+                    continue
+                credits = int(child.get("credits") or 0)
+                if not lower <= loads[donor] - credits <= upper:
+                    continue
+                if not (_item_minimum_appropriate_semester(child, num_semesters) <= target <= _semantic_latest(child, num_semesters)):
+                    continue
+                for parent in list(schedule[target]):
+                    if parent.get("course_id") is None or parent.get("regulatory_required"):
+                        continue
+                    parent_credits = int(parent.get("credits") or 0)
+                    if not lower <= loads[target] - parent_credits + credits <= upper:
+                        continue
+                    for earlier in sorted((s for s in schedule if s not in (donor, target)), key=lambda s: loads[s]):
+                        if not lower <= loads[earlier] + parent_credits <= upper:
+                            continue
+                        if not (_item_minimum_appropriate_semester(parent, num_semesters) <= earlier <= _semantic_latest(parent, num_semesters)):
+                            continue
+                        trial = {**by_course, child["course_id"]: target, parent["course_id"]: earlier}
+                        if any(
+                            trial.get(pid, 0) >= trial[cid]
+                            for cid, item in items_by_id.items()
+                            for pid in item.get("prerequisites") or []
+                        ):
+                            continue
+                        if not _move_item(schedule, target, earlier, parent):
+                            continue
+                        if not _move_item(schedule, donor, target, child):
+                            _move_item(schedule, earlier, target, parent)
+                            continue
+                        return True
+    return False
+
+
 
 def _relocate_bounded_bridges(schedule: Dict[int, List[Dict]], num_semesters: int, nominal_load: int, db: Session) -> Dict[int, List[Dict]]:
     """Move CORE/SECONDARY bridge modules back to their intended study window."""
@@ -170,6 +222,8 @@ def _rebalance_semester_load(schedule: Dict[int, List[Dict]], num_semesters: int
                     break
             if moved:
                 break
+        if not moved:
+            moved = _relocate_two_courses_for_overload(schedule, num_semesters, lower, upper)
         if not moved:
             break
     for _ in range(40):

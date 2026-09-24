@@ -61,6 +61,7 @@ from app.planner.timing import PlannerTimer
 from app.planner.bridge_policy import bridge_module_limit
 from app.planner.bridge_budget import cap_bridge_items_to_budget as _cap_bridge_items_to_budget
 from app.planner.schedule_credit_gap import fill_schedule_credit_gap as _fill_schedule_credit_gap
+from app.planner.exact_credit_repair import repair_exact_real_credit_overage
 from app.planner.domain_evidence import domain_label_matches
 from app.planner.credit_balancing import (
     _rebalance_semester_load,
@@ -464,18 +465,12 @@ def build_curriculum_plan(
                 selected_courses = _force_bridge_item(
                     selected_courses, integration, variant_type, target_credits
                 )
-        # The repair loop above may remove a real LO source while solving a
-        # prerequisite or credit issue. If that happens, restore the
-        # evidence-backed selector result before scheduling; otherwise the
-        # final verifier reports a loss that was introduced by repair itself.
-        current_lo_codes = {
-            code for item in selected_courses
-            for code in (item.get("admission_los") or [])
-        }
-        if required_lo_codes - current_lo_codes:
-            restored = sanitize_selected_courses(domain_repair_candidates)
-            if restored:
-                selected_courses = restored
+        # Do not replace the fitted post-GOSO timetable with the raw selector
+        # pool when an LO is missing. That pool can contain an entire 180-credit
+        # professional block, while the mandatory block has already consumed
+        # most of the degree budget. The independent final verifier must expose
+        # an unresolved LO rather than silently turning a 180-credit plan into
+        # an over-credit one. Evidence-backed repairs below can still close it.
         schedule = schedule_courses(selected_courses, num_semesters, nominal_load, db)
         schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
         verification = verify_curriculum_plan(schedule, project_version, db)
@@ -1257,23 +1252,22 @@ def build_curriculum_plan(
     is_kz_regulatory = (
         str(constraints.get("jurisdiction") or "INTERNATIONAL").upper() == "KZ"
     )
-    if not is_kz_regulatory:
-        schedule = _repair_final_domain_quotas(
-            schedule,
-            domain_repair_candidates,
-            project_version,
-            db,
-            is_admissible=is_project_domain,
-        )
-        # Domain replacement can change the credit weight of the affected
-        # semester. Balance only after the last replacement; otherwise the
-        # verifier can reject a plan that was balanced immediately beforehand.
-        schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
-        schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
-    # KZ finalization below reconstructs the schedule from the regulatory
-    # block and then runs the same quota repair against that *final* shape.
-    # Repairing quotas before the reconstruction was discarded work and was
-    # the dominant cost for scoped KZ programmes.
+    # The later regulatory rebuild changes the schedule shape, but the first
+    # quota repair is still required: it preserves real domain courses that
+    # provide professional LO evidence before that rebuild. The final KZ pass
+    # below validates the reconstructed schedule again.
+    schedule = _repair_final_domain_quotas(
+        schedule,
+        domain_repair_candidates,
+        project_version,
+        db,
+        is_admissible=is_project_domain,
+    )
+    # Domain replacement can change the credit weight of the affected
+    # semester. Balance only after the last replacement; otherwise the
+    # verifier can reject a plan that was balanced immediately beforehand.
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
     trace("final_domain_quota_done")
 
     # Final regulatory boundary.  Several late quality repairs legitimately
@@ -1323,7 +1317,54 @@ def build_curriculum_plan(
         schedule, project_version, target_credits, maximum_credits, db,
         real_candidates=selected_courses,
     )
+    # Credit filling may move an introductory bridge past its permitted
+    # semester window. Restore that window after the last rebuild/fill, at
+    # the actual verifier boundary.
+    schedule = _relocate_bounded_bridges(schedule, num_semesters, nominal_load, db)
     schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    # A bounded bridge move can fill an early semester and leave a late one
+    # short. Reuse the two-hop hard-load repair at this same final boundary;
+    # its prerequisite and semester checks also protect the displaced course.
+    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    # Regulatory reconstruction can discard the real courses that supplied a
+    # doctoral ICT competency. Reuse the evidence-scored, credit-preserving
+    # replacement on the *final* schedule, before quota repair (which protects
+    # competency_required courses). Never count a synthetic bridge as proof.
+    if competency_requirements:
+        final_items = [item for rows in schedule.values() for item in rows]
+        repaired_items = _repair_missing_ict_competencies(
+            final_items, project_version, db, variant_type
+        )
+        if len(repaired_items) != len(final_items):
+            raise ValueError("Competency repair changed the final plan size")
+        repaired_iter = iter(repaired_items)
+        schedule = {
+            semester: [next(repaired_iter) for _ in rows]
+            for semester, rows in schedule.items()
+        }
+        schedule = _repair_semester_appropriateness(
+            schedule, num_semesters, nominal_load, db
+        )
+        schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+        schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    # The KZ merge/trim rebuild above can undo an earlier domain replacement.
+    # Reconcile once on the schedule that will actually be verified and
+    # persisted; subsequent load balancing does not change course membership.
+    schedule = _repair_final_domain_quotas(
+        schedule,
+        domain_repair_candidates,
+        project_version,
+        db,
+        is_admissible=is_project_domain,
+    )
+    schedule = _rebalance_semester_load(schedule, num_semesters, nominal_load)
+    schedule = _strict_rebalance_max_load(schedule, num_semesters, nominal_load + 3)
+    schedule = repair_exact_real_credit_overage(
+        schedule, project_version, db,
+        is_admissible=is_project_domain,
+        variant_type=variant_type,
+    )
 
     # Keep the final domain decision in one auditable helper.  The local scan
     # above is retained temporarily for compatibility while the orchestration

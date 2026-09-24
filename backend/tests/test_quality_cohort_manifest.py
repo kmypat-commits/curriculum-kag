@@ -8,6 +8,7 @@ from scripts.audit_quality_cohort import (
     CohortRunLockedError,
     acquire_run_lock,
     attempt_output_path,
+    failed_child_details,
     build_cohort_cases,
     is_retryable_infrastructure_failure,
     mark_report_interrupted,
@@ -17,7 +18,7 @@ from scripts.audit_quality_cohort import (
     release_run_lock,
     validate_child_report,
 )
-from scripts.audit_cross_level_generation import load_exact_input
+from scripts.audit_cross_level_generation import has_real_cross_domain_course, load_exact_input
 from app.planner.selection_evidence import snapshot_payload
 
 
@@ -26,6 +27,24 @@ def test_breadth_manifest_has_unique_contexts():
     assert len(cases) == 30
     assert len({case["focus"] for case in cases}) == 30
     assert len({case["case_index"] for case in cases}) == 30
+
+
+def test_cross_domain_evidence_is_profile_specific_and_in_one_real_course():
+    agro = ["Информационные технологии в ландшафтной архитектуре"]
+    medicine = ["Искусственный интеллект в здравоохранении"]
+    assert has_real_cross_domain_course(agro, "ict-agro")
+    assert has_real_cross_domain_course(medicine, "ict-medicine")
+    assert not has_real_cross_domain_course(agro, "ict-medicine")
+    assert not has_real_cross_domain_course(
+        ["Анализ данных", "Растениеводство"], "ict-agro"
+    )
+
+
+def test_breadth_manifests_with_offsets_do_not_overlap():
+    first = build_cohort_cases(50, "breadth")
+    second = build_cohort_cases(30, "breadth", case_offset=50)
+    assert not ({case["case_index"] for case in first} & {case["case_index"] for case in second})
+    assert not ({case["focus"] for case in first} & {case["focus"] for case in second})
 
 
 def test_stability_manifest_repeats_the_same_context():
@@ -62,6 +81,18 @@ def test_child_report_requires_current_exitcode_fresh_file_and_passed_payload(tm
     assert validate_child_report(report, started, 0)[1] == "missing_or_invalid_child_report"
     report.write_text(json.dumps({"passed": False}), encoding="utf-8")
     assert validate_child_report(report, started, 0)[1] == "child_report_not_passed"
+
+
+def test_failed_child_diagnostics_are_retained_without_a_false_pass(tmp_path: Path):
+    output = tmp_path / "failed.json"
+    output.write_text(json.dumps({
+        "passed": False, "level": "doctorate", "profile": "standard",
+        "variants": {"A": {"quality_violations": [{"reason": "missing_core_competency_blocks"}]}},
+    }), encoding="utf-8")
+    details = failed_child_details(output)
+    assert details["level"] == "doctorate"
+    assert details["variants"]["A"]["quality_violations"][0]["reason"] == "missing_core_competency_blocks"
+    assert "passed" not in details
 
 
 def test_retry_classifier_does_not_retry_a_content_failure_but_retries_known_infrastructure():
