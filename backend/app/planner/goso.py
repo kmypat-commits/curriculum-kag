@@ -342,6 +342,18 @@ def ensure_goso_items(version: ProjectVersion, db: Session) -> List[Dict]:
     } for course in courses]
 
 
+def is_redundant_goso_foundation(
+    item: Dict, *, is_kz: bool, has_legal_goso: bool, required_ids: set[int]
+) -> bool:
+    """Do not count an ordinary legal/ethical foundation twice in a KZ plan."""
+    if not is_kz or item.get("regulatory_required") or item.get("course_id") in required_ids:
+        return False
+    if not has_legal_goso:
+        return False
+    title = str(item.get("title") or "").casefold()
+    return "основы права" in title or "антикорруп" in title
+
+
 def merge_goso_items(items: List[Dict], version: ProjectVersion, db: Session) -> List[Dict]:
     required = ensure_goso_items(version, db)
     required_keys = {item["course_id"] for item in required}
@@ -352,21 +364,13 @@ def merge_goso_items(items: List[Dict], version: ProjectVersion, db: Session) ->
         for item in required
     )
 
-    def is_redundant_epvo_foundation(item: Dict) -> bool:
-        if not is_kz or item.get("regulatory_required") or item.get("course_id") in required_keys:
-            return False
-        if not has_legal_goso:
-            return False
-        title = str(item.get("title") or "").casefold()
-        # These catalogue cards duplicate the mandatory KZ legal/ethical
-        # block.  They remain in EPVO, but must not be selected twice in a
-        # Kazakhstan plan as late generic electives.
-        return "основы права" in title or "антикорруп" in title
-
     filtered = [
         item for item in items
         if item.get("course_id") not in required_keys
-        and not is_redundant_epvo_foundation(item)
+        and not is_redundant_goso_foundation(
+            item, is_kz=is_kz, has_legal_goso=has_legal_goso,
+            required_ids=required_keys,
+        )
     ]
     return [*required, *filtered]
 

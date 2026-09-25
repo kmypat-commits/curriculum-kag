@@ -12,7 +12,7 @@ from app.models.epvo import EpvoDisciplineNormalized
 from app.kag.embedding_service import embedding_service
 from app.planner.goso import GOSO_COURSE_LO_CODES, evaluate_goso_compliance
 from app.planner.bridge_policy import bridge_can_close_program_lo, bridge_module_limit, scheduled_bridge_count
-from app.planner.domain_evidence import domain_credit_shares, domain_label_matches
+from app.planner.domain_evidence import course_domain_shares, domain_credit_shares, domain_label_matches
 from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.scheduler_text import has_domain_term
 LOAD_TOLERANCE = 3
@@ -341,48 +341,16 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     for items in schedule.values():
         for item in items:
             scoped_shares = scoped_domain_by_course.get(item.get("course_id"))
-            if scoped_shares is not None:
-                # A course may have a broad EPVO link to the primary scope while
-                # its explicit catalogue domain is the secondary discipline.
-                # Do not let that broad link erase auditable domain evidence.
-                item_domain = " ".join((str(item.get("domain") or ""), canonical_domains.get(int(item.get("course_id") or 0), "")))
-                canonical_label = canonical_domains.get(int(item.get("course_id") or 0), "")
-                explicit_matches = [
-                    domain_label_matches(item_domain, [project_domains[index]])
-                    for index in range(2)
-                ]
-                canonical_matches = [
-                    domain_label_matches(canonical_label, [project_domains[index]])
-                    for index in range(2)
-                ]
-                if canonical_matches[1] and not canonical_matches[0]:
-                    scoped_shares = (0.0, 1.0)
-                elif canonical_matches[0] and not canonical_matches[1]:
-                    scoped_shares = (1.0, 0.0)
-                elif explicit_matches[1] and not explicit_matches[0]:
-                    scoped_shares = (0.0, 1.0)
-                elif explicit_matches[0] and not explicit_matches[1]:
-                    scoped_shares = (1.0, 0.0)
-                credits = float(item.get("credits") or 0)
-                domain_credits[0] += credits * scoped_shares[0]
-                domain_credits[1] += credits * scoped_shares[1]
-                continue
             canonical_label = canonical_domains.get(int(item.get("course_id") or 0), "")
-            item_domain = " ".join((str(item.get("domain") or ""), canonical_label)).casefold().strip()
-            canonical_matches = [
-                domain_label_matches(canonical_label, [project_domains[index]])
-                for index in range(2)
-            ]
-            if canonical_matches[1] and not canonical_matches[0]:
-                domain_credits[1] += int(item.get("credits") or 0)
-                continue
-            if canonical_matches[0] and not canonical_matches[1]:
-                domain_credits[0] += int(item.get("credits") or 0)
-                continue
-            for index, domain in enumerate(project_domains):
-                if domain_label_matches(item_domain, [domain]):
-                    domain_credits[index] += int(item.get("credits") or 0)
-                    break
+            shares = course_domain_shares(
+                item_domain=item.get("domain"),
+                canonical_domain=canonical_label,
+                project_domains=(project_domains[0], project_domains[1]),
+                scoped_shares=scoped_shares,
+            )
+            credits = float(item.get("credits") or 0)
+            domain_credits[0] += credits * shares[0]
+            domain_credits[1] += credits * shares[1]
     # Explicit interdisciplinary modules are part of the domain envelope:
     # secondary foundations belong to domain 2, while the integration module
     # is shared equally. Generic LO-gap bridges are not counted as domain

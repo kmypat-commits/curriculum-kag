@@ -79,6 +79,39 @@ def domain_credit_shares(primary_scope: int, secondary_scope: int) -> Tuple[floa
     return (primary / total, secondary / total)
 
 
+def course_domain_shares(
+    *,
+    item_domain: str | None,
+    canonical_domain: str | None,
+    project_domains: tuple[str, str],
+    scoped_shares: tuple[float, float] | None,
+) -> tuple[float, float]:
+    """Resolve the same one-course domain contribution used by the verifier."""
+    canonical = str(canonical_domain or "")
+    combined = " ".join((str(item_domain or ""), canonical)).casefold().strip()
+    canonical_matches = tuple(
+        domain_label_matches(canonical, [domain]) for domain in project_domains
+    )
+    explicit_matches = tuple(
+        domain_label_matches(combined, [domain]) for domain in project_domains
+    )
+    if canonical_matches[1] and not canonical_matches[0]:
+        return (0.0, 1.0)
+    if canonical_matches[0] and not canonical_matches[1]:
+        return (1.0, 0.0)
+    if scoped_shares is not None:
+        if explicit_matches[1] and not explicit_matches[0]:
+            return (0.0, 1.0)
+        if explicit_matches[0] and not explicit_matches[1]:
+            return (1.0, 0.0)
+        return scoped_shares
+    if explicit_matches[0]:
+        return (1.0, 0.0)
+    if explicit_matches[1]:
+        return (0.0, 1.0)
+    return (0.0, 0.0)
+
+
 def domain_has_evidence(shares: Iterable[float], domain_index: int) -> bool:
     values = tuple(float(value or 0.0) for value in shares)
     return 0 <= domain_index < len(values) and values[domain_index] > 0.0
