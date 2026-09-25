@@ -186,6 +186,28 @@ def test_frontier_rejects_chain_that_cannot_fit_semester_windows():
     assert exclusions["illegal_prerequisite_semester"] == 1
 
 
+def test_frontier_accepts_already_fixed_regulatory_parent_only_if_earlier():
+    from app.planner.joint_contract import Candidate
+    from app.planner.joint_frontier import admit_candidate_chains
+
+    candidate = Candidate(
+        course_id=10, item={"course_id": 10, "credits": 5},
+        allowed_semesters=(2, 3), prerequisites=(99,),
+        lo_scores={"ON1": 0.6}, domain_shares=(1.0, 0.0), utility=0.6,
+    )
+    valid, _ = admit_candidate_chains(
+        {10: candidate}, (10,), duplicate_ids={99}, limit=10,
+        fixed_semesters={99: 1},
+    )
+    invalid, exclusions = admit_candidate_chains(
+        {10: candidate}, (10,), duplicate_ids={99}, limit=10,
+        fixed_semesters={99: 3},
+    )
+    assert {c.course_id for c in valid} == {10}
+    assert invalid == ()
+    assert exclusions["illegal_prerequisite_semester"] == 1
+
+
 def test_database_frontier_uses_raw_evidence_and_closes_parents():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session

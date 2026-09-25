@@ -33,6 +33,7 @@ def prerequisite_closure(
     course_id: int,
     prerequisites: Mapping[int, tuple[int, ...]],
     admissible_ids: Set[int],
+    fixed_ids: Set[int] = frozenset(),
 ) -> tuple[int, ...] | None:
     """Return parents-before-child closure, or None for an invalid chain.
 
@@ -44,6 +45,8 @@ def prerequisite_closure(
     visiting: set[int] = set()
 
     def visit(current: int) -> bool:
+        if current in fixed_ids:
+            return True
         if current in visiting or current not in admissible_ids or current not in prerequisites:
             return False
         if current in done:
@@ -67,6 +70,7 @@ def admit_candidate_chains(
     *,
     duplicate_ids: Set[int],
     limit: int,
+    fixed_semesters: Mapping[int, int] | None = None,
 ) -> tuple[tuple[Candidate, ...], dict[str, int]]:
     """Admit ranked roots atomically with every parent, under a hard cap.
 
@@ -76,6 +80,7 @@ def admit_candidate_chains(
     if limit < 1:
         raise ValueError("frontier limit must be positive")
     available = set(catalogue).difference(duplicate_ids)
+    fixed_semesters = fixed_semesters or {}
     parents = {cid: candidate.prerequisites for cid, candidate in catalogue.items()}
     selected: dict[int, Candidate] = {}
     exclusions = {
@@ -89,7 +94,7 @@ def admit_candidate_chains(
         if course_id in duplicate_ids:
             exclusions["goso_duplicate"] += 1
             continue
-        closure = prerequisite_closure(course_id, parents, available)
+        closure = prerequisite_closure(course_id, parents, available, fixed_semesters.keys())
         if closure is None:
             exclusions["missing_or_inadmissible_prerequisite"] += 1
             continue
@@ -103,7 +108,8 @@ def admit_candidate_chains(
         for member in closure:
             course = catalogue[member]
             after = max(
-                (earliest[parent] for parent in course.prerequisites),
+                (earliest[parent] if parent in earliest else fixed_semesters[parent]
+                 for parent in course.prerequisites),
                 default=0,
             )
             legal = [semester for semester in course.allowed_semesters if semester > after]
@@ -309,6 +315,11 @@ def build_joint_frontier(
         )
     candidates, chain_exclusions = admit_candidate_chains(
         catalogue, tuple(ranked_ids), duplicate_ids=duplicate_ids, limit=limit,
+        fixed_semesters={
+            int(item["course_id"]): semester
+            for semester, items in fixed_schedule.items()
+            for item in items
+        },
     )
     exclusions.update(chain_exclusions)
     exclusions["seed_truncated"] = omitted_seed_count
