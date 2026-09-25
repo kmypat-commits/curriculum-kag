@@ -118,8 +118,8 @@ def test_21992_shaped_frontier_excludes_goso_duplicate_before_lo_coverage():
     catalogue = {
         2422: candidate(2422, 0.78),
         33472: candidate(33472, 0.568, (31489, 33539)),
-        31489: candidate(31489, 0.0),
-        33539: candidate(33539, 0.0),
+        31489: candidate(31489, 0.4),
+        33539: candidate(33539, 0.4),
     }
     frontier, exclusions = admit_candidate_chains(
         catalogue, (2422, 33472), duplicate_ids={2422}, limit=4,
@@ -137,7 +137,7 @@ def test_limited_frontier_does_not_include_orphaned_child():
         course_id: Candidate(
             course_id=course_id, item={"course_id": course_id, "credits": 5},
             allowed_semesters=(1, 2), prerequisites=parents,
-            lo_scores={}, domain_shares=(1.0, 0.0), utility=1.0,
+            lo_scores={"ON1": 0.4}, domain_shares=(1.0, 0.0), utility=1.0,
         )
         for course_id, parents in ((1, (2,)), (2, ()))
     }
@@ -148,6 +148,25 @@ def test_limited_frontier_does_not_include_orphaned_child():
     assert exclusions["frontier_capacity"] == 1
 
 
+def test_frontier_rejects_chain_with_parent_below_current_verifier_gate():
+    from app.planner.joint_contract import Candidate
+    from app.planner.joint_frontier import admit_candidate_chains
+
+    def candidate(course_id, parent_ids, score):
+        return Candidate(
+            course_id=course_id, item={"course_id": course_id, "credits": 5},
+            allowed_semesters=(1, 2), prerequisites=parent_ids,
+            lo_scores={"ON1": score}, domain_shares=(1.0, 0.0), utility=score,
+        )
+
+    catalogue = {1: candidate(1, (2,), 0.6), 2: candidate(2, (), 0.0)}
+    frontier, exclusions = admit_candidate_chains(
+        catalogue, (1,), duplicate_ids=set(), limit=10,
+    )
+    assert frontier == ()
+    assert exclusions["unverified_course_evidence"] == 1
+
+
 def test_frontier_rejects_chain_that_cannot_fit_semester_windows():
     from app.planner.joint_contract import Candidate
     from app.planner.joint_frontier import admit_candidate_chains
@@ -156,7 +175,7 @@ def test_frontier_rejects_chain_that_cannot_fit_semester_windows():
         return Candidate(
             course_id=course_id, item={"course_id": course_id, "credits": 5},
             allowed_semesters=semesters, prerequisites=parents,
-            lo_scores={}, domain_shares=(1.0, 0.0), utility=1.0,
+            lo_scores={"ON1": 0.4}, domain_shares=(1.0, 0.0), utility=1.0,
         )
 
     catalogue = {1: candidate(1, (2,), (1, 2)), 2: candidate(2, (), (2, 3))}
@@ -174,6 +193,7 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
     from app.database import Base
     from app.models.course import Course
     from app.models.embedding import MatchScore
+    from app.models.epvo import EpvoDisciplineNormalized
     from app.models.project import LearningOutcome, Project, ProjectVersion
     from app.planner.joint_frontier import build_joint_frontier
 
@@ -185,7 +205,8 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
                 title="Test", domain1="Информационные технологии", domain2="",
                 constraints_json={"total_semesters": 4, "total_credits": 120,
                                   "max_credits_per_semester": 30,
-                                  "jurisdiction": "KZ", "education_level": "bachelor"},
+                                  "jurisdiction": "KZ", "education_level": "bachelor",
+                                  "group_code": "B074"},
             )
             version = ProjectVersion(version_number=1, project=project)
             lo = LearningOutcome(lo_code="ON1", lo_text="Разрабатывать информационные системы")
@@ -202,9 +223,30 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             duplicate = Course(course_id="EPVO-103", title="Основы антикоррупционной культуры",
                                domain="Информационные технологии", credits=5,
                                recommended_semester=1)
-            db.add_all([version, parent, strong, boosted, duplicate])
+            wrong_level = Course(course_id="EPVO-900", title="Магистерский курс информатики",
+                                 domain="Информационные технологии", credits=5,
+                                 recommended_semester=3)
+            wrong_level_source = EpvoDisciplineNormalized(
+                id=900, canonical_title=wrong_level.title,
+                dedup_fingerprint="wrong-level-900", group_codes=["M100"],
+                direction_codes=["7M061"],
+            )
+            valid_sources = [
+                EpvoDisciplineNormalized(
+                    id=epvo_id, canonical_title=title,
+                    dedup_fingerprint=f"valid-level-{epvo_id}",
+                    group_codes=["B074"], direction_codes=["6B073"],
+                )
+                for epvo_id, title in ((100, parent.title), (101, strong.title),
+                                       (102, boosted.title))
+            ]
+            db.add_all([version, parent, strong, boosted, duplicate,
+                        wrong_level, wrong_level_source, *valid_sources])
             db.flush()
             db.add_all([
+                MatchScore(project_version_id=version.id, course_id=parent.id,
+                           lo_id=lo.id, score=0.4,
+                           evidence_json={"semantic_score": 0.4}),
                 MatchScore(project_version_id=version.id, course_id=strong.id,
                            lo_id=lo.id, score=0.9,
                            evidence_json={"semantic_score": 0.568}),
@@ -212,6 +254,9 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
                            lo_id=lo.id, score=1.0,
                            evidence_json={"semantic_score": 0.453}),
                 MatchScore(project_version_id=version.id, course_id=duplicate.id,
+                           lo_id=lo.id, score=0.95,
+                           evidence_json={"semantic_score": 0.78}),
+                MatchScore(project_version_id=version.id, course_id=wrong_level.id,
                            lo_id=lo.id, score=0.95,
                            evidence_json={"semantic_score": 0.78}),
             ])
@@ -222,6 +267,67 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             assert problem.candidates_by_id[boosted.id].lo_scores["ON1"] == 0.453
             assert problem.candidates_by_id[strong.id].prerequisites == (parent.id,)
             assert duplicate.id not in problem.candidates_by_id
+            assert wrong_level.id not in problem.candidates_by_id
             assert problem.exclusions["goso_duplicate"] == 1
+    finally:
+        engine.dispose()
+
+
+def test_final_admission_rejects_structural_parent_without_direct_lo():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.database import Base
+    from app.models.course import Course
+    from app.models.embedding import MatchScore
+    from app.models.project import LearningOutcome, Project, ProjectVersion
+    from app.planner.admission import audit_final_course_admission
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            project = Project(title="Test", domain1="Информационные технологии",
+                              domain2="", constraints_json={"total_semesters": 2})
+            version = ProjectVersion(version_number=1, project=project)
+            lo = LearningOutcome(lo_code="ON1", lo_text="Разрабатывать системы")
+            version.learning_outcomes.append(lo)
+            db.add(version)
+            db.flush()
+            parent = Course(course_id=f"AI-CONFIRMED-{version.id}-1",
+                            title="Основы программирования",
+                            domain="Информационные технологии", credits=5)
+            child = Course(course_id=f"AI-CONFIRMED-{version.id}-2",
+                           title="Разработка информационных систем",
+                           domain="Информационные технологии", credits=5)
+            unrelated = Course(course_id=f"AI-CONFIRMED-{version.id}-3",
+                               title="Общие технологии",
+                               domain="Информационные технологии", credits=5)
+            db.add_all([parent, child, unrelated])
+            db.flush()
+            db.add(MatchScore(project_version_id=version.id, course_id=child.id,
+                              lo_id=lo.id, score=0.6,
+                              evidence_json={"semantic_score": 0.6}))
+            db.flush()
+            schedule = {
+                1: [{"course_id": parent.id, "title": parent.title,
+                     "credits": 5, "prerequisites": [], "domain": parent.domain}],
+                2: [{"course_id": child.id, "title": child.title,
+                     "credits": 5, "prerequisites": [parent.id], "domain": child.domain,
+                     "admission_score": 0.6}],
+            }
+            check = audit_final_course_admission(schedule, version, db)
+            assert not check["passed"]
+            assert any(v["course_id"] == parent.id and
+                       v["reason"] == "no_credible_professional_lo"
+                       for v in check["violations"])
+            schedule[2].append({"course_id": unrelated.id, "title": unrelated.title,
+                                "credits": 5, "prerequisites": [],
+                                "domain": unrelated.domain})
+            check = audit_final_course_admission(schedule, version, db)
+            assert not check["passed"]
+            assert any(v["course_id"] == unrelated.id and
+                       v["reason"] == "no_credible_professional_lo"
+                       for v in check["violations"])
     finally:
         engine.dispose()

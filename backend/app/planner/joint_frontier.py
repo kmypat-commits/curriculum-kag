@@ -8,19 +8,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Set
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.course import Course, course_prerequisites
 from app.models.embedding import MatchScore
+from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.planner.course_policy import education_level_course_allowed
 from app.planner.domain_evidence import course_domain_shares, domain_label_matches
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.goso import ensure_goso_items, is_redundant_goso_foundation
 from app.planner.joint_contract import Candidate, PlanningProblem
 from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.scheduler_utils import title_key
 from app.planner.semester_rules import foundation_max_semester, minimum_appropriate_semester
 from app.planner.variant_scope import build_epvo_scope_index
+from app.planner.verifier import LOAD_TOLERANCE, MATCH_THRESHOLD, TOTAL_CREDIT_TOLERANCE
+from app.services.epvo_repository import epvo_row_matches_education_level
 
 
 
@@ -76,6 +81,7 @@ def admit_candidate_chains(
     exclusions = {
         "goso_duplicate": 0,
         "missing_or_inadmissible_prerequisite": 0,
+        "unverified_course_evidence": 0,
         "illegal_prerequisite_semester": 0,
         "frontier_capacity": 0,
     }
@@ -86,6 +92,12 @@ def admit_candidate_chains(
         closure = prerequisite_closure(course_id, parents, available)
         if closure is None:
             exclusions["missing_or_inadmissible_prerequisite"] += 1
+            continue
+        if any(
+            max(catalogue[member].lo_scores.values(), default=0.0) < MATCH_THRESHOLD
+            for member in closure
+        ):
+            exclusions["unverified_course_evidence"] += 1
             continue
         earliest: dict[int, int] = {}
         for member in closure:
@@ -149,7 +161,7 @@ def build_joint_frontier(
         })
         aggregate["max"] = max(aggregate["max"], float(match.score or 0))
         aggregate["expert"] = max(aggregate["expert"], expert)
-        if raw >= 0.4:
+        if raw >= MATCH_THRESHOLD:
             aggregate["professional_lo_codes"].add(code)
         aggregate["lo_scores"][code] = score_map[code]
 
@@ -160,7 +172,7 @@ def build_joint_frontier(
     by_lo: dict[str, list[int]] = {}
     for code in sorted(set(professional.values())):
         by_lo[code] = sorted(
-            (cid for cid, scores in evidence.items() if scores.get(code, 0) >= 0.4),
+            (cid for cid, scores in evidence.items() if scores.get(code, 0) >= MATCH_THRESHOLD),
             key=lambda cid: (-evidence[cid][code], -ranking[cid], cid),
         )[:limit]
     for position in range(limit):
@@ -210,6 +222,21 @@ def build_joint_frontier(
         db, version=version, constraints=constraints, aggregates=aggregates,
         courses=loaded, title_key=title_key,
     )
+    epvo_index = epvo_code_index(loaded)
+    known_epvo_source: set[int] = set()
+    level_eligible_source: set[int] = set()
+    if loaded:
+        source_rows = db.query(EpvoDisciplineNormalized).filter(or_(
+            EpvoDisciplineNormalized.approved_course_id.in_(tuple(loaded)),
+            EpvoDisciplineNormalized.id.in_(tuple(epvo_index) or (-1,)),
+        )).all()
+        for row in source_rows:
+            linked = linked_course_id(row, epvo_index)
+            if linked is None:
+                continue
+            known_epvo_source.add(int(linked))
+            if epvo_row_matches_education_level(row, constraints.get("education_level")):
+                level_eligible_source.add(int(linked))
     fixed_items = ensure_goso_items(version, db)
     fixed_schedule = {semester: [] for semester in range(1, semesters + 1)}
     for item in fixed_items:
@@ -248,6 +275,9 @@ def build_joint_frontier(
         if not education_level_course_allowed(course, constraints.get("education_level")):
             exclusions["out_of_domain_or_level"] += 1
             continue
+        if cid in known_epvo_source and cid not in level_eligible_source:
+            exclusions["out_of_domain_or_level"] += 1
+            continue
         label_ok = any(domain_label_matches(course.domain, [domain]) for domain in domains if domain)
         scope_ok = cid in scope.level_scope_allowed_ids
         if not (label_ok or scope_ok):
@@ -282,7 +312,7 @@ def build_joint_frontier(
     )
     exclusions.update(chain_exclusions)
     exclusions["seed_truncated"] = omitted_seed_count
-    tolerance = max(0, int(constraints.get("credit_tolerance", 5) or 0))
+    tolerance = max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE) or 0))
     target = int(constraints.get("total_credits") or 240)
     fixed_credits = sum(int(item.get("credits") or 0) for item in fixed_items)
     quota_base = max(0, target - fixed_credits)
@@ -299,7 +329,8 @@ def build_joint_frontier(
         candidates=candidates, fixed_schedule=fixed_schedule,
         required_los=tuple(sorted(set(professional.values()))),
         target_credits=target, credit_tolerance=tolerance,
-        min_load=max(0.0, nominal - 3), max_load=nominal + 3,
+        min_load=max(0.0, nominal - LOAD_TOLERANCE),
+        max_load=nominal + LOAD_TOLERANCE,
         domain_minima=tuple(max(0.0, quota_base * percent / 100 - quota_tolerance)
                              for percent in percentages),
         exclusions=exclusions,
