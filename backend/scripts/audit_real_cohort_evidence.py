@@ -8,7 +8,10 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from independent_curriculum_checks import check_variant
+if __package__:
+    from .independent_curriculum_checks import check_variant
+else:
+    from independent_curriculum_checks import check_variant
 
 
 def sha256(data: bytes) -> str:
@@ -78,17 +81,152 @@ def audit(first: dict, second: dict, frozen: dict) -> dict:
     }
 
 
+def audit_slices(
+    first: dict, second: dict, frozen: dict, *,
+    first_offset: int = 0, first_count: int = 20,
+    second_offset: int = 20, second_count: int = 40,
+) -> dict:
+    """Independently verify exact disjoint frozen slices before promotion.
+
+    This checks source-file and canonical hashes, identity and order, actual
+    schedule arithmetic and prerequisite order. It does not assert academic
+    suitability or independent human expert judgement.
+    """
+    prepared = frozen["prepared"]
+    if min(first_offset, first_count, second_offset, second_count) < 0:
+        raise ValueError("slice offsets and counts must be non-negative")
+    first_positions = set(range(first_offset, first_offset + first_count))
+    second_positions = set(range(second_offset, second_offset + second_count))
+    if first_positions & second_positions or max(first_positions | second_positions, default=-1) >= len(prepared):
+        raise ValueError("slices overlap or exceed frozen manifest")
+    findings: list[dict] = []
+    cases: list[dict] = []
+    structural_passed = 0
+    internally_passed = 0
+    seen: set[str] = set()
+    for part, offset, count, report in (
+        (1, first_offset, first_count, first),
+        (2, second_offset, second_count, second),
+    ):
+        if count == 0:
+            continue
+        expected = prepared[offset:offset + count]
+        actual_cases = report.get("reports") or []
+        report_manifest = (report.get("manifest") or {}).get("cases") or []
+        if report.get("completed") != count or len(actual_cases) != count or len(report_manifest) != count:
+            findings.append({"part": part, "reason": "incomplete_report",
+                             "expected": count, "completed": report.get("completed"),
+                             "reports": len(actual_cases), "manifest_cases": len(report_manifest)})
+        for position, expected_entry in enumerate(expected):
+            program_id = str(expected_entry["program_id"])
+            if program_id in seen:
+                findings.append({"part": part, "program_id": program_id,
+                                 "reason": "cohort_identity_mismatch", "detail": "duplicate"})
+            seen.add(program_id)
+            case = actual_cases[position] if position < len(actual_cases) else {}
+            manifest_case = report_manifest[position] if position < len(report_manifest) else {}
+            if str(case.get("program_id")) != program_id or str(manifest_case.get("program_id")) != program_id:
+                findings.append({"part": part, "position": position,
+                                 "program_id": program_id,
+                                 "reason": "cohort_identity_mismatch",
+                                 "reported": case.get("program_id"),
+                                 "manifest": manifest_case.get("program_id")})
+            try:
+                raw = Path(expected_entry["input"]).read_bytes()
+                payload = json.loads(raw)
+                file_hash = sha256(raw)
+                canonical_hash = sha256(json.dumps(
+                    payload, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8"))
+            except (OSError, ValueError, TypeError) as error:
+                findings.append({"part": part, "program_id": program_id,
+                                 "reason": "unreadable_input", "error": str(error)})
+                continue
+            if (
+                file_hash != expected_entry.get("sha256")
+                or file_hash != manifest_case.get("input_file_sha256")
+                or canonical_hash != expected_entry.get("canonical_sha256")
+                or canonical_hash != manifest_case.get("input_sha256")
+                or canonical_hash != case.get("input_sha256")
+                or canonical_hash != case.get("expected_input_sha256")
+            ):
+                findings.append({"part": part, "program_id": program_id,
+                                 "reason": "input_hash_mismatch"})
+            try:
+                constraints = payload["constraints"]
+                nominal = int(constraints["max_credits_per_semester"])
+                target = int(constraints["total_credits"])
+                semesters = int(constraints["total_semesters"])
+            except (KeyError, TypeError, ValueError) as error:
+                findings.append({"part": part, "program_id": program_id,
+                                 "reason": "invalid_input_constraints", "error": str(error)})
+                continue
+            variant = (case.get("variants") or {}).get("A")
+            issues = ([{"reason": "missing_variant_A"}] if variant is None else
+                      check_variant(
+                          variant, target_credits=target,
+                          min_load=max(0, nominal - 3), max_load=nominal + 3,
+                          num_semesters=semesters,
+                      ))
+            if issues:
+                findings.append({"part": part, "program_id": program_id,
+                                 "reason": "structural_issue", "issues": issues})
+            else:
+                structural_passed += 1
+            if case.get("passed"):
+                internally_passed += 1
+            cases.append({
+                "part": part, "position": offset + position,
+                "program_id": program_id, "input_file_sha256": file_hash,
+                "input_canonical_sha256": canonical_hash,
+                "internal_passed": bool(case.get("passed")),
+                "structural_passed": not issues,
+                "output_canonical_sha256": sha256(json.dumps(
+                    variant, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":"), default=str,
+                ).encode("utf-8")) if variant is not None else None,
+            })
+    requested = first_count + second_count
+    return {
+        "requested": requested, "distinct_programmes": len(seen),
+        "internal_passed": internally_passed,
+        "internal_failed": requested - internally_passed,
+        "structural_passed": structural_passed,
+        "structural_failed": requested - structural_passed,
+        "accepted": (len(seen) == requested and internally_passed == requested
+                     and structural_passed == requested and not findings),
+        "findings": findings, "cases": cases,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--part1", type=Path, required=True)
-    parser.add_argument("--part2", type=Path, required=True)
+    parser.add_argument("--part2", type=Path)
     parser.add_argument("--input-manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--first-offset", type=int)
+    parser.add_argument("--first-count", type=int)
+    parser.add_argument("--second-offset", type=int)
+    parser.add_argument("--second-count", type=int)
     args = parser.parse_args()
-    result = audit(
-        json.loads(args.part1.read_text(encoding="utf-8")),
-        json.loads(args.part2.read_text(encoding="utf-8")),
-        json.loads(args.input_manifest.read_text(encoding="utf-8")),
+    first = json.loads(args.part1.read_text(encoding="utf-8"))
+    if args.part2 is None and args.second_count != 0:
+        parser.error("--part2 is required unless --second-count 0")
+    second = json.loads(args.part2.read_text(encoding="utf-8")) if args.part2 else {}
+    frozen = json.loads(args.input_manifest.read_text(encoding="utf-8"))
+    sliced = any(value is not None for value in (
+        args.first_offset, args.first_count, args.second_offset, args.second_count,
+    ))
+    result = (
+        audit_slices(
+            first, second, frozen,
+            first_offset=args.first_offset if args.first_offset is not None else 0,
+            first_count=args.first_count if args.first_count is not None else 20,
+            second_offset=args.second_offset if args.second_offset is not None else 20,
+            second_count=args.second_count if args.second_count is not None else 40,
+        ) if sliced else audit(first, second, frozen)
     )
     rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
@@ -100,6 +238,8 @@ def main() -> int:
         )}, ensure_ascii=False))
     else:
         print(rendered, end="")
+    if sliced:
+        return 0 if result["accepted"] else 1
     return 0 if result["distinct_programmes"] == 80 and result["internal_failed"] == 0 and not result["findings"] else 1
 
 

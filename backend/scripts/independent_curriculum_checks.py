@@ -16,7 +16,8 @@ from pathlib import Path
 TARGET_CREDITS_BY_LEVEL = {"bachelor": 240, "master": 120, "doctorate": 180}
 
 
-def check_variant(variant: dict, *, target_credits: int, max_load: int, min_load: int = 0) -> list[dict]:
+def check_variant(variant: dict, *, target_credits: int, max_load: int,
+                  min_load: int = 0, num_semesters: int | None = None) -> list[dict]:
     issues: list[dict] = []
     rows = variant.get("schedule_fingerprint") or []
     if not rows or any(not isinstance(row, list) or len(row) != 3 for row in rows):
@@ -40,6 +41,13 @@ def check_variant(variant: dict, *, target_credits: int, max_load: int, min_load
     reported_loads = {int(key): int(value) for key, value in (variant.get("semester_loads") or {}).items()}
     if dict(loads) != reported_loads:
         issues.append({"reason": "reported_semester_load_mismatch", "computed": dict(loads), "reported": reported_loads})
+    if num_semesters is not None:
+        missing = sorted(set(range(1, num_semesters + 1)) - set(loads))
+        if missing:
+            issues.append({"reason": "missing_semester", "semesters": missing})
+        unexpected = sorted(set(loads) - set(range(1, num_semesters + 1)))
+        if unexpected:
+            issues.append({"reason": "unexpected_semester", "semesters": unexpected})
     for semester, credits in loads.items():
         if credits > max_load:
             issues.append({"reason": "semester_overload", "semester": semester, "actual": credits, "maximum": max_load})
