@@ -18,6 +18,7 @@ def solve_joint(
     *,
     time_limit_seconds: float,
     forbidden_sets: tuple[frozenset[int], ...] = (),
+    forbidden_placements: tuple[frozenset[tuple[int, int]], ...] = (),
 ) -> PlanningResult:
     """Select only a fully feasible real-course set and its semester schedule.
 
@@ -150,6 +151,15 @@ def solve_joint(
         # This is a no-good cut for exactly one previous real-course set.
         add({x_index[cid]: (1.0 if cid in exact else -1.0) for cid in sorted(all_ids)},
             -np.inf, len(exact) - 1)
+    for placement in forbidden_placements:
+        chosen = {cid for cid, _semester in placement}
+        if any(key not in y_index for key in placement) or len(chosen) != len(placement):
+            raise PlanningFailure("invalid_candidate_data", {
+                "reason": "invalid_forbidden_placement",
+            })
+        coefficients = {y_index[key]: 1.0 for key in sorted(placement)}
+        coefficients.update({x_index[cid]: -1.0 for cid in sorted(all_ids - chosen)})
+        add(coefficients, -np.inf, len(placement) - 1)
 
     data: list[float] = []
     row_ids: list[int] = []

@@ -22,6 +22,7 @@ from app.planner.goso import ensure_goso_items, is_redundant_goso_foundation
 from app.planner.joint_contract import Candidate, PlanningProblem
 from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.scheduler_utils import title_key
+from app.planner.scoped_epvo_semesters import apply_scoped_epvo_semesters
 from app.planner.semester_rules import foundation_max_semester, minimum_appropriate_semester
 from app.planner.variant_scope import build_epvo_scope_index
 from app.planner.verifier import LOAD_TOLERANCE, MATCH_THRESHOLD, TOTAL_CREDIT_TOLERANCE
@@ -260,6 +261,13 @@ def build_joint_frontier(
         "group_code", "direction_code", "secondary_group_code",
         "secondary_direction_code",
     ))
+    scoped_items = {
+        int(item["course_id"]): item
+        for item in apply_scoped_epvo_semesters(
+            [{"course_id": cid, "recommended_semester": course.recommended_semester}
+             for cid, course in sorted(loaded.items())], version, db,
+        )
+    }
     catalogue: dict[int, Candidate] = {}
     duplicate_ids: set[int] = set(required_ids)
     exclusions = {"out_of_domain_or_level": 0, "no_legal_semester": 0}
@@ -268,11 +276,25 @@ def build_joint_frontier(
         item = {
             "course_id": cid, "title": str(course.title or ""),
             "domain": str(course.domain or ""), "credits": int(course.credits or 0),
-            "recommended_semester": course.recommended_semester,
+            "recommended_semester": scoped_items[cid].get("recommended_semester"),
             "prerequisites": list(raw_parents.get(cid, ())),
             "type": course.cycle_component or "mandatory",
             "selection_method": "joint_real_course",
+            "admission_score": round(max(evidence.get(cid, {}).values(), default=0.0), 4),
+            "admission_los": sorted(
+                code for code, score in evidence.get(cid, {}).items()
+                if score >= MATCH_THRESHOLD
+            ),
         }
+        if scoped_items[cid].get("_scoped_epvo_semester"):
+            item["_scoped_epvo_semester"] = True
+        title = item["title"].casefold().strip()
+        if (
+            int(item.get("recommended_semester") or 0) == 1
+            and title.startswith(("введение ", "основы ", "introduction ", "fundamentals "))
+        ):
+            item["_scoped_epvo_semester"] = True
+            item["source_semester_required"] = True
         if is_redundant_goso_foundation(
             item, is_kz=is_kz, has_legal_goso=has_legal_goso,
             required_ids=required_ids,
@@ -297,8 +319,8 @@ def build_joint_frontier(
             semesters, foundation_max_semester(item["title"], semesters),
             int(item.get("latest_semester") or semesters),
         )
-        if raw_parents.get(cid) and course.recommended_semester:
-            upper = max(upper, min(semesters, int(course.recommended_semester) + 2))
+        if raw_parents.get(cid) and item.get("recommended_semester"):
+            upper = max(upper, min(semesters, int(item["recommended_semester"]) + 2))
         allowed = tuple(range(lower, upper + 1))
         if not allowed or item["credits"] <= 0:
             exclusions["no_legal_semester"] += 1

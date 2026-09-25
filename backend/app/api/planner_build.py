@@ -22,10 +22,11 @@ from app.models.course import Course
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
-from app.models.plan import Plan
+from app.models.plan import Plan, PlanItem
 from app.models.plan_build_status import PlanBuildStatus
 from app.models.user import User
 from app.planner.scheduler import build_curriculum_plan, calculate_plan_metrics
+from app.planner.joint_contract import PlanningFailure
 from app.planner.invariant_ledger import schedule_fingerprint
 from app.planner.evidence_preflight import assess_professional_evidence
 from app.planner.selection_evidence import build_selection_evidence_snapshot
@@ -715,32 +716,49 @@ def build_plan(
             raise HTTPException(status_code=422, detail="Выберите хотя бы один вариант плана: A, B или C")
 
         def build_variant(variant_type: str) -> dict:
-            # Every requested variant passes through the selector. Cloning A
-            # would make the labels cosmetic and hide duplicate alternatives.
+            # B/C solve the same hard model with an explicit no-good cut
+            # against A's real-course set; they never clone A's schedule.
+            reference: frozenset[int] | None = None
+            if variant_type in {"B", "C"}:
+                current_a = variants.get("A")
+                if current_a:
+                    reference = frozenset(
+                        int(item["course_id"])
+                        for items in (current_a.get("schedule") or {}).values()
+                        for item in items if item.get("course_id") is not None
+                    )
+                else:
+                    previous_a = max(
+                        (plan for plan in old_plans if plan.variant_type == "A"),
+                        key=lambda plan: plan.id, default=None,
+                    )
+                    if previous_a is not None:
+                        reference = frozenset(
+                            int(row.course_id)
+                            for row in db.query(PlanItem).filter(
+                                PlanItem.plan_id == previous_a.id,
+                                PlanItem.course_id.is_not(None),
+                            ).all()
+                        )
+                if not reference:
+                    raise PlanningFailure("missing_variant_a_reference", {
+                        "variant": variant_type,
+                        "message": "Сначала постройте вариант A или запросите A вместе с альтернативами.",
+                    })
+            other_references = ()
+            if variant_type == "C" and variants.get("B"):
+                other_references = (frozenset(
+                    int(item["course_id"])
+                    for items in (variants["B"].get("schedule") or {}).values()
+                    for item in items if item.get("course_id") is not None
+                ),)
             return build_curriculum_plan(
                 project_version_id,
                 db,
                 variant_type,
                 commit=False,
-                selection_variant_type=(
-                    "A"
-                    if variant_type == "B"
-                    and str((version.project.constraints_json or {}).get("program_type") or "standard").lower()
-                    in {"interdisciplinary", "joint"}
-                    else None
-                ),
-                selected_courses_override=(
-                    [
-                        dict(item)
-                        for items in (variants.get("A", {}).get("schedule", {}) or {}).values()
-                        for item in items
-                    ]
-                    if variant_type == "B"
-                    and str((version.project.constraints_json or {}).get("program_type") or "standard").lower()
-                    in {"interdisciplinary", "joint"}
-                    and variants.get("A")
-                    else None
-                ),
+                diversity_reference=reference,
+                diversity_references=other_references,
             )
 
         variants: dict[str, dict] = {}
@@ -1071,6 +1089,36 @@ def build_plan(
             timings=timings, sql_query_count=sql_query_count,
         )
         raise HTTPException(status_code=504, detail="Построение превысило допустимое время; повторите запрос после проверки ограничений")
+    except PlanningFailure as exc:
+        if sql_query_count is None:
+            sql_query_count = finish_sql_query_measurement(sql_measurement)
+        db.rollback()
+        timed_out = exc.status in {"solver_timeout", "solver_limit"}
+        messages = {
+            "solver_timeout": "Оптимизатор достиг лимита времени; старый план сохранён.",
+            "solver_limit": "Оптимизатор достиг лимита поиска; старый план сохранён.",
+            "no_solution_in_bounded_frontier": "В проверенном наборе дисциплин допустимый план не найден; старый план сохранён.",
+            "infeasible_with_complete_frontier": "При текущих дисциплинах и обязательных требованиях допустимый план не найден.",
+            "verifier_rejected": "Найденные варианты не прошли независимую проверку; старый план сохранён.",
+            "missing_variant_a_reference": "Для альтернативы сначала нужен вариант A.",
+            "invalid_candidate_data": "В каталоге обнаружены некорректные данные дисциплин или пререквизитов.",
+        }
+        message = messages.get(exc.status, "План не прошёл проверку; старый вариант сохранён.")
+        _replace_build_status(project_version_id, **{
+            "state": "timed_out" if timed_out else "rejected",
+            "stage": exc.status, "progress": 0, "error": message,
+            "verification_summary": [{"status": exc.status, "details": exc.details}],
+            "elapsed_seconds": round(time.perf_counter() - build_started, 1),
+            "timings": timings,
+        })
+        _record_build_telemetry(
+            db, current_user=current_user, project_version_id=project_version_id,
+            state="timed_out" if timed_out else "rejected",
+            elapsed_seconds=time.perf_counter() - build_started,
+            timings=timings, sql_query_count=sql_query_count,
+            response_payload={"planner_status": exc.status},
+        )
+        raise HTTPException(status_code=504 if timed_out else 422, detail=message)
     except HTTPException:
         if sql_query_count is None:
             sql_query_count = finish_sql_query_measurement(sql_measurement)

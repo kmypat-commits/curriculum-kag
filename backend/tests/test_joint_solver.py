@@ -170,3 +170,27 @@ def test_joint_solver_enforces_verifier_combined_lo_coverage_not_just_real_thres
     ])
     result = solve_joint(setup, time_limit_seconds=5)
     assert result.selected_course_ids == frozenset({2, 3})
+
+
+def test_joint_solver_retries_another_placement_of_same_valid_course_set():
+    from app.planner.joint_solver import solve_joint
+
+    setup = problem([
+        candidate(1, 10, (1, 2), {"ON1": 0.65}),
+        candidate(2, 10, (1, 2), {"ON2": 0.65}),
+    ])
+    first = solve_joint(setup, time_limit_seconds=5)
+    first_placement = frozenset(
+        (item["course_id"], semester)
+        for semester, items in first.schedule.items()
+        for item in items if item.get("course_id") in {1, 2}
+    )
+    second = solve_joint(setup, time_limit_seconds=5,
+                         forbidden_placements=(first_placement,))
+    second_placement = frozenset(
+        (item["course_id"], semester)
+        for semester, items in second.schedule.items()
+        for item in items if item.get("course_id") in {1, 2}
+    )
+    assert second.selected_course_ids == first.selected_course_ids
+    assert second_placement != first_placement

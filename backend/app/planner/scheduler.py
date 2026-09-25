@@ -111,6 +111,7 @@ from app.planner.admission import (
 from app.planner.final_schedule_checks import audit_final_schedule_boundary, late_schedule_snapshot
 from app.planner.selection_evidence import build_selection_evidence_snapshot
 from app.planner.plan_result_assembly import persist_plan_result
+from app.planner.joint_planner import build_verified_joint_schedule
 
 
 # Canonical implementations live in the pure semester-rules module.  The
@@ -175,12 +176,47 @@ def build_curriculum_plan(
     commit: bool = True,
     selection_variant_type: str | None = None,
     selected_courses_override: List[Dict] | None = None,
+    diversity_reference: frozenset[int] | None = None,
+    diversity_references: tuple[frozenset[int], ...] = (),
 ) -> Dict:
     trace = PlannerTimer(f"[planner-timing] variant={variant_type}").trace
 
     project_version = db.query(ProjectVersion).filter(ProjectVersion.id == project_version_id).first()
     if not project_version:
         raise ValueError(f"Project version {project_version_id} not found")
+    # Explicit selector overrides remain a diagnostic compatibility path.
+    # Ordinary generation uses one verified course-and-semester decision.
+    if selected_courses_override is None and selection_variant_type is None:
+        forbidden = (
+            *((diversity_reference,) if diversity_reference else ()),
+            *diversity_references,
+        )
+        schedule, joint = build_verified_joint_schedule(
+            project_version, db, variant_type, forbidden_sets=forbidden,
+        )
+        verification = joint["verification"]
+        selected_courses = [item for items in schedule.values() for item in items]
+        metrics = calculate_plan_metrics(
+            schedule, selected_courses, project_version, db, verification,
+        )
+        metrics["course_admission"] = joint["boundary"]["admission"]
+        metrics["joint_planner"] = joint["planner"]
+        metrics["optimizer"] = {
+            "name": "Joint MILP", "selection_method": "joint_milp",
+        }
+        if str((project_version.project.constraints_json or {}).get("jurisdiction") or "INTERNATIONAL").upper() == "KZ":
+            from app.planner.goso_ruleset import GOSO_RULESET_CHECKSUM, GOSO_RULESET_VERSION
+            metrics["goso_ruleset_version"] = GOSO_RULESET_VERSION
+            metrics["goso_ruleset_checksum"] = GOSO_RULESET_CHECKSUM
+            metrics["goso_ruleset_source"] = "https://adilet.zan.kz/rus/docs/V2200028916"
+        metrics["selection_evidence_snapshot"] = build_selection_evidence_snapshot(
+            schedule, project_version_id, db,
+        )
+        return persist_plan_result(
+            db=db, project_version_id=project_version_id,
+            variant_type=variant_type, schedule=schedule,
+            metrics=metrics, verification=verification, commit=commit,
+        )
     constraints = project_version.project.constraints_json or {}
     excluded_course_ids = {
         int(value) for value in (constraints.get("excluded_course_ids") or [])

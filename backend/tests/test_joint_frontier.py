@@ -258,6 +258,7 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
                     id=epvo_id, canonical_title=title,
                     dedup_fingerprint=f"valid-level-{epvo_id}",
                     group_codes=["B074"], direction_codes=["6B073"],
+                    typical_semester={100: 1, 101: 2, 102: 3}[epvo_id],
                 )
                 for epvo_id, title in ((100, parent.title), (101, strong.title),
                                        (102, boosted.title))
@@ -286,6 +287,9 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             problem = build_joint_frontier(version, db, limit=10)
             assert {strong.id, parent.id}.issubset(problem.candidates_by_id)
             assert problem.candidates_by_id[strong.id].lo_scores["ON1"] == 0.568
+            assert problem.candidates_by_id[strong.id].item["admission_score"] == 0.568
+            assert problem.candidates_by_id[strong.id].item["recommended_semester"] == 2
+            assert problem.candidates_by_id[parent.id].item["source_semester_required"] is True
             assert problem.candidates_by_id[boosted.id].lo_scores["ON1"] == 0.453
             assert problem.candidates_by_id[strong.id].prerequisites == (parent.id,)
             assert duplicate.id not in problem.candidates_by_id
