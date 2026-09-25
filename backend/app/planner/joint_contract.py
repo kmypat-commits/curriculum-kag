@@ -47,3 +47,7 @@ class PlanningFailure(RuntimeError):
         super().__init__(status)
         self.status = status
         self.details = details
+
+    def diagnostic(self) -> dict:
+        """Structured failure context for audit reports without parsing text."""
+        return {"status": self.status, "details": self.details}

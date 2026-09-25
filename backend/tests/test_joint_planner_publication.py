@@ -167,3 +167,11 @@ def test_verified_joint_build_persists_exact_schedule(monkeypatch):
             assert saved.metrics_json["joint_planner"]["fingerprint"] == "known"
     finally:
         engine.dispose()
+def test_planning_failure_exposes_structured_audit_context():
+    from app.planner.joint_contract import PlanningFailure
+
+    failure = PlanningFailure("infeasible_with_complete_frontier", {"candidate_count": 12})
+    assert failure.diagnostic() == {
+        "status": "infeasible_with_complete_frontier",
+        "details": {"candidate_count": 12},
+    }

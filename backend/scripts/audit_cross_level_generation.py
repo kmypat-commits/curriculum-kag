@@ -688,6 +688,9 @@ def main() -> None:
             ),
         })
     except Exception as error:
+        from app.planner.joint_contract import PlanningFailure
+        if isinstance(error, PlanningFailure):
+            report["planning_failure"] = error.diagnostic()
         report.update({
             "status": "failed",
             "level": args.level,
