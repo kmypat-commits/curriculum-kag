@@ -18,6 +18,7 @@ from app.planner.scheduler_text import has_domain_term
 LOAD_TOLERANCE = 3
 TOTAL_CREDIT_TOLERANCE = 5
 MATCH_THRESHOLD = 0.4
+REAL_COURSE_LO_THRESHOLD = 0.5
 REDUNDANCY_THRESHOLD = 0.45
 FALLBACK_REDUNDANCY_THRESHOLD = 0.65
 
@@ -439,7 +440,7 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
         # A generated bridge remains a proposal until its sources and
         # programme-LO mapping are independently approved. Only that explicit
         # approval may supplement real-course evidence in this strict gate.
-        if real_max < 0.5 and not bridge_supported:
+        if real_max < REAL_COURSE_LO_THRESHOLD and not bridge_supported:
             lo_without_real_course.append({
                 "lo_code": lo.lo_code,
                 "lo_text": lo.lo_text,
