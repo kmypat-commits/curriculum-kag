@@ -62,6 +62,8 @@ from app.planner.bridge_policy import bridge_module_limit
 from app.planner.bridge_budget import cap_bridge_items_to_budget as _cap_bridge_items_to_budget
 from app.planner.schedule_credit_gap import fill_schedule_credit_gap as _fill_schedule_credit_gap
 from app.planner.exact_credit_repair import repair_exact_real_credit_overage
+from app.planner.global_schedule_repair import repair_schedule_globally
+from app.planner.match_aggregation import selected_real_lo_coverage
 from app.planner.domain_evidence import domain_label_matches
 from app.planner.credit_balancing import (
     _rebalance_semester_load,
@@ -212,17 +214,16 @@ def build_curriculum_plan(
         lo for lo in project_version.learning_outcomes
         if not str(lo.lo_code or "").startswith("LO-GOSO-")
     ]
-    real_lo_coverage = {lo.id: 0.0 for lo in professional_los}
-    if selected_real_ids and real_lo_coverage:
-        for match in db.query(MatchScore).filter(
+    selected_matches = (
+        db.query(MatchScore).filter(
             MatchScore.project_version_id == project_version_id,
             MatchScore.course_id.in_(selected_real_ids),
-        ).all():
-            expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
-            if match.lo_id in real_lo_coverage:
-                real_lo_coverage[match.lo_id] = max(
-                    real_lo_coverage.get(match.lo_id, 0.0), float(match.score or 0.0), expert
-                )
+        ).all()
+        if selected_real_ids else []
+    )
+    real_lo_coverage = selected_real_lo_coverage(
+        selected_matches, [lo.id for lo in professional_los]
+    )
     selector_has_complete_real_lo = bool(real_lo_coverage) and all(
         score >= 0.5 for score in real_lo_coverage.values()
     )
@@ -1365,6 +1366,16 @@ def build_curriculum_plan(
         is_admissible=is_project_domain,
         variant_type=variant_type,
     )
+    # Local moves cannot resolve every feasible cyclic relocation. Only for
+    # an actual final load violation, solve the complete assignment without
+    # changing course membership, course credits, or fixed regulatory rows.
+    final_loads = _schedule_loads(schedule)
+    if any(load < nominal_load - 3 or load > nominal_load + 3 for load in final_loads.values()):
+        globally_repaired = repair_schedule_globally(
+            schedule, num_semesters=num_semesters, nominal_load=nominal_load
+        )
+        if globally_repaired is not None:
+            schedule = globally_repaired
 
     # Keep the final domain decision in one auditable helper.  The local scan
     # above is retained temporarily for compatibility while the orchestration

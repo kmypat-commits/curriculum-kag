@@ -20,6 +20,19 @@ def semantic_evidence_score(match) -> float:
     return float(getattr(match, "score", 0.0) or 0.0)
 
 
+def selected_real_lo_coverage(matches, lo_ids):
+    """Measure selected-course coverage with verifier-grade evidence."""
+    coverage = {lo_id: 0.0 for lo_id in lo_ids}
+    for match in matches:
+        if match.lo_id not in coverage:
+            continue
+        expert = float((match.evidence_json or {}).get("epvo_expert_score") or 0.0)
+        coverage[match.lo_id] = max(
+            coverage[match.lo_id], semantic_evidence_score(match), expert
+        )
+    return coverage
+
+
 def aggregate_match_scores(db, match_model, project_version_id: int, learning_outcomes: Iterable):
     outcomes = list(learning_outcomes)
     weights = {lo.id: lo.weight or 1.0 for lo in outcomes}
