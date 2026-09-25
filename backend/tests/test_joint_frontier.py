@@ -165,3 +165,63 @@ def test_frontier_rejects_chain_that_cannot_fit_semester_windows():
     )
     assert frontier == ()
     assert exclusions["illegal_prerequisite_semester"] == 1
+
+
+def test_database_frontier_uses_raw_evidence_and_closes_parents():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.database import Base
+    from app.models.course import Course
+    from app.models.embedding import MatchScore
+    from app.models.project import LearningOutcome, Project, ProjectVersion
+    from app.planner.joint_frontier import build_joint_frontier
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            project = Project(
+                title="Test", domain1="Информационные технологии", domain2="",
+                constraints_json={"total_semesters": 4, "total_credits": 120,
+                                  "max_credits_per_semester": 30,
+                                  "jurisdiction": "KZ", "education_level": "bachelor"},
+            )
+            version = ProjectVersion(version_number=1, project=project)
+            lo = LearningOutcome(lo_code="ON1", lo_text="Разрабатывать информационные системы")
+            version.learning_outcomes.append(lo)
+            parent = Course(course_id="EPVO-100", title="Основы программирования",
+                            domain="Информационные технологии", credits=5,
+                            recommended_semester=1)
+            strong = Course(course_id="EPVO-101", title="Разработка информационных систем",
+                            domain="Информационные технологии", credits=5,
+                            recommended_semester=3, prerequisites=[parent])
+            boosted = Course(course_id="EPVO-102", title="Общие вопросы технологий",
+                             domain="Информационные технологии", credits=5,
+                             recommended_semester=3)
+            duplicate = Course(course_id="EPVO-103", title="Основы антикоррупционной культуры",
+                               domain="Информационные технологии", credits=5,
+                               recommended_semester=1)
+            db.add_all([version, parent, strong, boosted, duplicate])
+            db.flush()
+            db.add_all([
+                MatchScore(project_version_id=version.id, course_id=strong.id,
+                           lo_id=lo.id, score=0.9,
+                           evidence_json={"semantic_score": 0.568}),
+                MatchScore(project_version_id=version.id, course_id=boosted.id,
+                           lo_id=lo.id, score=1.0,
+                           evidence_json={"semantic_score": 0.453}),
+                MatchScore(project_version_id=version.id, course_id=duplicate.id,
+                           lo_id=lo.id, score=0.95,
+                           evidence_json={"semantic_score": 0.78}),
+            ])
+            db.flush()
+            problem = build_joint_frontier(version, db, limit=10)
+            assert {strong.id, parent.id}.issubset(problem.candidates_by_id)
+            assert problem.candidates_by_id[strong.id].lo_scores["ON1"] == 0.568
+            assert problem.candidates_by_id[boosted.id].lo_scores["ON1"] == 0.453
+            assert problem.candidates_by_id[strong.id].prerequisites == (parent.id,)
+            assert duplicate.id not in problem.candidates_by_id
+            assert problem.exclusions["goso_duplicate"] == 1
+    finally:
+        engine.dispose()
