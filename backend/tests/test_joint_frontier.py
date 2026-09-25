@@ -1,6 +1,41 @@
 from app.planner import domain_evidence, goso
 
 
+def test_shared_domain_policy_matches_verifier_for_unscoped_real_courses():
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from app.planner.verifier import verify_curriculum_plan
+
+    domains = ("Информационные технологии", "Общественное здоровье")
+    schedule = {
+        1: [{"course_id": 100, "title": "IT", "domain": domains[0], "credits": 5}],
+        2: [{"course_id": 200, "title": "Health", "domain": domains[1], "credits": 6}],
+    }
+    version = SimpleNamespace(
+        id=1,
+        project=SimpleNamespace(
+            domain1=domains[0], domain2=domains[1],
+            constraints_json={"total_semesters": 2, "total_credits": 11,
+                              "max_credits_per_semester": 6},
+        ),
+        learning_outcomes=[],
+    )
+    result = verify_curriculum_plan(schedule, version, MagicMock())
+    expected = [0.0, 0.0]
+    for items in schedule.values():
+        for item in items:
+            shares = domain_evidence.course_domain_shares(
+                item_domain=item["domain"], canonical_domain="",
+                project_domains=domains, scoped_shares=None,
+            )
+            expected[0] += item["credits"] * shares[0]
+            expected[1] += item["credits"] * shares[1]
+    assert result["domain_credits"] == {
+        "domain1": expected[0], "domain2": expected[1],
+    }
+
+
 def test_goso_duplicate_cannot_count_as_professional_lo_support():
     assert hasattr(goso, "is_redundant_goso_foundation")
     is_redundant_goso_foundation = goso.is_redundant_goso_foundation
