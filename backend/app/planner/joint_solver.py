@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import time
+import math
 import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import coo_array
 
+from app.config import settings
 from app.planner.joint_contract import PlanningFailure, PlanningProblem, PlanningResult
 from app.planner.verifier import MATCH_THRESHOLD, REAL_COURSE_LO_THRESHOLD
 
@@ -120,6 +122,18 @@ def solve_joint(
             if course.lo_scores.get(code, 0.0) >= REAL_COURSE_LO_THRESHOLD
         }
         add(covering, 1.0, np.inf)
+        # The independent verifier combines multiple direct-course evidence
+        # scores as 1 - product(1 - score). Taking -log turns that exact
+        # multiplicative gate into a linear binary constraint.
+        coverage_required = -math.log1p(-float(settings.COVERAGE_THRESHOLD))
+        combined_coverage = {
+            x_index[course.course_id]: (
+                coverage_required + 1.0 if course.lo_scores[code] >= 1.0
+                else -math.log1p(-max(0.0, course.lo_scores[code]))
+            )
+            for course in candidates if course.lo_scores.get(code, 0.0) > 0.0
+        }
+        add(combined_coverage, coverage_required, np.inf)
     for index, minimum in enumerate(problem.domain_minima):
         if minimum <= 0:
             continue

@@ -158,3 +158,15 @@ def test_joint_solver_reports_bounded_frontier_without_claiming_global_infeasibi
     with pytest.raises(PlanningFailure) as exc:
         solve_joint(setup, time_limit_seconds=5)
     assert exc.value.status == "no_solution_in_bounded_frontier"
+
+
+def test_joint_solver_enforces_verifier_combined_lo_coverage_not_just_real_threshold():
+    from app.planner.joint_solver import solve_joint
+
+    setup = problem([
+        candidate(1, 10, (1,), {"ON1": 0.55}, utility=2.0),
+        candidate(2, 10, (1,), {"ON1": 0.65}, utility=1.0),
+        candidate(3, 10, (2,), {"ON2": 0.65}, utility=1.0),
+    ])
+    result = solve_joint(setup, time_limit_seconds=5)
+    assert result.selected_course_ids == frozenset({2, 3})
