@@ -768,7 +768,9 @@ export default function PlanBuilder() {
         }
     }
 
-    if (loading) return <LoadingSpinner />
+    if (loading) return <LoadingSpinner fullPage={false}
+        message={localize({ru: 'Загружаем сохранённый план', kk: 'Сақталған жоспар жүктелуде', en: 'Loading the saved plan'})}
+        detail={localize({ru: 'Читаем данные программы. Повторное построение не запускается.', kk: 'Бағдарлама деректері оқылуда. Қайта құру іске қосылмайды.', en: 'Reading programme data. No new build is being started.'})} />
 
     const currentPlan = variants ? variants[activeVariant] : null
     const creditVerification = currentPlan?.metrics?.verification || currentPlan?.verification || {}

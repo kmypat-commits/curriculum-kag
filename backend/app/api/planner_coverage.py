@@ -32,7 +32,7 @@ from app.services.content_localization import (
     course_translation_status,
 )
 from app.services.epvo_repository import epvo_row_matches_education_level
-from app.services.plan_reporting import academic_classification as _academic_classification
+from app.services.plan_reporting import academic_classification as _academic_classification, variant_response_metrics
 
 
 router = APIRouter()
@@ -710,7 +710,7 @@ def get_variants(
             "plan_id": plan.id,
             "variant_type": plan.variant_type,
             "is_active": plan.is_active == 1,
-            "metrics": metrics,
+            "metrics": variant_response_metrics(metrics, include_explanations=include_explanations),
             "metrics_current": persisted_metrics_current(metrics),
             "verification": metrics.get("verification", {}),
             "schedule": schedule,

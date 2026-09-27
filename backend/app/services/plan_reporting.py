@@ -1,6 +1,12 @@
 """Pure reporting helpers for plan API responses."""
 from __future__ import annotations
 
+
+def variant_response_metrics(metrics: dict, *, include_explanations: bool) -> dict:
+    """Keep immutable audit evidence in storage, not in every summary read."""
+    return {key: value for key, value in metrics.items()
+            if include_explanations or key != "selection_evidence_snapshot"}
+
 from app.models.bridge_module import BridgeModule
 from app.models.course import Course
 from app.models.plan import PlanItem
