@@ -32,3 +32,15 @@ def test_program_spec_hash_changes_when_the_curriculum_command_changes():
     changed = build_program_spec_snapshot(_version([outcome]))
     changed["goal"] = "Prepare research specialists."
     assert program_spec_hash(baseline) != program_spec_hash(changed)
+
+
+def test_snapshot_does_not_change_when_live_optional_requirements_are_edited():
+    version = _version([])
+    version.project.constraints_json["curriculum_requirements"] = {
+        "enabled": True, "required_course_ids": [1],
+    }
+    snapshot = build_program_spec_snapshot(version)
+    original_hash = program_spec_hash(snapshot)
+    version.project.constraints_json["curriculum_requirements"]["required_course_ids"].append(2)
+    assert snapshot["constraints"]["curriculum_requirements"]["required_course_ids"] == [1]
+    assert program_spec_hash(snapshot) == original_hash

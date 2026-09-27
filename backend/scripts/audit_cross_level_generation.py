@@ -37,6 +37,7 @@ from app.database import SessionLocal
 from app.kag.scoring import compute_all_matches
 from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.course_policy import project_domain_terms
+from app.planner.credit_policy import total_credits_accepted
 from app.models.project import LearningOutcome, Project, ProjectVersion
 from app.models.course import Course
 from app.models.bridge_module import BridgeModule
@@ -459,6 +460,8 @@ def main() -> None:
                 if bridge_id in bridge_rows
             ]
             variants[code] = {
+                "credit_adjustment_required": verification.get("credit_adjustment_required", False),
+                "credit_adjustment_warning": verification.get("credit_adjustment_warning"),
                 "credits": sum(int(item.get("credits") or 0) for items in schedule.values() for item in items),
                 "semester_loads": verification.get("semester_loads"),
                 "hard_violations": verification.get("hard_violation_count"),
@@ -673,7 +676,7 @@ def main() -> None:
             "max_allowed_bridges": max_allowed_bridges,
             "min_prerequisite_edges": min_prerequisite_edges,
             "passed": variants_are_distinct and all(
-                row["credits"] == total_credits
+                total_credits_accepted(row["credits"], constraints)
                 and row["hard_violations"] == 0
                 and not row["credit_integrity_violations"]
                 and not row["foreign_professional_titles"]

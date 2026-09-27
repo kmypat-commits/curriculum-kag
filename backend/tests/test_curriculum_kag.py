@@ -849,16 +849,17 @@ def test_load_repair_transfers_only_flexible_bridge_credits():
     assert next(item for item in result[2] if item.get("bridge_module_id") == 102)["credits"] == 4
 
 
-def test_verifier_accepts_plus_five_total_and_plus_three_load():
+def test_verifier_rejects_excess_total_for_two_semesters_without_load_violation():
     schedule = {1: [{"course_id": 1, "credits": 29, "prerequisites": []}], 2: [{"course_id": 2, "credits": 32, "prerequisites": []}]}
     project = SimpleNamespace(constraints_json={"total_semesters": 2, "total_credits": 60, "max_credits_per_semester": 30})
     version = SimpleNamespace(id=1, project=project, learning_outcomes=[])
     db = MagicMock()
     result = verify_curriculum_plan(schedule, version, db)
-    assert result["feasible"] is True
+    assert result["feasible"] is False
     assert result["insufficient_evidence"] is False
     assert result["total_credits"] == 61
     assert result["semester_load_violations"] == []
+    assert result["credit_violations"]
 
 
 def test_offline_bridge_is_domain_aware():

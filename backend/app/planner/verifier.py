@@ -270,7 +270,8 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     ]
     credit_violations = []
     if total_credits < target_credits: credit_violations.append({"reason": "below_target", "actual": total_credits, "target": target_credits})
-    credit_tolerance = max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE)))
+    from app.planner.credit_policy import total_credit_tolerance
+    credit_tolerance = total_credit_tolerance(constraints, legacy_default=TOTAL_CREDIT_TOLERANCE)
     if total_credits > target_credits + credit_tolerance: credit_violations.append({"reason": "above_tolerance", "actual": total_credits, "maximum": target_credits + credit_tolerance})
     project_domains = [
         getattr(project_version.project, "domain1", "") or "",
@@ -646,6 +647,12 @@ def verify_curriculum_plan(schedule: Dict[int, List[Dict]], project_version: Pro
     hard_count = len(prerequisite_violations) + len(load_violations) + len(credit_violations) + len(domain_quota_violations) + len(goso_compliance["violations"]) + course_lo_violations + real_lo_violations + bridge_overflow
     result = {"feasible": hard_count == 0, "quality_passed": not quality_violations and goso_compliance["compliant"], "insufficient_evidence": insufficient_evidence, "hard_violation_count": hard_count, "course_lo_violations": course_lo_violations, "bridge_module_count": bridge_count, "bridge_module_limit": bridge_limit, "bridge_module_overflow": bridge_overflow, "prerequisite_violations": prerequisite_violations, "semester_load_violations": load_violations, "goso_load_exemptions": sorted(goso_load_exemptions), "regulatory_credits_by_semester": regulatory_credits_by_semester, "credit_violations": credit_violations, "domain_quota_violations": domain_quota_violations, "domain_credits": {"domain1": round(domain_credits[0], 2), "domain2": round(domain_credits[1], 2)}, "domain_quota_base_credits": domain_quota_base_credits, "domain_quota_tolerance_credits": domain_quota_tolerance, "goso_compliance": goso_compliance, "pedagogical_audit": pedagogical_audit, "semester_loads": semester_loads, "nominal_semester_load": round(nominal_load, 2), "allowed_semester_load": {"min": round(min_load, 2), "max": round(max_load, 2)}, "target_credits": target_credits, "total_credits": total_credits, "credit_tolerance": credit_tolerance, "maximum_total_credits": target_credits + credit_tolerance, "min_lo_coverage": round(min_coverage, 4), "average_lo_coverage": round(average_coverage, 4), "coverage_threshold": settings.COVERAGE_THRESHOLD, "coverage_by_lo": coverage_by_lo, "evidence_count": evidence_count, "redundancy": redundancy, "redundancy_threshold": redundancy_threshold, "strict_redundancy_threshold": REDUNDANCY_THRESHOLD, "embedding_mode": embedding_mode, "quality_violations": quality_violations}
     result["lo_without_real_course"] = lo_without_real_course
+    result["credit_adjustment_required"] = target_credits < total_credits <= target_credits + credit_tolerance
+    result["credit_adjustment_warning"] = (
+        f"План содержит {total_credits} кредитов при цели {target_credits}; "
+        "превышение в пределах допуска, требуется ручная корректировка."
+        if result["credit_adjustment_required"] else None
+    )
     return result
 
 

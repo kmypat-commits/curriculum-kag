@@ -26,8 +26,9 @@ class PlanningProblem:
     min_load: float
     max_load: float
     domain_minima: tuple[float, float]
-    exclusions: dict[str, int]
+    exclusions: dict[str, object]
     frontier_truncated: bool
+    required_course_ids: tuple[int, ...] = ()
 
     @property
     def candidates_by_id(self) -> dict[int, Candidate]:
@@ -40,6 +41,7 @@ class PlanningResult:
     selected_course_ids: frozenset[int]
     objective: float
     solver_seconds: float
+    optimality_proven: bool = True
 
 
 class PlanningFailure(RuntimeError):

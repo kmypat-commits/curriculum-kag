@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any
 
 
@@ -29,7 +30,7 @@ def build_program_spec_snapshot(version: Any) -> dict[str, Any]:
         "goal": str(project.goal or ""),
         "domain1": str(project.domain1 or ""),
         "domain2": str(project.domain2 or ""),
-        "constraints": dict(project.constraints_json or {}),
+        "constraints": deepcopy(project.constraints_json or {}),
         "learning_outcomes": outcomes,
     }
 

@@ -344,7 +344,10 @@ def _assign_epvo_prerequisites(courses: list[Course], replace_existing: bool = F
     }
 
     def subject_tokens(course: Course) -> set[str]:
-        return _tokens(" ".join((course.title or "", course.description or ""))) - stopwords
+        # A catalogue description may be generic or inherited from another
+        # programme after deduplication. It cannot establish a prerequisite
+        # between two otherwise unrelated discipline titles.
+        return _tokens(course.title or "") - stopwords
 
     def is_foundation(course: Course) -> bool:
         title = _key(course.title)

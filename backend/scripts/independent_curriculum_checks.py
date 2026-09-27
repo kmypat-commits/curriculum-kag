@@ -34,7 +34,8 @@ def check_variant(variant: dict, *, target_credits: int, max_load: int,
             issues.append({"reason": "duplicate_title", "title": title})
         titles.add(key)
     computed_total = sum(loads.values())
-    if computed_total != target_credits:
+    maximum_total = target_credits + (4 if target_credits == 240 and num_semesters == 8 else 0)
+    if not target_credits <= computed_total <= maximum_total:
         issues.append({"reason": "target_credits", "actual": computed_total, "required": target_credits})
     if computed_total != int(variant.get("credits") or 0):
         issues.append({"reason": "reported_credit_mismatch", "computed": computed_total, "reported": variant.get("credits")})

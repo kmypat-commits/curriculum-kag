@@ -16,6 +16,7 @@ from app.models.embedding import MatchScore
 from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.planner.course_policy import education_level_course_allowed
+from app.planner.course_policy import project_domain_terms
 from app.planner.domain_evidence import course_domain_shares, domain_label_matches
 from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.goso import ensure_goso_items, is_redundant_goso_foundation
@@ -24,9 +25,33 @@ from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.scheduler_utils import title_key
 from app.planner.scoped_epvo_semesters import apply_scoped_epvo_semesters
 from app.planner.semester_rules import foundation_max_semester, minimum_appropriate_semester
+from app.planner.scheduler_domain_rules import has_foreign_professional_title
 from app.planner.variant_scope import build_epvo_scope_index
-from app.planner.verifier import LOAD_TOLERANCE, MATCH_THRESHOLD, TOTAL_CREDIT_TOLERANCE
+from app.planner.verifier import LOAD_TOLERANCE, MATCH_THRESHOLD, REAL_COURSE_LO_THRESHOLD, TOTAL_CREDIT_TOLERANCE
 from app.services.epvo_repository import epvo_row_matches_education_level
+
+
+def lo_pipeline_counts(
+    evidence: Mapping[int, Mapping[str, float]],
+    catalogue: Mapping[int, Candidate],
+    admitted: tuple[Candidate, ...],
+    required_los: tuple[str, ...],
+) -> dict[str, dict[str, int | float]]:
+    """Count verifier-strength real LO evidence at each frontier boundary."""
+    return {
+        code: {
+            "scored": sum(scores.get(code, 0.0) >= REAL_COURSE_LO_THRESHOLD
+                          for scores in evidence.values()),
+            "scoped": sum(course.lo_scores.get(code, 0.0) >= REAL_COURSE_LO_THRESHOLD
+                          for course in catalogue.values()),
+            "admitted": sum(course.lo_scores.get(code, 0.0) >= REAL_COURSE_LO_THRESHOLD
+                            for course in admitted),
+            "max_scored": round(max(
+                (scores.get(code, 0.0) for scores in evidence.values()), default=0.0,
+            ), 4),
+        }
+        for code in required_los
+    }
 
 
 
@@ -141,6 +166,7 @@ def build_joint_frontier(
     constraints = version.project.constraints_json or {}
     semesters = int(constraints.get("total_semesters") or 8)
     domains = (str(version.project.domain1 or ""), str(version.project.domain2 or ""))
+    admission_domains = project_domain_terms(version, db)
     professional = {
         lo.id: str(lo.lo_code)
         for lo in version.learning_outcomes
@@ -270,7 +296,8 @@ def build_joint_frontier(
     }
     catalogue: dict[int, Candidate] = {}
     duplicate_ids: set[int] = set(required_ids)
-    exclusions = {"out_of_domain_or_level": 0, "no_legal_semester": 0}
+    exclusions = {"out_of_domain_or_level": 0, "no_legal_semester": 0,
+                  "foreign_professional_context": 0}
     for cid in sorted(loaded):
         course = loaded[cid]
         item = {
@@ -300,6 +327,9 @@ def build_joint_frontier(
             required_ids=required_ids,
         ):
             duplicate_ids.add(cid)
+        if has_foreign_professional_title(course, admission_domains):
+            exclusions["foreign_professional_context"] += 1
+            continue
         if not education_level_course_allowed(course, constraints.get("education_level")):
             exclusions["out_of_domain_or_level"] += 1
             continue
@@ -345,7 +375,11 @@ def build_joint_frontier(
     )
     exclusions.update(chain_exclusions)
     exclusions["seed_truncated"] = omitted_seed_count
-    tolerance = max(0, int(constraints.get("credit_tolerance", TOTAL_CREDIT_TOLERANCE) or 0))
+    exclusions["lo_evidence_pipeline"] = lo_pipeline_counts(
+        evidence, catalogue, candidates, tuple(sorted(set(professional.values()))),
+    )
+    from app.planner.credit_policy import total_credit_tolerance
+    tolerance = total_credit_tolerance(constraints, legacy_default=TOTAL_CREDIT_TOLERANCE)
     target = int(constraints.get("total_credits") or 240)
     fixed_credits = sum(int(item.get("credits") or 0) for item in fixed_items)
     quota_base = max(0, target - fixed_credits)

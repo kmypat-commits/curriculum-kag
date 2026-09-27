@@ -242,6 +242,16 @@ def ensure_goso_learning_outcomes(version: ProjectVersion, db: Session) -> List[
         return []
     level = str(constraints.get("education_level") or "bachelor").lower()
     definitions = GOSO_PROGRAM_LOS.get(level, [])
+    if level == "master":
+        # A profile master's regulatory block differs from the scientific
+        # track. Do not inject outcomes of mandatory units absent from the
+        # selected ruleset. User-supplied outcomes are never removed here.
+        applicable_codes = {
+            GOSO_COURSE_LO_CODES.get(item[0])
+            for item in _definitions_for_constraints(constraints)
+        }
+        definitions = [(code, text) for code, text in definitions
+                       if code in applicable_codes]
     existing = {lo.lo_code: lo for lo in version.learning_outcomes}
     next_order = max((int(lo.order_index or 0) for lo in version.learning_outcomes), default=0) + 1
     result = []

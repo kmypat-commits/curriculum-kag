@@ -97,7 +97,8 @@ def build_verified_joint_schedule(
             fingerprint = _schedule_fingerprint(schedule)
             attempt = {
                 "frontier_hash": last_frontier_hash, "limit": limit,
-                "solver_status": "optimal", "solver_seconds": result.solver_seconds,
+                "solver_status": "optimal" if result.optimality_proven else "feasible_at_limit",
+                "solver_seconds": result.solver_seconds,
                 "schedule_fingerprint": fingerprint,
             }
             placement = frozenset(
@@ -160,6 +161,7 @@ def build_verified_joint_schedule(
                     "solver_seconds": round(result.solver_seconds, 3),
                     "total_seconds": round(time.perf_counter() - started, 3),
                     "objective": result.objective,
+                    "optimality_proven": result.optimality_proven,
                     "fingerprint": fingerprint,
                     "selected_course_ids": sorted(result.selected_course_ids),
                     "attempts": attempts + [{**attempt, "boundary_status": "accepted"}],

@@ -1,6 +1,26 @@
 from app.planner import domain_evidence, goso
 
 
+def test_lo_pipeline_counts_distinguish_scoring_scope_and_chain_loss():
+    from types import SimpleNamespace
+    from app.planner.joint_frontier import lo_pipeline_counts
+
+    evidence = {
+        1: {"ON1": 0.61}, 2: {"ON1": 0.72},
+        3: {"ON2": 0.58},
+    }
+    catalogue = {
+        1: SimpleNamespace(lo_scores=evidence[1]),
+        3: SimpleNamespace(lo_scores=evidence[3]),
+    }
+    admitted = (catalogue[3],)
+    assert lo_pipeline_counts(evidence, catalogue, admitted, ("ON1", "ON2", "ON3")) == {
+        "ON1": {"scored": 2, "scoped": 1, "admitted": 0, "max_scored": 0.72},
+        "ON2": {"scored": 1, "scoped": 1, "admitted": 1, "max_scored": 0.58},
+        "ON3": {"scored": 0, "scoped": 0, "admitted": 0, "max_scored": 0.0},
+    }
+
+
 def test_shared_domain_policy_matches_verifier_for_unscoped_real_courses():
     from types import SimpleNamespace
     from unittest.mock import MagicMock
@@ -248,6 +268,9 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             wrong_level = Course(course_id="EPVO-900", title="Магистерский курс информатики",
                                  domain="Информационные технологии", credits=5,
                                  recommended_semester=3)
+            foreign = Course(course_id="EPVO-104", title="Финансовая грамотность и навыки предпринимательства",
+                             domain="Информационные технологии", credits=5,
+                             recommended_semester=3)
             wrong_level_source = EpvoDisciplineNormalized(
                 id=900, canonical_title=wrong_level.title,
                 dedup_fingerprint="wrong-level-900", group_codes=["M100"],
@@ -258,13 +281,13 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
                     id=epvo_id, canonical_title=title,
                     dedup_fingerprint=f"valid-level-{epvo_id}",
                     group_codes=["B074"], direction_codes=["6B073"],
-                    typical_semester={100: 1, 101: 2, 102: 3}[epvo_id],
+                    typical_semester={100: 1, 101: 2, 102: 3, 104: 3}[epvo_id],
                 )
                 for epvo_id, title in ((100, parent.title), (101, strong.title),
-                                       (102, boosted.title))
+                                       (102, boosted.title), (104, foreign.title))
             ]
             db.add_all([version, parent, strong, boosted, duplicate,
-                        wrong_level, wrong_level_source, *valid_sources])
+                        wrong_level, foreign, wrong_level_source, *valid_sources])
             db.flush()
             db.add_all([
                 MatchScore(project_version_id=version.id, course_id=parent.id,
@@ -282,6 +305,9 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
                 MatchScore(project_version_id=version.id, course_id=wrong_level.id,
                            lo_id=lo.id, score=0.95,
                            evidence_json={"semantic_score": 0.78}),
+                MatchScore(project_version_id=version.id, course_id=foreign.id,
+                           lo_id=lo.id, score=0.95,
+                           evidence_json={"semantic_score": 0.78}),
             ])
             db.flush()
             problem = build_joint_frontier(version, db, limit=10)
@@ -294,6 +320,7 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             assert problem.candidates_by_id[strong.id].prerequisites == (parent.id,)
             assert duplicate.id not in problem.candidates_by_id
             assert wrong_level.id not in problem.candidates_by_id
+            assert foreign.id not in problem.candidates_by_id
             assert problem.exclusions["goso_duplicate"] == 1
     finally:
         engine.dispose()

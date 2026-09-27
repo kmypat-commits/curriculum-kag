@@ -9,6 +9,7 @@ from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import coo_array
 
 from app.config import settings
+from app.planner.discipline_identity import discipline_identity
 from app.planner.joint_contract import PlanningFailure, PlanningProblem, PlanningResult
 from app.planner.verifier import MATCH_THRESHOLD, REAL_COURSE_LO_THRESHOLD
 
@@ -75,6 +76,32 @@ def solve_joint(
         sparse_rows.append(coefficients)
         lower.append(minimum)
         upper.append(maximum)
+
+    for cid in problem.required_course_ids:
+        if cid in fixed_semester:
+            continue
+        if cid not in x_index:
+            raise PlanningFailure("required_requirements_rejected", {
+                "reason": "required_course_not_admissible", "course_id": cid,
+                "frontier_truncated": problem.frontier_truncated,
+            })
+        add({x_index[cid]: 1.0}, 1.0, 1.0)
+
+    # Different catalogue IDs may represent the same discipline, including
+    # a duplicate of a mandatory regulatory unit. Enforce this during choice,
+    # not by deleting courses afterwards and breaking credits/LO coverage.
+    discipline_key = discipline_identity
+    fixed_titles = {discipline_key(item) for items in problem.fixed_schedule.values()
+                    for item in items if discipline_key(item)}
+    title_groups = {}
+    for course in candidates:
+        key = discipline_key(course.item)
+        if key:
+            title_groups.setdefault(key, []).append(course.course_id)
+    for key, ids in title_groups.items():
+        if key in fixed_titles or len(ids) > 1:
+            add({x_index[cid]: 1.0 for cid in ids}, 0.0,
+                0.0 if key in fixed_titles else 1.0)
 
     for course in candidates:
         cid = course.course_id
@@ -189,7 +216,7 @@ def solve_joint(
         constraints=LinearConstraint(matrix, np.asarray(lower), np.asarray(upper)),
         options={"time_limit": float(time_limit_seconds), "presolve": True},
     )
-    if result.status != 0 or result.x is None:
+    if result.status not in {0, 1} or result.x is None:
         status = (
             "solver_timeout" if result.status == 1 and "time" in str(result.message).lower()
             else "solver_limit" if result.status == 1
@@ -197,22 +224,47 @@ def solve_joint(
             else "infeasible_with_complete_frontier" if result.status == 2
             else "solver_error"
         )
+        necessary_bounds = {
+            "target_credits": problem.target_credits,
+            "max_total_credits": fixed_total + sum(
+                int(course.item["credits"]) for course in candidates
+            ),
+            "los_without_real_course": [
+                code for code in problem.required_los
+                if not any(
+                    course.lo_scores.get(code, 0.0) >= REAL_COURSE_LO_THRESHOLD
+                    for course in candidates
+                )
+            ],
+        }
         raise PlanningFailure(status, {
             "scipy_status": int(result.status), "message": str(result.message),
             "frontier_truncated": problem.frontier_truncated,
             "candidate_count": len(candidates), "exclusions": problem.exclusions,
+            "necessary_bounds": necessary_bounds,
         })
-    if np.max(np.abs(result.x - np.round(result.x))) > 1e-6:
+    values = np.asarray(result.x, dtype=float)
+    if values.shape != (nvars,) or not np.all(np.isfinite(values)):
+        raise PlanningFailure("solver_error", {"reason": "invalid_solution_vector"})
+    if np.max(np.abs(values - np.round(values))) > 1e-6:
         raise PlanningFailure("solver_error", {"reason": "fractional_solution"})
+    # Validate the rounded incumbent against EVERY constraint. A time limit
+    # can leave a useful feasible plan without proving objective optimality.
+    values = np.round(values)
+    activity = matrix @ values
+    if (np.any(values < 0) or np.any(values > 1)
+            or np.any(activity < np.asarray(lower) - 1e-6)
+            or np.any(activity > np.asarray(upper) + 1e-6)):
+        raise PlanningFailure("solver_error", {"reason": "infeasible_solution_vector"})
     schedule = {semester: [dict(item) for item in problem.fixed_schedule[semester]]
                 for semester in semesters}
     selected: set[int] = set()
     for course in candidates:
-        if result.x[x_index[course.course_id]] < 0.5:
+        if values[x_index[course.course_id]] < 0.5:
             continue
         selected.add(course.course_id)
         placements = [semester for semester in course.allowed_semesters
-                      if result.x[y_index[course.course_id, semester]] > 0.5]
+                      if values[y_index[course.course_id, semester]] > 0.5]
         if len(placements) != 1:
             raise PlanningFailure("solver_error", {
                 "reason": "invalid_placement", "course_id": course.course_id,
@@ -220,5 +272,6 @@ def solve_joint(
         schedule[placements[0]].append(dict(course.item))
     return PlanningResult(
         schedule=schedule, selected_course_ids=frozenset(selected),
-        objective=float(result.fun), solver_seconds=time.perf_counter() - started,
+        objective=float(objective @ values), solver_seconds=time.perf_counter() - started,
+        optimality_proven=result.status == 0,
     )

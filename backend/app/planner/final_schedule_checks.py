@@ -19,17 +19,22 @@ def audit_final_schedule_boundary(
     is_general_course: Callable[[Any], bool],
 ) -> dict[str, Any]:
     """Run the non-mutating checks required before plan publication."""
+    admission = audit_final_course_admission(schedule, project_version, db)
+    # Reuse DB-verified source scope, not user-supplied schedule flags or a
+    # stale canonical domain inherited during EPVO deduplication. Scope alone
+    # cannot bypass LO, level, foreign-context or semester admission failures.
+    scoped_ids = set(admission.get("scoped_course_ids", ())) if admission["passed"] else set()
     invalid_domain_courses = find_invalid_project_domain_courses(
         schedule,
         db,
         project_domains,
         declared_secondary_domain,
-        is_project_domain,
+        lambda course: is_project_domain(course) or course.id in scoped_ids,
         is_general_course=is_general_course,
     )
     return {
         "invalid_domain_courses": invalid_domain_courses,
-        "admission": audit_final_course_admission(schedule, project_version, db),
+        "admission": admission,
     }
 
 

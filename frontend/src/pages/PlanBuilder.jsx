@@ -771,6 +771,7 @@ export default function PlanBuilder() {
     if (loading) return <LoadingSpinner />
 
     const currentPlan = variants ? variants[activeVariant] : null
+    const creditVerification = currentPlan?.metrics?.verification || currentPlan?.verification || {}
     const currentPlanCanActivate = Boolean(currentPlan?.plan_id && !currentPlan?.is_active)
     const currentPlanHasHardViolations = Number(
         (currentPlan?.metrics?.verification || currentPlan?.verification || {}).hard_violation_count || 0
@@ -1156,6 +1157,15 @@ export default function PlanBuilder() {
                                             : t('quality_repair_notice')}
                                     </strong>{' '}
                                     {t('quality_notice_desc')}
+                                    {creditVerification.credit_adjustment_required && (
+                                        <p role="status" style={{ margin: '8px 0 0' }}>
+                                            {localize({
+                                                ru: `План содержит ${creditVerification.total_credits} кредитов при цели ${creditVerification.target_credits}. Превышение в пределах допуска; перед утверждением скорректируйте кредиты вручную.`,
+                                                kk: `Жоспарда ${creditVerification.total_credits} кредит, мақсат — ${creditVerification.target_credits}. Артық кредит рұқсат шегінде; бекіту алдында кредиттерді қолмен түзетіңіз.`,
+                                                en: `The plan contains ${creditVerification.total_credits} credits against a target of ${creditVerification.target_credits}. The surplus is within the allowance; adjust credits manually before approval.`,
+                                            })}
+                                        </p>
+                                    )}
                                 </div>
                                 {(!currentPlan.metrics.international_quality.passed || currentPlan.metrics.international_quality.checks?.some(check => !check.passed)) && (
                                     <button

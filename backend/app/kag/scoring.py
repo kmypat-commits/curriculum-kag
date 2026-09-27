@@ -1,7 +1,7 @@
 ﻿from typing import List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import String, cast, func, or_
-from app.models.course import Course
+from app.models.course import Course, course_prerequisites
 from app.models.project import LearningOutcome, ProjectVersion
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized, RawEpvoLearningOutcome
@@ -11,6 +11,7 @@ from app.kag.indexing import index_all_courses
 from app.models.embedding import Embedding
 from app.config import settings
 from app.planner.domain_evidence import domain_label_matches
+from app.planner.verifier import REAL_COURSE_LO_THRESHOLD
 
 
 _DOMAIN_FAMILY_TERMS = (
@@ -115,7 +116,7 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
             RawEpvoLearningOutcome.payload_json,
         ).all()
         raw_cache.update({
-            (int(program_source_id), str(source_key)): _raw_lo_text(payload_json or {})
+            (str(program_source_id), str(source_key)): _raw_lo_text(payload_json or {})
             for program_source_id, source_key, payload_json in raw_rows
         })
         db.info["epvo_raw_lo_text_cache_loaded"] = True
@@ -127,7 +128,10 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
             EpvoDisciplineLoLink.discipline_id == discipline_id,
         ).limit(EPVO_EXPERT_LINK_LIMIT).all()
     for link in links:
-        raw_key = (link.program_source_id, link.lo_source_key)
+        raw_key = (str(link.program_source_id), str(link.lo_source_key))
+        if raw_key not in raw_cache and str(link.program_source_id).isdigit():
+            # Existing long-lived sessions may still hold the old integer key.
+            raw_key = (int(link.program_source_id), str(link.lo_source_key))
         if raw_key not in raw_cache:
             raw_cache[raw_key] = ""
         source_text = raw_cache[raw_key]
@@ -149,6 +153,25 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
             }
     cache[cache_key] = best
     return best
+
+
+def _expert_candidate_rows(
+    lo: LearningOutcome, courses: List[Course], db: Session, *, limit: int,
+) -> List[Dict]:
+    """Retrieve real courses backed by source LO links, even with weak title overlap."""
+    if limit < 1:
+        return []
+    prefetched = db.info.get("epvo_expert_links_cache")
+    ranked = []
+    for course in courses:
+        discipline_id = _epvo_id_from_course(course)
+        if discipline_id is None or (prefetched is not None and not prefetched.get(discipline_id)):
+            continue
+        score = float(_epvo_expert_signal(course, lo, db).get("score") or 0.0)
+        if score >= REAL_COURSE_LO_THRESHOLD:
+            ranked.append((score, int(course.id)))
+    ranked.sort(key=lambda row: (-row[0], row[1]))
+    return [{"course_id": cid, "retrieval_score": score} for score, cid in ranked[:limit]]
 
 
 def calculate_semantic_similarity(
@@ -390,6 +413,37 @@ def _lightweight_candidate_courses(
     return [{"course_id": course.id, "retrieval_score": float(rank(course)[0])} for course in ranked[:limit]]
 
 
+def _extend_with_prerequisites(
+    roots: List[Dict], parents: Dict[int, tuple[int, ...]], allowed_ids: set[int],
+) -> List[Dict]:
+    """Score scoped ancestors of retrieved courses before planner admission.
+
+    Retrieval is allowed to rank an advanced course, but the final planner
+    cannot select it if its foundation was never scored against any LO. This
+    adds real in-scope ancestor cards only; it does not grant them evidence.
+    """
+    expanded = [dict(row) for row in roots]
+    seen = {int(row["course_id"]) for row in roots}
+    visiting: set[int] = set()
+
+    def visit(course_id: int) -> None:
+        if course_id in visiting:
+            return
+        visiting.add(course_id)
+        for parent_id in sorted(parents.get(course_id, ())):
+            if parent_id not in allowed_ids:
+                continue
+            visit(parent_id)
+            if parent_id not in seen:
+                expanded.append({"course_id": parent_id, "retrieval_score": 0.0})
+                seen.add(parent_id)
+        visiting.remove(course_id)
+
+    for row in roots:
+        visit(int(row["course_id"]))
+    return expanded
+
+
 def publish_match_scores(db: Session, project_version_id: int, match_scores: list[MatchScore]) -> None:
     """Atomically replace a version's evidence after a successful computation."""
     try:
@@ -490,6 +544,15 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
         course for course in all_courses
         if course.id in scoped_course_ids or _domain_matches(course, domain_filter)
     ]
+    project_course_ids = {int(course.id) for course in project_courses}
+    parent_rows = db.execute(course_prerequisites.select().where(
+        course_prerequisites.c.course_id.in_(project_course_ids or {-1})
+    )).fetchall()
+    project_parents: Dict[int, tuple[int, ...]] = {}
+    parent_sets: Dict[int, set[int]] = {}
+    for row in parent_rows:
+        parent_sets.setdefault(int(row.course_id), set()).add(int(row.prerequisite_id))
+    project_parents = {cid: tuple(sorted(ids)) for cid, ids in parent_sets.items()}
     localizations = course_localization_map(
         db,
         [course.id for course in project_courses],
@@ -601,6 +664,10 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                     lo, scoped_courses, limit=per_scope_limit, localizations=localizations
                 ):
                     by_course_id.setdefault(int(row["course_id"]), row)
+            for row in _expert_candidate_rows(
+                lo, project_courses, db, limit=max(settings.TOP_K_RETRIEVAL, 40),
+            ):
+                by_course_id.setdefault(int(row["course_id"]), row)
             top_courses = list(by_course_id.values())
             if progress_callback:
                 progress_callback({"stage": "retrieval_ready", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(top_courses)})
@@ -609,6 +676,9 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             top_courses = retrieve_top_k_courses_hybrid(
                 lo, db, k=settings.TOP_K_RETRIEVAL, domain_filter=domain_filter
             )
+        top_courses = _extend_with_prerequisites(
+            top_courses, project_parents, project_course_ids,
+        )
 
         lo_scores: List[float] = []
         pending_matches = []
@@ -645,7 +715,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
                 localizations.get(course.id),
                 lo_embedding=lo_embedding,
                 course_embedding=candidate_embeddings[candidate_index],
-                include_expert_signal=(not large_catalog_mode) and candidate_index < 12,
+                include_expert_signal=large_catalog_mode or candidate_index < 12,
             )
             candidate_index += 1
             pending_matches.append((course, match_result))

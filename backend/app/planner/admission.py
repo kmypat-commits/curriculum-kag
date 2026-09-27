@@ -232,4 +232,5 @@ def audit_final_course_admission(schedule: Dict, project_version: ProjectVersion
                 "recommended_semester": item.get("recommended_semester") or course.recommended_semester,
                 "selection_method": item.get("selection_method"),
             })
-    return {"checked_real_courses": len(real_items), "passed": not violations, "violations": violations}
+    return {"checked_real_courses": len(real_items), "passed": not violations,
+            "violations": violations, "scoped_course_ids": sorted(scoped_ids)}
