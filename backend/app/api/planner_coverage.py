@@ -38,14 +38,18 @@ from app.services.plan_reporting import academic_classification as _academic_cla
 router = APIRouter()
 
 @router.get("/{project_version_id}/variants")
-async def get_variants(
+def get_variants(
     project_version_id: int,
     include_descriptions: bool = Query(False),
     include_explanations: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get existing plan variants for a project version"""
+    """Read persisted variants in FastAPI's worker pool, not the ASGI loop.
+
+    All ORM and payload assembly below are synchronous. Keeping this route
+    synchronous prevents a slow plan read from stalling unrelated requests.
+    """
     from app.models.plan import Plan, PlanItem
     from app.services.epvo_repository import epvo_row_matches_education_level
 
