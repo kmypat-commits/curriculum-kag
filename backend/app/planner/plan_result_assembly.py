@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from app.models.bridge_module import BridgeModule
 from app.models.embedding import MatchScore
 from app.models.plan import Plan, PlanItem
-from app.models.project import LearningOutcome
+from app.models.project import LearningOutcome, ProjectVersion
+from app.planner.joint_contract import PlanningFailure
 
 
 def persist_plan_result(
@@ -32,6 +33,24 @@ def persist_plan_result(
     pass the exact schedule that was just verified, making the persisted plan
     and returned evidence a single publication boundary.
     """
+    version = db.get(ProjectVersion, project_version_id)
+    if version is None:
+        raise ValueError(f"Project version {project_version_id} not found")
+    excluded_ids = {
+        int(value)
+        for value in (version.project.constraints_json or {}).get("excluded_course_ids", ())
+        if str(value).isdigit()
+    }
+    selected_excluded = sorted({
+        int(item["course_id"])
+        for items in schedule.values() for item in items
+        if item.get("course_id") is not None
+        and int(item["course_id"]) in excluded_ids
+    })
+    if selected_excluded:
+        raise PlanningFailure("excluded_course_selected", {
+            "course_ids": selected_excluded, "variant": variant_type,
+        })
     plan = Plan(
         project_version_id=project_version_id,
         variant_type=variant_type,

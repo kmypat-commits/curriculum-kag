@@ -320,6 +320,39 @@ def test_verified_joint_build_persists_exact_schedule(monkeypatch):
             }
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("variant_type", ["A", "B", "C"])
+def test_publication_rejects_excluded_course_even_from_legacy_schedule(variant_type):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.database import Base
+    from app.models.plan import Plan
+    from app.models.project import Project, ProjectVersion
+    from app.planner.plan_result_assembly import persist_plan_result
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            version = ProjectVersion(
+                version_number=1,
+                project=Project(title="Excluded", domain1="IT", domain2="",
+                                constraints_json={"excluded_course_ids": [1158]}),
+            )
+            db.add(version)
+            db.flush()
+            with pytest.raises(PlanningFailure) as exc:
+                persist_plan_result(
+                    db=db, project_version_id=version.id, variant_type=variant_type,
+                    schedule={1: [{"course_id": 1158, "credits": 3}]},
+                    metrics={}, verification={"feasible": True}, commit=False,
+                )
+            assert exc.value.status == "excluded_course_selected"
+            assert db.query(Plan).count() == 0
+    finally:
+        engine.dispose()
 def test_planning_failure_exposes_structured_audit_context():
     from app.planner.joint_contract import PlanningFailure
 
