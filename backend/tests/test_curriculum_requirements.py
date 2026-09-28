@@ -78,3 +78,35 @@ def test_project_creation_rejects_forged_requirements():
         ProjectCreate(title="Programme", goal="Train specialists", domain1="ICT",
                       domain2="", learning_outcomes=[{"lo_code": "LO1", "lo_text": "Apply"}],
                       constraints=constraints)
+
+
+def test_enabled_requirements_reject_unknown_internal_course_ids():
+    from fastapi import HTTPException
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.api.projects import _validate_requirement_course_existence
+    from app.models.course import Course
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Course.__table__.create(engine)
+    with engine.begin() as connection:
+        connection.execute(Course.__table__.insert(), {
+            "id": 11, "course_id": "EPVO-11", "title": "Real course",
+            "domain": "ICT", "credits": 5,
+        })
+    with Session(engine) as db:
+        constraints = {"curriculum_requirements": {
+            "enabled": True,
+            "required_course_ids": [11, 12],
+            "core_blocks": [{"id": "web", "title": "Web",
+                             "accepted_course_ids": [11, 13]}],
+        }}
+        with pytest.raises(HTTPException) as exc:
+            _validate_requirement_course_existence(constraints, db)
+        assert exc.value.status_code == 422
+        assert exc.value.detail["code"] == "required_course_missing"
+        assert exc.value.detail["course_ids"] == [12, 13]
+
+        constraints["curriculum_requirements"]["enabled"] = False
+        _validate_requirement_course_existence(constraints, db)

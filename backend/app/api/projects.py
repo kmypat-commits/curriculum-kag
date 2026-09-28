@@ -1,4 +1,5 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
@@ -7,6 +8,7 @@ from typing import List, Optional, Dict
 from app.database import get_db
 from app.models.user import User
 from app.models.project import Project, ProjectVersion, LearningOutcome
+from app.models.course import Course
 from app.services.auth import get_current_user
 from app.services.rbac import has_role, require_permission
 from app.config import settings
@@ -120,6 +122,24 @@ def _validate_optional_requirements(constraints: Dict) -> None:
         constraints["curriculum_requirements"] = CurriculumRequirements.model_validate(
             constraints["curriculum_requirements"]
         ).model_dump()
+
+
+def _validate_requirement_course_existence(constraints: Dict, db: Session) -> None:
+    requirements = constraints.get("curriculum_requirements") or {}
+    if not requirements.get("enabled"):
+        return
+    requested = set(requirements.get("required_course_ids") or [])
+    for block in requirements.get("core_blocks") or []:
+        requested.update(block.get("accepted_course_ids") or [])
+    if not requested:
+        return
+    existing = set(db.execute(select(Course.id).where(Course.id.in_(requested))).scalars())
+    missing = sorted(requested - existing)
+    if missing:
+        raise HTTPException(status_code=422, detail={
+            "code": "required_course_missing", "course_ids": missing,
+            "message": "Указанные дисциплины отсутствуют в рабочем каталоге",
+        })
 
 
 class LearningOutcomeCreate(BaseModel):
@@ -329,6 +349,7 @@ async def create_project(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new educational program project"""
+    _validate_requirement_course_existence(project_data.constraints, db)
     
     try:
         project = Project(
@@ -418,6 +439,7 @@ async def update_project_constraints(
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
     _require_project_access(current_user, project)
+    _validate_requirement_course_existence(payload.constraints, db)
     project.constraints_json = payload.constraints
     db.commit()
     return {"status": "success", "project_id": project.id, "constraints": project.constraints_json}
