@@ -23,6 +23,39 @@ def test_required_course_missing_from_frontier_is_explicit():
     assert exc.value.details["reason"] == "required_course_not_admissible"
 
 
+def test_required_professional_block_selects_confirmed_low_ranked_course():
+    from dataclasses import replace
+    from app.planner.joint_contract import RequiredCoreBlock
+    from app.planner.joint_solver import solve_joint
+
+    setup = problem([candidate(1, 10, (1,), {"ON1": .65}, utility=10),
+                     candidate(2, 10, (2,), {"ON2": .65}),
+                     candidate(3, 10, (1,), {"ON1": .65}, utility=.1)])
+    setup = replace(setup, required_core_blocks=(
+        RequiredCoreBlock("wood", (3,), min_courses=1, min_credits=10),
+    ))
+    assert solve_joint(setup, time_limit_seconds=5).selected_course_ids == frozenset({2, 3})
+
+
+def test_fixed_course_contributes_to_block_minima_without_double_counting_total():
+    from dataclasses import replace
+    from app.planner.joint_contract import RequiredCoreBlock
+    from app.planner.joint_solver import solve_joint
+
+    setup = problem([
+        candidate(1, 10, (1,), {"ON1": .65}, utility=10),
+        candidate(2, 10, (2,), {"ON2": .65}),
+        candidate(3, 10, (1,), {"ON1": .65}, utility=.1),
+        candidate(4, 10, (1,), {"ON1": .65}, utility=9),
+    ], target=70, min_load=30, max_load=40)
+    setup = replace(setup, required_core_blocks=(
+        RequiredCoreBlock("wood", (91, 3), min_courses=2, min_credits=30),
+    ))
+    result = solve_joint(setup, time_limit_seconds=5)
+    assert 3 in result.selected_course_ids
+    assert sum(item["credits"] for items in result.schedule.values() for item in items) == 70
+
+
 @pytest.mark.parametrize("version", [
     "Иностранный язык (профессинальный)",
     "Профессиональный иностранный язык",

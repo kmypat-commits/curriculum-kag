@@ -17,11 +17,12 @@ from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.planner.course_policy import education_level_course_allowed
 from app.planner.course_policy import project_domain_terms
+from app.planner.core_evidence import verified_matches
 from app.planner.core_requirements import effective_requirements
 from app.planner.domain_evidence import course_domain_shares, domain_label_matches
 from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.goso import ensure_goso_items, is_redundant_goso_foundation
-from app.planner.joint_contract import Candidate, PlanningProblem
+from app.planner.joint_contract import Candidate, PlanningProblem, RequiredCoreBlock
 from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.scheduler_utils import title_key
 from app.planner.scoped_epvo_semesters import apply_scoped_epvo_semesters
@@ -174,6 +175,17 @@ def build_joint_frontier(
     constraints = version.project.constraints_json or {}
     requirements = effective_requirements(constraints.get("curriculum_requirements"))
     methodist_required_ids = set(requirements["required_course_ids"]) if requirements else set()
+    required_blocks = [block for block in requirements["core_blocks"]
+                       if block["requirement"] == "required"] if requirements else []
+    block_seed_ids = {
+        int(record["course_id"])
+        for record in (constraints.get("curriculum_confirmations") or [])
+        if record.get("status") == "confirmed"
+        and record.get("project_version_id") == version.id
+        and any(record.get("block_id") == block["id"]
+                and record.get("course_id") in block["accepted_course_ids"]
+                for block in required_blocks)
+    }
     excluded_course_ids = {
         int(value) for value in (constraints.get("excluded_course_ids") or [])
         if str(value).isdigit()
@@ -236,7 +248,7 @@ def build_joint_frontier(
             seen.add(cid)
     seed_cap = max(limit * 4, limit + len(professional))
     ranked_ids, omitted_seed_count = prioritize_required_seeds(
-        ranked_ids, methodist_required_ids, cap=seed_cap,
+        ranked_ids, methodist_required_ids | block_seed_ids, cap=seed_cap,
     )
 
     # Load only ranked IDs and their recursive parent closure. No full Course
@@ -397,6 +409,22 @@ def build_joint_frontier(
     exclusions["lo_evidence_pipeline"] = lo_pipeline_counts(
         evidence, catalogue, candidates, tuple(sorted(set(professional.values()))),
     )
+    confirmed = verified_matches(
+        required_blocks, constraints.get("curriculum_confirmations") or [],
+        loaded, project_version_id=version.id,
+    ) if required_blocks else {}
+    usable_ids = {candidate.course_id for candidate in candidates} | {
+        int(item["course_id"]) for items in fixed_schedule.values()
+        for item in items if item.get("course_id") is not None
+    }
+    core_blocks = tuple(
+        RequiredCoreBlock(
+            block_id=block["id"],
+            course_ids=tuple(sorted(confirmed.get(block["id"], set()) & usable_ids)),
+            min_courses=block["min_courses"], min_credits=block["min_credits"],
+        )
+        for block in required_blocks
+    )
     from app.planner.credit_policy import total_credit_tolerance
     tolerance = total_credit_tolerance(constraints, legacy_default=TOTAL_CREDIT_TOLERANCE)
     target = int(constraints.get("total_credits") or 240)
@@ -424,4 +452,5 @@ def build_joint_frontier(
             chain_exclusions["frontier_capacity"] > 0 or omitted_seed_count > 0
         ),
         required_course_ids=tuple(sorted(methodist_required_ids)),
+        required_core_blocks=core_blocks,
     )

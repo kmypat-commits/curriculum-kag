@@ -87,6 +87,34 @@ def solve_joint(
             })
         add({x_index[cid]: 1.0}, 1.0, 1.0)
 
+    fixed_credits_by_id = {
+        int(item["course_id"]): int(item.get("credits") or 0)
+        for items in problem.fixed_schedule.values() for item in items
+        if item.get("course_id") is not None
+    }
+    for block in problem.required_core_blocks:
+        eligible = set(block.course_ids)
+        fixed = eligible & fixed_credits_by_id.keys()
+        selectable = eligible & x_index.keys()
+        fixed_credits = sum(fixed_credits_by_id[cid] for cid in fixed)
+        possible_credits = fixed_credits + sum(int(by_id[cid].item["credits"])
+                                               for cid in selectable)
+        if (len(fixed) + len(selectable) < block.min_courses
+                or possible_credits < block.min_credits):
+            raise PlanningFailure("required_requirements_rejected", {
+                "reason": "core_block_has_no_admitted_candidate",
+                "block_id": block.block_id,
+                "admitted_course_ids": sorted(fixed | selectable),
+                "frontier_truncated": problem.frontier_truncated,
+            })
+        if block.min_courses > len(fixed):
+            add({x_index[cid]: 1.0 for cid in sorted(selectable)},
+                float(block.min_courses - len(fixed)), np.inf)
+        if block.min_credits > fixed_credits:
+            add({x_index[cid]: float(by_id[cid].item["credits"])
+                 for cid in sorted(selectable)},
+                float(block.min_credits - fixed_credits), np.inf)
+
     # Different catalogue IDs may represent the same discipline, including
     # a duplicate of a mandatory regulatory unit. Enforce this during choice,
     # not by deleting courses afterwards and breaking credits/LO coverage.

@@ -266,7 +266,8 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
                             recommended_semester=1)
             strong = Course(course_id="EPVO-101", title="Разработка информационных систем",
                             domain="Информационные технологии", credits=5,
-                            recommended_semester=3, prerequisites=[parent])
+                            recommended_semester=3, prerequisites=[parent],
+                            description="Проектирование и разработка информационных систем")
             boosted = Course(course_id="EPVO-102", title="Общие вопросы технологий",
                              domain="Информационные технологии", credits=5,
                              recommended_semester=3)
@@ -353,6 +354,29 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             required = build_joint_frontier(version, db, limit=10)
             assert required.required_course_ids == (strong.id,)
             assert {strong.id, parent.id}.issubset(required.candidates_by_id)
+            from app.planner.core_evidence import create_confirmation
+            from app.schemas.curriculum_requirements import CurriculumRequirements
+
+            block = {"id": "systems", "title": "Разработка систем",
+                     "description": "Проектирование информационных систем",
+                     "requirement": "required", "accepted_course_ids": [strong.id],
+                     "min_courses": 1, "min_credits": 5}
+            requirements = CurriculumRequirements(enabled=True, core_blocks=[block]).model_dump()
+            block = requirements["core_blocks"][0]
+            confirmation = create_confirmation(
+                block, strong, source_field="description",
+                excerpt="разработка информационных систем", actor_user_id=7,
+                project_version_id=version.id, rationale="Проверено содержание",
+            )
+            project.constraints_json = {
+                **project.constraints_json,
+                "curriculum_requirements": requirements,
+                "curriculum_confirmations": [confirmation],
+            }
+            block_problem = build_joint_frontier(version, db, limit=10)
+            assert len(block_problem.required_core_blocks) == 1
+            assert block_problem.required_core_blocks[0].course_ids == (strong.id,)
+            assert {strong.id, parent.id}.issubset(block_problem.candidates_by_id)
     finally:
         engine.dispose()
 

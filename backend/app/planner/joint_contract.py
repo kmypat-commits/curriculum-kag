@@ -17,6 +17,14 @@ class Candidate:
 
 
 @dataclass(frozen=True)
+class RequiredCoreBlock:
+    block_id: str
+    course_ids: tuple[int, ...]
+    min_courses: int
+    min_credits: int
+
+
+@dataclass(frozen=True)
 class PlanningProblem:
     candidates: tuple[Candidate, ...]
     fixed_schedule: dict[int, list[dict]]
@@ -29,6 +37,7 @@ class PlanningProblem:
     exclusions: dict[str, object]
     frontier_truncated: bool
     required_course_ids: tuple[int, ...] = ()
+    required_core_blocks: tuple[RequiredCoreBlock, ...] = ()
 
     @property
     def candidates_by_id(self) -> dict[int, Candidate]:
