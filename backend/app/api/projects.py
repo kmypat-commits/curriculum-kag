@@ -3,8 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
+from copy import deepcopy
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
 from app.database import get_db
 from app.models.user import User
 from app.models.project import Project, ProjectVersion, LearningOutcome
@@ -19,6 +20,7 @@ from app.services.llm_errors import LLM_ERRORS
 from app.services.program_profiles import PROGRAM_PROFILES, profile_for
 from app.services.access import require_project_access, require_project_object_access
 from app.schemas.curriculum_requirements import CurriculumRequirements
+from app.planner.core_evidence import block_content_hash, course_content_hash, create_confirmation
 import json
 import logging
 
@@ -118,6 +120,8 @@ def _validate_curriculum_volume(constraints: Dict) -> None:
 
 
 def _validate_optional_requirements(constraints: Dict) -> None:
+    # Confirmations are issued by the server, never accepted from a client.
+    constraints.pop("curriculum_confirmations", None)
     if "curriculum_requirements" in constraints:
         constraints["curriculum_requirements"] = CurriculumRequirements.model_validate(
             constraints["curriculum_requirements"]
@@ -238,6 +242,19 @@ class ProjectConstraintsUpdate(BaseModel):
         _validate_optional_requirements(constraints)
         self.constraints = constraints
         return self
+
+
+class CoreConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_version_id: int = Field(gt=0)
+    block_id: str = Field(min_length=1, max_length=80)
+    course_id: int = Field(gt=0)
+    source_field: Literal["description", "topics", "learning_outcomes", "assessment_methods"]
+    source_excerpt: str = Field(min_length=1, max_length=1000)
+    rationale: str = Field(min_length=1, max_length=1000)
+    expected_course_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_block_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class SuggestionRequest(BaseModel):
@@ -440,9 +457,63 @@ async def update_project_constraints(
         raise HTTPException(status_code=404, detail="Проект не найден")
     _require_project_access(current_user, project)
     _validate_requirement_course_existence(payload.constraints, db)
-    project.constraints_json = payload.constraints
+    saved_confirmations = (project.constraints_json or {}).get("curriculum_confirmations") or []
+    new_constraints = dict(payload.constraints)
+    if saved_confirmations:
+        new_constraints["curriculum_confirmations"] = deepcopy(saved_confirmations)
+    project.constraints_json = new_constraints
     db.commit()
     return {"status": "success", "project_id": project.id, "constraints": project.constraints_json}
+
+
+@router.post("/{project_id}/curriculum-confirmations", dependencies=[
+    Depends(require_project_object_access), Depends(require_permission("planner", "write")),
+])
+async def confirm_project_core_match(
+    project_id: int,
+    payload: CoreConfirmationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Attest a real course's content for one block in the current project version."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    _require_project_access(current_user, project)
+    version = db.query(ProjectVersion).filter(ProjectVersion.project_id == project_id).order_by(
+        ProjectVersion.version_number.desc()
+    ).first()
+    if not version or version.id != payload.project_version_id:
+        raise HTTPException(status_code=409, detail={"code": "requirements_changed"})
+    requirements = CurriculumRequirements.model_validate(
+        (project.constraints_json or {}).get("curriculum_requirements") or {}
+    )
+    if not requirements.enabled:
+        raise HTTPException(status_code=409, detail={"code": "requirements_disabled"})
+    block = next((row.model_dump() for row in requirements.core_blocks if row.id == payload.block_id), None)
+    if block is None:
+        raise HTTPException(status_code=404, detail={"code": "core_block_missing"})
+    course = db.query(Course).filter(Course.id == payload.course_id).first()
+    if course is None:
+        raise HTTPException(status_code=422, detail={"code": "required_course_missing"})
+    if payload.expected_course_hash != course_content_hash(course) or payload.expected_block_hash != block_content_hash(block):
+        raise HTTPException(status_code=409, detail={"code": "evidence_revision_changed"})
+    try:
+        confirmation = create_confirmation(
+            block, course, source_field=payload.source_field,
+            excerpt=payload.source_excerpt, actor_user_id=current_user.id,
+            project_version_id=version.id, rationale=payload.rationale,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+    constraints = deepcopy(project.constraints_json or {})
+    records = [row for row in constraints.get("curriculum_confirmations") or []
+               if not (row.get("block_id") == block["id"] and row.get("course_id") == course.id)]
+    records.append(confirmation)
+    constraints["curriculum_confirmations"] = records
+    project.constraints_json = constraints
+    db.commit()
+    return {"confirmation": confirmation}
 
 
 @router.get("", response_model=List[ProjectResponse])

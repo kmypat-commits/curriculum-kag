@@ -128,3 +128,54 @@ def test_enabled_requirements_reject_unknown_internal_course_ids():
 
         constraints["curriculum_requirements"]["enabled"] = False
         _validate_requirement_course_existence(constraints, db)
+
+
+def test_client_cannot_persist_its_own_core_confirmations():
+    from app.api.projects import ProjectConstraintsUpdate, ProjectCreate
+
+    forged = [{"block_id": "wood", "course_id": 17, "status": "confirmed",
+               "author_user_id": 99}]
+    constraints = _valid_constraints()
+    constraints["curriculum_confirmations"] = forged
+    updated = ProjectConstraintsUpdate(constraints=constraints)
+    assert "curriculum_confirmations" not in updated.constraints
+
+    created = ProjectCreate(
+        title="Programme", goal="Train specialists", domain1="ICT", domain2="",
+        learning_outcomes=[{"lo_code": "LO1", "lo_text": "Apply"}],
+        constraints={**_valid_constraints(), "curriculum_confirmations": forged},
+    )
+    assert "curriculum_confirmations" not in created.constraints
+
+
+def test_updating_constraints_preserves_only_previously_server_saved_confirmations():
+    import asyncio
+    from types import SimpleNamespace
+    from app.api.projects import ProjectConstraintsUpdate, update_project_constraints
+
+    saved = [{"block_id": "wood", "course_id": 17, "status": "confirmed",
+              "author_user_id": 7, "content_hash": "server-hash"}]
+    project = SimpleNamespace(id=4, created_by=7,
+                              constraints_json={**_valid_constraints(),
+                                                "curriculum_confirmations": saved})
+
+    class DB:
+        def query(self, _model):
+            return self
+
+        def filter(self, *_args):
+            return self
+
+        def first(self):
+            return project
+
+        def commit(self):
+            pass
+
+    incoming = {**_valid_constraints(), "curriculum_confirmations": [
+        {"block_id": "fake", "course_id": 99, "status": "confirmed"},
+    ]}
+    payload = ProjectConstraintsUpdate(constraints=incoming)
+    asyncio.run(update_project_constraints(4, payload, DB(),
+                                           SimpleNamespace(id=7, roles=[])))
+    assert project.constraints_json["curriculum_confirmations"] == saved
