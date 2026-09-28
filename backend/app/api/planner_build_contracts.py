@@ -51,6 +51,23 @@ def partition_publishable_variants(
     )
 
 
+def required_exclusion_conflicts(constraints: dict | None) -> list[int]:
+    """Return courses that a methodist both requires and excludes."""
+    constraints = constraints or {}
+    requirements = constraints.get("curriculum_requirements") or {}
+    if not isinstance(requirements, dict) or requirements.get("enabled") is not True:
+        return []
+    excluded = {
+        int(value) for value in constraints.get("excluded_course_ids") or []
+        if str(value).isdigit()
+    }
+    required = {
+        int(value) for value in requirements.get("required_course_ids") or []
+        if str(value).isdigit()
+    }
+    return sorted(required & excluded)
+
+
 def generation_readiness(
     constraints: dict | None, *, goal: str | None,
     learning_outcomes_count: int, learning_outcomes: list[str] | None = None,
@@ -86,6 +103,14 @@ def generation_readiness(
     tolerance = int(constraints.get("credit_tolerance") or 0)
     if total_credits and semesters and max_per_semester and total_credits > semesters * max_per_semester + tolerance:
         blocking.append("Заданное число кредитов не помещается в установленную семестровую нагрузку.")
+
+    conflicting_courses = required_exclusion_conflicts(constraints)
+    if conflicting_courses:
+        blocking.append(
+            "Дисциплины одновременно обязательны и исключены: "
+            + ", ".join(str(course_id) for course_id in conflicting_courses)
+            + ". Снимите исключение либо уберите их из обязательных."
+        )
 
     programme_type = str(constraints.get("program_type") or "standard").lower()
     if programme_type in {"interdisciplinary", "joint"}:
@@ -126,6 +151,7 @@ def generation_readiness(
         "blocking": blocking,
         "warnings": warnings,
         "checks": {
+            "methodist_conflicts": {"required_course_ids": conflicting_courses},
             "goal": bool(str(goal or "").strip()),
             "learning_outcomes": learning_outcomes_count,
             "unique_learning_outcomes": len(seen_outcomes) if clean_outcomes else learning_outcomes_count,

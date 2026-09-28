@@ -57,6 +57,7 @@ from app.api.planner_build_contracts import (
     must_reject_variant,
     normalize_requested_variants,
     partition_publishable_variants,
+    required_exclusion_conflicts,
 )
 from app.api.planner_variant_runner import run_requested_variants
 from app.schemas.planner import (
@@ -483,6 +484,18 @@ def build_plan(
     """Build all three curriculum plan variants"""
     request_hash = _build_request_hash(project_version_id, payload.variants)
     program_spec_json, spec_hash = _load_program_spec_for_command(db, project_version_id)
+    conflicting_courses = required_exclusion_conflicts(program_spec_json.get("constraints"))
+    if conflicting_courses:
+        raise HTTPException(status_code=422, detail={
+            "code": "required_course_excluded",
+            "course_ids": conflicting_courses,
+            "message": "Обязательная дисциплина одновременно исключена. Снимите исключение либо уберите её из обязательных.",
+            "message_by_language": {
+                "ru": "Обязательная дисциплина одновременно исключена. Снимите исключение либо уберите её из обязательных.",
+                "kk": "Міндетті пән бір уақытта алынып тасталған. Алып тастауды немесе міндетті талабын өзгертіңіз.",
+                "en": "A required course is also excluded. Remove the exclusion or the requirement.",
+            },
+        })
     if settings.ASYNC_BUILDS and os.environ.get("CURRICULUM_KAG_WORKER") != "1":
         previous_status = _get_build_status(project_version_id)
         if (

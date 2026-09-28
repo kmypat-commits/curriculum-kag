@@ -117,6 +117,57 @@ def test_generation_readiness_blocks_impossible_volume_before_scoring():
     assert "не помещается" in result["blocking"][0]
 
 
+def test_generation_readiness_names_required_course_excluded_by_methodist():
+    result = generation_readiness(
+        {
+            "education_level": "bachelor", "education_area": "6B06",
+            "direction_code": "6B061", "group_code": "B057",
+            "instruction_language": "ru", "duration_years": 4,
+            "total_semesters": 8, "total_credits": 240,
+            "max_credits_per_semester": 30,
+            "excluded_course_ids": [1158],
+            "curriculum_requirements": {
+                "enabled": True, "required_course_ids": [1158],
+            },
+        },
+        goal="Подготовить специалистов по биоинформатике",
+        learning_outcomes_count=5,
+    )
+    assert result["ready"] is False
+    assert any("1158" in message for message in result["blocking"])
+    assert result["checks"]["methodist_conflicts"]["required_course_ids"] == [1158]
+
+
+def test_build_api_rejects_required_excluded_course_before_queue_claim():
+    import app.api.planner_build as module
+    from fastapi import HTTPException
+    from app.schemas.planner import PlannerBuildRequest
+
+    snapshot = {
+        "constraints": {
+            "excluded_course_ids": [1158],
+            "curriculum_requirements": {
+                "enabled": True, "required_course_ids": [1158],
+            },
+        },
+    }
+    with patch.object(module.settings, "ASYNC_BUILDS", True), \
+         patch.object(module.settings, "PERSISTENT_PLANNER_WORKER", True), \
+         patch.object(module, "_load_program_spec_for_command", return_value=(snapshot, "hash")), \
+         patch.object(module, "_claim_build_status") as claim:
+        claim.return_value = {"state": "queued", "job_id": "test-job"}
+        with pytest.raises(HTTPException) as exc:
+            module.build_plan(
+                project_version_id=77,
+                payload=PlannerBuildRequest(variants=["A"]),
+                db=None, current_user=SimpleNamespace(id=12),
+            )
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "required_course_excluded"
+    assert exc.value.detail["course_ids"] == [1158]
+    claim.assert_not_called()
+
+
 def test_generation_readiness_keeps_small_lo_set_as_warning_not_false_success():
     result = generation_readiness(
         {
