@@ -31,12 +31,30 @@ def test_coverage_does_not_count_same_course_twice_or_invent_matches():
          "min_courses": 1, "min_credits": 5, "requirement": "required"},
         {"id": "other", "title": "Другой профиль", "accepted_course_ids": [2]},
     ]}
-    result = evaluate_coverage(requirements, {1: [{"course_id": 1, "credits": 5}]})
+    result = evaluate_coverage(requirements, {1: [{"course_id": 1, "credits": 5}]},
+                               confirmed_matches={"core": {1}})
     assert result["unique_core_credits"] == 5
     assert result["core_coverage"][0]["status"] == "covered"
     assert result["core_coverage"][1]["status"] == "gap"
     assert result["required_courses"]["missing"] == [3]
     assert not result["passed"]
+
+
+def test_unconfirmed_candidate_does_not_satisfy_required_professional_block():
+    from app.planner.core_requirements import evaluate_coverage
+
+    requirements = {"enabled": True, "core_blocks": [
+        {"id": "wood", "title": "Деревообработка", "requirement": "required",
+         "accepted_course_ids": [10], "min_courses": 1, "min_credits": 5},
+    ]}
+    schedule = {3: [{"course_id": 10, "credits": 5}]}
+    result = evaluate_coverage(requirements, schedule)
+
+    assert result["core_coverage"][0]["status"] == "unconfirmed"
+    assert result["core_coverage"][0]["unconfirmed_course_ids"] == [10]
+    assert result["core_coverage"][0]["supported_credits"] == 0
+    assert result["unique_core_credits"] == 0
+    assert result["passed"] is False
 
 
 def _valid_constraints():
