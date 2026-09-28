@@ -322,6 +322,19 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             assert wrong_level.id not in problem.candidates_by_id
             assert foreign.id not in problem.candidates_by_id
             assert problem.exclusions["goso_duplicate"] == 1
+            project.constraints_json = {
+                **project.constraints_json, "excluded_course_ids": [parent.id],
+            }
+            without_parent = build_joint_frontier(version, db, limit=10)
+            assert parent.id not in without_parent.candidates_by_id
+            assert strong.id not in without_parent.candidates_by_id
+            assert boosted.id in without_parent.candidates_by_id
+            project.constraints_json = {
+                **project.constraints_json, "excluded_course_ids": [strong.id],
+            }
+            without_child = build_joint_frontier(version, db, limit=10)
+            assert strong.id not in without_child.candidates_by_id
+            assert parent.id in without_child.candidates_by_id
     finally:
         engine.dispose()
 

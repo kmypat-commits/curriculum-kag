@@ -164,6 +164,10 @@ def build_joint_frontier(
     if limit < 1:
         raise ValueError("frontier limit must be positive")
     constraints = version.project.constraints_json or {}
+    excluded_course_ids = {
+        int(value) for value in (constraints.get("excluded_course_ids") or [])
+        if str(value).isdigit()
+    }
     semesters = int(constraints.get("total_semesters") or 8)
     domains = (str(version.project.domain1 or ""), str(version.project.domain2 or ""))
     admission_domains = project_domain_terms(version, db)
@@ -297,8 +301,12 @@ def build_joint_frontier(
     catalogue: dict[int, Candidate] = {}
     duplicate_ids: set[int] = set(required_ids)
     exclusions = {"out_of_domain_or_level": 0, "no_legal_semester": 0,
+                  "excluded_by_methodist": 0,
                   "foreign_professional_context": 0}
     for cid in sorted(loaded):
+        if cid in excluded_course_ids:
+            exclusions["excluded_by_methodist"] += 1
+            continue
         course = loaded[cid]
         item = {
             "course_id": cid, "title": str(course.title or ""),

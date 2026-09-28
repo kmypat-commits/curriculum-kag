@@ -8,6 +8,42 @@ import pytest
 from app.planner.joint_contract import PlanningFailure
 
 
+@pytest.mark.parametrize("variant_type", ["A", "B", "C"])
+def test_joint_planner_never_accepts_excluded_course(variant_type, monkeypatch):
+    from app.planner import joint_planner
+    from app.planner.joint_contract import PlanningResult
+
+    version = SimpleNamespace(
+        id=15, project=SimpleNamespace(
+            domain1="IT", domain2="", constraints_json={"excluded_course_ids": [1158]}),
+        learning_outcomes=[],
+    )
+    schedule = {1: [{"course_id": 1158, "credits": 5, "domain": "IT"}]}
+    monkeypatch.setattr(joint_planner, "FRONTIER_LIMITS", (1,))
+    monkeypatch.setattr(joint_planner, "MAX_VERIFIER_ATTEMPTS_PER_FRONTIER", 1)
+    monkeypatch.setattr(joint_planner, "build_joint_frontier",
+                        lambda *_args, **_kwargs: SimpleNamespace(
+                            frontier_truncated=False, exclusions={}, candidates=(),
+                            fixed_schedule={}, target_credits=5, domain_minima=()))
+    monkeypatch.setattr(joint_planner, "solve_joint",
+                        lambda *_args, **_kwargs: PlanningResult(
+                            schedule=schedule, selected_course_ids=frozenset({1158}),
+                            objective=1.0, solver_seconds=0.01))
+    monkeypatch.setattr(joint_planner, "audit_final_course_admission",
+                        lambda *_args, **_kwargs: {"passed": True, "violations": []})
+    monkeypatch.setattr(joint_planner, "verify_curriculum_plan",
+                        lambda *_args, **_kwargs: {"feasible": True, "quality_passed": True})
+    monkeypatch.setattr(joint_planner, "project_domain_terms", lambda *_args: ("IT",))
+    monkeypatch.setattr(joint_planner, "audit_final_schedule_boundary",
+                        lambda *_args, **_kwargs: {
+                            "invalid_domain_courses": [], "admission": {"passed": True}})
+
+    with pytest.raises(PlanningFailure) as exc:
+        joint_planner.build_verified_joint_schedule(version, MagicMock(), variant_type)
+    assert exc.value.status == "excluded_course_selected"
+    assert exc.value.details["course_ids"] == [1158]
+
+
 def test_joint_planner_rejects_verifier_disagreement_without_persistence(monkeypatch):
     from app.planner import joint_planner
     from app.planner.joint_contract import PlanningResult

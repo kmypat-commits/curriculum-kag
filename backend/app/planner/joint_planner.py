@@ -94,6 +94,21 @@ def build_verified_joint_schedule(
                                  "details": failure.details})
                 break
             schedule = result.schedule
+            excluded_course_ids = {
+                int(value)
+                for value in (version.project.constraints_json or {}).get("excluded_course_ids", ())
+                if str(value).isdigit()
+            }
+            selected_excluded = sorted({
+                int(item["course_id"])
+                for items in schedule.values() for item in items
+                if item.get("course_id") is not None
+                and int(item["course_id"]) in excluded_course_ids
+            })
+            if selected_excluded:
+                raise PlanningFailure("excluded_course_selected", {
+                    "course_ids": selected_excluded, "variant": variant_type,
+                })
             fingerprint = _schedule_fingerprint(schedule)
             attempt = {
                 "frontier_hash": last_frontier_hash, "limit": limit,
