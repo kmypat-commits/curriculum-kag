@@ -37,3 +37,44 @@ def test_coverage_does_not_count_same_course_twice_or_invent_matches():
     assert result["core_coverage"][1]["status"] == "gap"
     assert result["required_courses"]["missing"] == [3]
     assert not result["passed"]
+
+
+def _valid_constraints():
+    return {
+        "education_level": "bachelor", "education_area": "6B06",
+        "direction_code": "6B061", "group_code": "B057",
+        "program_type": "standard", "instruction_language": "ru",
+        "duration_years": 4, "total_semesters": 8,
+        "total_credits": 240, "max_credits_per_semester": 30,
+    }
+
+
+@pytest.mark.parametrize("requirements", [
+    {"enabled": True, "required_course_ids": [0]},
+    {"enabled": True, "core_blocks": [{
+        "id": "core", "title": "Профиль",
+        "confirmation": {"author_user_id": 99, "status": "approved"},
+    }]},
+])
+def test_constraints_update_rejects_invalid_or_forged_requirements(requirements):
+    from app.api.projects import ProjectConstraintsUpdate
+
+    constraints = _valid_constraints()
+    constraints["curriculum_requirements"] = requirements
+    with pytest.raises(ValidationError):
+        ProjectConstraintsUpdate(constraints=constraints)
+
+
+def test_project_creation_rejects_forged_requirements():
+    from app.api.projects import ProjectCreate
+
+    constraints = _valid_constraints()
+    constraints["curriculum_requirements"] = {
+        "enabled": True,
+        "core_blocks": [{"id": "core", "title": "Профиль",
+                         "confirmation": {"author_user_id": 99}}],
+    }
+    with pytest.raises(ValidationError):
+        ProjectCreate(title="Programme", goal="Train specialists", domain1="ICT",
+                      domain2="", learning_outcomes=[{"lo_code": "LO1", "lo_text": "Apply"}],
+                      constraints=constraints)

@@ -16,6 +16,7 @@ from app.services.language import normalize_language
 from app.services.llm_errors import LLM_ERRORS
 from app.services.program_profiles import PROGRAM_PROFILES, profile_for
 from app.services.access import require_project_access, require_project_object_access
+from app.schemas.curriculum_requirements import CurriculumRequirements
 import json
 import logging
 
@@ -114,6 +115,13 @@ def _validate_curriculum_volume(constraints: Dict) -> None:
             raise ValueError("Сумма минимальных долей двух областей не должна превышать 100 процентов")
 
 
+def _validate_optional_requirements(constraints: Dict) -> None:
+    if "curriculum_requirements" in constraints:
+        constraints["curriculum_requirements"] = CurriculumRequirements.model_validate(
+            constraints["curriculum_requirements"]
+        ).model_dump()
+
+
 class LearningOutcomeCreate(BaseModel):
     lo_code: str
     lo_text: str
@@ -161,6 +169,7 @@ class ProjectCreate(BaseModel):
             self.domain2 = ""
             self.constraints["min_domain2_percent"] = 0
         _validate_curriculum_volume(self.constraints)
+        _validate_optional_requirements(self.constraints)
         return self
 
 
@@ -206,6 +215,7 @@ class ProjectConstraintsUpdate(BaseModel):
                 constraints.pop(key, None)
             constraints["min_domain2_percent"] = 0
         _validate_curriculum_volume(constraints)
+        _validate_optional_requirements(constraints)
         self.constraints = constraints
         return self
 
