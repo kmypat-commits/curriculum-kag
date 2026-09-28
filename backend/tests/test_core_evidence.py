@@ -103,9 +103,60 @@ def test_confirm_endpoint_uses_authenticated_author_and_rejects_stale_course():
     assert result["confirmation"]["author_user_id"] == 7
     assert project.constraints_json["curriculum_confirmations"][0] == result["confirmation"]
     assert db.commits == 1
-
     with pytest.raises(HTTPException) as exc:
         asyncio.run(confirm_project_core_match(
             4, CoreConfirmationRequest(**{**values, "expected_course_hash": "0" * 64}), db, actor))
     assert exc.value.status_code == 409
     assert db.commits == 1
+
+
+def test_confirmation_preview_is_bound_to_current_version_and_saved_accepted_course():
+    import asyncio
+    from fastapi import HTTPException
+
+    from app.api.projects import preview_project_core_match
+    from app.planner.core_evidence import block_content_hash, course_content_hash
+    from app.models.course import Course
+    from app.models.project import Project, ProjectVersion
+
+    block, course = _block(), _course()
+    project = SimpleNamespace(id=4, created_by=7, constraints_json={
+        "curriculum_requirements": {"enabled": True, "core_blocks": [block]},
+    })
+    version = SimpleNamespace(id=3, project_id=4, version_number=1)
+
+    class DB:
+        def __init__(self):
+            self.model = None
+            self.commits = 0
+
+        def query(self, model):
+            self.model = model
+            return self
+
+        def filter(self, *_args):
+            return self
+
+        def order_by(self, *_args):
+            return self
+
+        def first(self):
+            return {Project: project, ProjectVersion: version, Course: course}[self.model]
+
+    db = DB()
+    actor = SimpleNamespace(id=7, roles=[])
+    preview = asyncio.run(preview_project_core_match(4, "wood", 17, 3, db, actor))
+    assert preview["course"]["title"] == "Технология деревообработки"
+    assert preview["source_fields"]["description"] == course.description
+    assert preview["expected_course_hash"] == course_content_hash(course)
+    assert preview["expected_block_hash"] == block_content_hash(block)
+    assert db.commits == 0
+
+    with pytest.raises(HTTPException) as stale:
+        asyncio.run(preview_project_core_match(4, "wood", 17, 2, db, actor))
+    assert stale.value.status_code == 409
+    block["accepted_course_ids"] = []
+    project.constraints_json["curriculum_requirements"]["core_blocks"] = [block]
+    with pytest.raises(HTTPException) as unaccepted:
+        asyncio.run(preview_project_core_match(4, "wood", 17, 3, db, actor))
+    assert unaccepted.value.status_code == 409

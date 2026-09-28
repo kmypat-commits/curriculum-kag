@@ -466,6 +466,52 @@ async def update_project_constraints(
     return {"status": "success", "project_id": project.id, "constraints": project.constraints_json}
 
 
+@router.get("/{project_id}/curriculum-confirmations/preview", dependencies=[
+    Depends(require_project_object_access), Depends(require_permission("planner", "read")),
+])
+async def preview_project_core_match(
+    project_id: int,
+    block_id: str,
+    course_id: int,
+    project_version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Read current evidence before a methodist attests a course/block match."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    _require_project_access(current_user, project)
+    version = db.query(ProjectVersion).filter(ProjectVersion.project_id == project_id).order_by(
+        ProjectVersion.version_number.desc()
+    ).first()
+    if not version or version.id != project_version_id:
+        raise HTTPException(status_code=409, detail={"code": "requirements_changed"})
+    requirements = CurriculumRequirements.model_validate(
+        (project.constraints_json or {}).get("curriculum_requirements") or {}
+    )
+    if not requirements.enabled:
+        raise HTTPException(status_code=409, detail={"code": "requirements_disabled"})
+    block = next((row.model_dump() for row in requirements.core_blocks if row.id == block_id), None)
+    if block is None or course_id not in block["accepted_course_ids"]:
+        raise HTTPException(status_code=409, detail={"code": "course_not_accepted_for_block"})
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if course is None:
+        raise HTTPException(status_code=404, detail={"code": "required_course_missing"})
+    return {
+        "block_id": block_id,
+        "project_version_id": version.id,
+        "course": {"id": course.id, "course_id": course.course_id, "title": course.title},
+        "source_fields": {
+            field: getattr(course, field, None) for field in (
+                "description", "topics", "learning_outcomes", "assessment_methods"
+            )
+        },
+        "expected_course_hash": course_content_hash(course),
+        "expected_block_hash": block_content_hash(block),
+    }
+
+
 @router.post("/{project_id}/curriculum-confirmations", dependencies=[
     Depends(require_project_object_access), Depends(require_permission("planner", "write")),
 ])

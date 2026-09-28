@@ -14,7 +14,7 @@ import CurriculumRequirements from '../components/CurriculumRequirements'
 import { useNotifications } from '../contexts/NotificationContext'
 import usePlanBuildPolling from '../hooks/usePlanBuildPolling'
 import usePlanVariants from '../hooks/usePlanVariants'
-import { saveCurriculumRequirements } from '../utils/curriculumRequirementsApi'
+import { saveCurriculumRequirements, loadCoreEvidencePreview, confirmCoreMatch } from '../utils/curriculumRequirementsApi'
 import {
     alreadyRunningText,
     localizeQualityEvidenceText,
@@ -288,6 +288,23 @@ export default function PlanBuilder() {
         )
         setProject(current => ({ ...current, constraints }))
         setRequiresRegeneration(true)
+    }
+
+    const previewCoreMatch = (blockId, courseId) => loadCoreEvidencePreview(
+        axios.get, Number(id), project.latest_version.id, blockId, courseId,
+    )
+
+    const confirmMethodistCoreMatch = async (reviewed) => {
+        const record = await confirmCoreMatch(axios.post, Number(id), project.latest_version.id, reviewed)
+        setProject(current => {
+            const constraints = current.constraints || {}
+            const prior = (constraints.curriculum_confirmations || []).filter(item =>
+                item.block_id !== record.block_id || item.course_id !== record.course_id
+            )
+            return { ...current, constraints: { ...constraints, curriculum_confirmations: [...prior, record] } }
+        })
+        setRequiresRegeneration(true)
+        return record
     }
 
     const handleShowCourseDescriptionsChange = async (checked) => {
@@ -843,8 +860,12 @@ export default function PlanBuilder() {
             <main className="container workspace-main" style={{ paddingTop: '30px' }}>
                 <CurriculumRequirements
                     value={project?.constraints?.curriculum_requirements}
+                    confirmations={project?.constraints?.curriculum_confirmations || []}
+                    versionId={project?.latest_version?.id}
                     onSave={saveMethodistRequirements}
                     searchCourses={searchMethodistCourses}
+                    loadPreview={previewCoreMatch}
+                    confirmMatch={confirmMethodistCoreMatch}
                     disabled={building}
                 />
                 {epvoApplied && !building && (
