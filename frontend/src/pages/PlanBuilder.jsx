@@ -10,9 +10,11 @@ import PlanBuildProgress from '../components/PlanBuildProgress'
 import PlanSemesterGrid from '../components/PlanSemesterGrid'
 import PlanQualityPanel from '../components/PlanQualityPanel'
 import PlanVerificationPanels from '../components/PlanVerificationPanels'
+import CurriculumRequirements from '../components/CurriculumRequirements'
 import { useNotifications } from '../contexts/NotificationContext'
 import usePlanBuildPolling from '../hooks/usePlanBuildPolling'
 import usePlanVariants from '../hooks/usePlanVariants'
+import { saveCurriculumRequirements } from '../utils/curriculumRequirementsApi'
 import {
     alreadyRunningText,
     localizeQualityEvidenceText,
@@ -271,6 +273,21 @@ export default function PlanBuilder() {
         } finally {
             setLoading(false)
         }
+    }
+
+    const searchMethodistCourses = async (search) => {
+        const { data } = await axios.get('/api/repository/courses', {
+            params: { search, limit: 20, include_descriptions: false },
+        })
+        return data
+    }
+
+    const saveMethodistRequirements = async (requirements) => {
+        const constraints = await saveCurriculumRequirements(
+            axios.patch, Number(id), project?.constraints || {}, requirements,
+        )
+        setProject(current => ({ ...current, constraints }))
+        setRequiresRegeneration(true)
     }
 
     const handleShowCourseDescriptionsChange = async (checked) => {
@@ -824,6 +841,12 @@ export default function PlanBuilder() {
             </header>
 
             <main className="container workspace-main" style={{ paddingTop: '30px' }}>
+                <CurriculumRequirements
+                    value={project?.constraints?.curriculum_requirements}
+                    onSave={saveMethodistRequirements}
+                    searchCourses={searchMethodistCourses}
+                    disabled={building}
+                />
                 {epvoApplied && !building && (
                     <div className="card" style={{ marginBottom: '20px', borderTop: '2px solid #366092' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
