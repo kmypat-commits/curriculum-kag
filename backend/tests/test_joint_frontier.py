@@ -1,6 +1,14 @@
 from app.planner import domain_evidence, goso
 
 
+def test_required_seed_precedes_higher_ranked_electives_without_losing_it_to_cap():
+    from app.planner.joint_frontier import prioritize_required_seeds
+
+    selected, omitted = prioritize_required_seeds([10, 11, 12], {12}, cap=2)
+    assert selected == [12, 10]
+    assert omitted == 1
+
+
 def test_lo_pipeline_counts_distinguish_scoring_scope_and_chain_loss():
     from types import SimpleNamespace
     from app.planner.joint_frontier import lo_pipeline_counts
@@ -335,6 +343,16 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             without_child = build_joint_frontier(version, db, limit=10)
             assert strong.id not in without_child.candidates_by_id
             assert parent.id in without_child.candidates_by_id
+            project.constraints_json = {
+                **project.constraints_json,
+                "excluded_course_ids": [],
+                "curriculum_requirements": {
+                    "enabled": True, "required_course_ids": [strong.id],
+                },
+            }
+            required = build_joint_frontier(version, db, limit=10)
+            assert required.required_course_ids == (strong.id,)
+            assert {strong.id, parent.id}.issubset(required.candidates_by_id)
     finally:
         engine.dispose()
 

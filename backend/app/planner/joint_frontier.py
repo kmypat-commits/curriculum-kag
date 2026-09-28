@@ -17,6 +17,7 @@ from app.models.epvo import EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
 from app.planner.course_policy import education_level_course_allowed
 from app.planner.course_policy import project_domain_terms
+from app.planner.core_requirements import effective_requirements
 from app.planner.domain_evidence import course_domain_shares, domain_label_matches
 from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 from app.planner.goso import ensure_goso_items, is_redundant_goso_foundation
@@ -29,6 +30,13 @@ from app.planner.scheduler_domain_rules import has_foreign_professional_title
 from app.planner.variant_scope import build_epvo_scope_index
 from app.planner.verifier import LOAD_TOLERANCE, MATCH_THRESHOLD, REAL_COURSE_LO_THRESHOLD, TOTAL_CREDIT_TOLERANCE
 from app.services.epvo_repository import epvo_row_matches_education_level
+
+
+def prioritize_required_seeds(ranked_ids, required_ids, *, cap):
+    """Reserve bounded frontier search slots for explicit methodist courses."""
+    ordered = list(dict.fromkeys([*sorted(required_ids), *ranked_ids]))
+    selected = ordered[:max(cap, len(required_ids))]
+    return selected, len(ordered) - len(selected)
 
 
 def lo_pipeline_counts(
@@ -164,6 +172,8 @@ def build_joint_frontier(
     if limit < 1:
         raise ValueError("frontier limit must be positive")
     constraints = version.project.constraints_json or {}
+    requirements = effective_requirements(constraints.get("curriculum_requirements"))
+    methodist_required_ids = set(requirements["required_course_ids"]) if requirements else set()
     excluded_course_ids = {
         int(value) for value in (constraints.get("excluded_course_ids") or [])
         if str(value).isdigit()
@@ -225,8 +235,9 @@ def build_joint_frontier(
             ranked_ids.append(cid)
             seen.add(cid)
     seed_cap = max(limit * 4, limit + len(professional))
-    omitted_seed_count = max(0, len(ranked_ids) - seed_cap)
-    ranked_ids = ranked_ids[:seed_cap]
+    ranked_ids, omitted_seed_count = prioritize_required_seeds(
+        ranked_ids, methodist_required_ids, cap=seed_cap,
+    )
 
     # Load only ranked IDs and their recursive parent closure. No full Course
     # catalogue scan; parent edges come directly from the association table.
@@ -412,4 +423,5 @@ def build_joint_frontier(
         frontier_truncated=(
             chain_exclusions["frontier_capacity"] > 0 or omitted_seed_count > 0
         ),
+        required_course_ids=tuple(sorted(methodist_required_ids)),
     )

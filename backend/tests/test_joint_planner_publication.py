@@ -44,6 +44,85 @@ def test_joint_planner_never_accepts_excluded_course(variant_type, monkeypatch):
     assert exc.value.details["course_ids"] == [1158]
 
 
+@pytest.mark.parametrize("variant_type", ["A", "B", "C"])
+def test_joint_planner_never_accepts_missing_methodist_required_course(variant_type, monkeypatch):
+    from app.planner import joint_planner
+    from app.planner.joint_contract import PlanningResult
+
+    version = SimpleNamespace(
+        id=15, project=SimpleNamespace(domain1="IT", domain2="", constraints_json={
+            "curriculum_requirements": {"enabled": True, "required_course_ids": [2]},
+        }), learning_outcomes=[],
+    )
+    schedule = {1: [{"course_id": 1, "credits": 5, "domain": "IT"}]}
+    monkeypatch.setattr(joint_planner, "FRONTIER_LIMITS", (1,))
+    monkeypatch.setattr(joint_planner, "MAX_VERIFIER_ATTEMPTS_PER_FRONTIER", 1)
+    monkeypatch.setattr(joint_planner, "build_joint_frontier",
+                        lambda *_args, **_kwargs: SimpleNamespace(
+                            frontier_truncated=False, exclusions={}, candidates=(),
+                            fixed_schedule={}, target_credits=5, domain_minima=()))
+    monkeypatch.setattr(joint_planner, "solve_joint",
+                        lambda *_args, **_kwargs: PlanningResult(
+                            schedule=schedule, selected_course_ids=frozenset({1}),
+                            objective=1.0, solver_seconds=0.01))
+    monkeypatch.setattr(joint_planner, "audit_final_course_admission",
+                        lambda *_args, **_kwargs: {"passed": True, "violations": []})
+    monkeypatch.setattr(joint_planner, "verify_curriculum_plan",
+                        lambda *_args, **_kwargs: {"feasible": True, "quality_passed": True})
+    monkeypatch.setattr(joint_planner, "project_domain_terms", lambda *_args: ("IT",))
+    monkeypatch.setattr(joint_planner, "audit_final_schedule_boundary",
+                        lambda *_args, **_kwargs: {
+                            "invalid_domain_courses": [], "admission": {"passed": True}})
+
+    with pytest.raises(PlanningFailure) as exc:
+        joint_planner.build_verified_joint_schedule(version, MagicMock(), variant_type)
+    assert exc.value.status == "required_requirements_rejected"
+    assert exc.value.details["required_courses"]["missing"] == [2]
+
+
+def test_final_core_boundary_requires_current_server_evidence_for_block():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.models.course import Course
+    from app.planner.core_evidence import create_confirmation
+    from app.planner.joint_planner import _audit_core_requirement_boundary
+    from app.schemas.curriculum_requirements import CurriculumRequirements
+
+    block = {"id": "wood", "title": "Деревообработка", "description": "Обработка древесины",
+             "requirement": "required", "accepted_course_ids": [17], "min_courses": 1,
+             "min_credits": 5}
+    requirements = CurriculumRequirements(enabled=True, core_blocks=[block]).model_dump()
+    block = requirements["core_blocks"][0]
+    course = Course(id=17, course_id="EPVO-17", title="Технология деревообработки",
+                    domain="Производство", credits=5, language="ru",
+                    description="Проектирование изделий из древесины")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Course.__table__.create(engine)
+    with engine.begin() as connection:
+        connection.execute(Course.__table__.insert(), {
+            "id": 17, "course_id": course.course_id, "title": course.title,
+            "domain": course.domain, "credits": course.credits,
+            "language": course.language, "description": course.description,
+        })
+    version = SimpleNamespace(id=3, project=SimpleNamespace(constraints_json={
+        "curriculum_requirements": requirements,
+    }))
+    schedule = {1: [{"course_id": 17, "credits": 5}]}
+    with Session(engine) as db:
+        unconfirmed = _audit_core_requirement_boundary(version, db, schedule)
+        assert not unconfirmed["passed"]
+        assert unconfirmed["core_coverage"][0]["status"] == "unconfirmed"
+
+        record = create_confirmation(block, course, source_field="description",
+                                     excerpt="изделий из древесины", actor_user_id=7,
+                                     project_version_id=3, rationale="Проверено")
+        version.project.constraints_json["curriculum_confirmations"] = [record]
+        confirmed = _audit_core_requirement_boundary(version, db, schedule)
+        assert confirmed["passed"]
+        assert confirmed["core_coverage"][0]["selected_course_ids"] == [17]
+
+
 def test_joint_planner_rejects_verifier_disagreement_without_persistence(monkeypatch):
     from app.planner import joint_planner
     from app.planner.joint_contract import PlanningResult
@@ -190,7 +269,9 @@ def test_verified_joint_build_persists_exact_schedule(monkeypatch):
                                     {1: []},
                                     {"verification": {"feasible": True, "quality_passed": True},
                                      "boundary": {"admission": {"passed": True}},
-                                     "planner": {"fingerprint": "known"}},
+                                     "planner": {"fingerprint": "known"},
+                                     "core_coverage": {"enabled": True, "passed": True,
+                                                       "core_coverage": []}},
                                 ))
             monkeypatch.setattr(scheduler, "calculate_plan_metrics",
                                 lambda *_args: {"metrics_schema_version": 2})
@@ -201,6 +282,9 @@ def test_verified_joint_build_persists_exact_schedule(monkeypatch):
             assert result["schedule"] == {1: []}
             assert saved.metrics_json["optimizer"]["selection_method"] == "joint_milp"
             assert saved.metrics_json["joint_planner"]["fingerprint"] == "known"
+            assert saved.metrics_json["core_coverage"] == {
+                "enabled": True, "passed": True, "core_coverage": [],
+            }
     finally:
         engine.dispose()
 def test_planning_failure_exposes_structured_audit_context():

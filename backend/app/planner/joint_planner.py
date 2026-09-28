@@ -8,9 +8,12 @@ import time
 
 from sqlalchemy.orm import Session
 
+from app.models.course import Course
 from app.models.project import ProjectVersion
 from app.planner.admission import audit_final_course_admission
 from app.planner.course_policy import course_curriculum_role, project_domain_terms
+from app.planner.core_evidence import verified_matches
+from app.planner.core_requirements import effective_requirements, evaluate_coverage
 from app.planner.final_schedule_checks import audit_final_schedule_boundary
 from app.planner.joint_contract import PlanningFailure
 from app.planner.joint_frontier import build_joint_frontier
@@ -22,6 +25,27 @@ from app.planner.verifier import verify_curriculum_plan
 FRONTIER_LIMITS = (120, 240, 480)
 MAX_VERIFIER_ATTEMPTS_PER_FRONTIER = 3
 SOLVER_TIME_LIMIT_SECONDS = 30.0
+
+
+def _audit_core_requirement_boundary(version, db, schedule):
+    constraints = version.project.constraints_json or {}
+    requirements = effective_requirements(constraints.get("curriculum_requirements"))
+    if requirements is None:
+        return None
+    selected_ids = {int(item["course_id"]) for items in schedule.values() for item in items
+                    if item.get("course_id") is not None}
+    evidence_ids = {cid for block in requirements["core_blocks"]
+                    for cid in block["accepted_course_ids"] if cid in selected_ids}
+    courses = {}
+    if evidence_ids:
+        courses = {int(course.id): course for course in db.query(Course).filter(
+            Course.id.in_(sorted(evidence_ids))
+        ).all()}
+    confirmed = verified_matches(
+        requirements["core_blocks"], constraints.get("curriculum_confirmations") or [],
+        courses, project_version_id=version.id,
+    )
+    return evaluate_coverage(requirements, schedule, confirmed_matches=confirmed)
 
 
 def _schedule_fingerprint(schedule: dict[int, list[dict]]) -> str:
@@ -161,9 +185,17 @@ def build_verified_joint_schedule(
                 })
                 rejected_placements.append(placement)
                 continue
+            core_coverage = _audit_core_requirement_boundary(version, db, schedule)
+            if core_coverage is not None and not core_coverage["passed"]:
+                raise PlanningFailure("required_requirements_rejected", {
+                    "variant": variant_type,
+                    "required_courses": core_coverage["required_courses"],
+                    "core_coverage": core_coverage["core_coverage"],
+                })
             return schedule, {
                 "verification": verification,
                 "boundary": boundary,
+                "core_coverage": core_coverage,
                 "planner": {
                     "name": "joint_milp",
                     "variant": variant_type,

@@ -201,6 +201,8 @@ def build_curriculum_plan(
         )
         metrics["course_admission"] = joint["boundary"]["admission"]
         metrics["joint_planner"] = joint["planner"]
+        if joint.get("core_coverage") is not None:
+            metrics["core_coverage"] = joint["core_coverage"]
         metrics["optimizer"] = {
             "name": "Joint MILP", "selection_method": "joint_milp",
         }
