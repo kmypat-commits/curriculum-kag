@@ -978,7 +978,7 @@ export default function PlanBuilder() {
                                 </div>
                             </div>
                         )}
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
                             {['A', 'B', 'C'].map(v => (
                                 <button
                                     key={v}
