@@ -68,6 +68,22 @@ def get_variants(
 
     plan_ids = [plan.id for plan in plans]
     all_items = db.query(PlanItem).filter(PlanItem.plan_id.in_(plan_ids)).all() if plan_ids else []
+    excluded_ids = set()
+    if plans:
+        constraints = plans[0].project_version.project.constraints_json or {}
+        excluded_ids = {
+            int(value) for value in constraints.get("excluded_course_ids") or []
+            if str(value).isdigit()
+        }
+    stale_plan_ids = {
+        item.plan_id for item in all_items if item.course_id in excluded_ids
+    }
+    # Keep old plans in the database for recovery, but do not present stale
+    # B/C as current alternatives once a compliant replacement exists.
+    if any(plan.id not in stale_plan_ids for plan in plans):
+        plans = [plan for plan in plans if plan.id not in stale_plan_ids]
+        visible_ids = {plan.id for plan in plans}
+        all_items = [item for item in all_items if item.plan_id in visible_ids]
     items_by_plan = {}
     for item in all_items:
         items_by_plan.setdefault(item.plan_id, []).append(item)
@@ -710,6 +726,7 @@ def get_variants(
             "plan_id": plan.id,
             "variant_type": plan.variant_type,
             "is_active": plan.is_active == 1,
+            "stale_due_to_exclusions": plan.id in stale_plan_ids,
             "metrics": variant_response_metrics(metrics, include_explanations=include_explanations),
             "metrics_current": persisted_metrics_current(metrics),
             "verification": metrics.get("verification", {}),

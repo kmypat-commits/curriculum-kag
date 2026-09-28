@@ -1027,13 +1027,15 @@ export default function PlanBuilder() {
                                 <button
                                     key={v}
                                     onClick={() => setActiveVariant(v)}
+                                    disabled={!variants?.[v]}
                                     style={{
                                         padding: '12px 24px',
                                         background: activeVariant === v ? '#366092' : 'white',
                                         color: activeVariant === v ? 'white' : '#666',
                                         border: '1px solid #e0e0e0',
                                         borderRadius: '4px',
-                                        cursor: 'pointer',
+                                        cursor: variants?.[v] ? 'pointer' : 'not-allowed',
+                                        opacity: variants?.[v] ? 1 : 0.5,
                                         fontWeight: 'bold'
                                     }}
                                 >
