@@ -9,6 +9,16 @@ def test_required_seed_precedes_higher_ranked_electives_without_losing_it_to_cap
     assert omitted == 1
 
 
+def test_preferred_seeds_share_a_bounded_budget_across_profile_blocks():
+    from app.planner.joint_frontier import reserve_preferred_seeds
+
+    seeds = reserve_preferred_seeds(
+        {"wood": {3, 4}, "web": {7, 8}},
+        {3: .8, 4: .7, 7: .9, 8: .6}, budget=2,
+    )
+    assert seeds == [7, 3]
+
+
 def test_lo_pipeline_counts_distinguish_scoring_scope_and_chain_loss():
     from types import SimpleNamespace
     from app.planner.joint_frontier import lo_pipeline_counts
@@ -377,6 +387,25 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             assert len(block_problem.required_core_blocks) == 1
             assert block_problem.required_core_blocks[0].course_ids == (strong.id,)
             assert {strong.id, parent.id}.issubset(block_problem.candidates_by_id)
+            preferred_block = {**block, "requirement": "preferred"}
+            preferred_requirements = CurriculumRequirements(
+                enabled=True, core_blocks=[preferred_block],
+            ).model_dump()
+            preferred_block = preferred_requirements["core_blocks"][0]
+            preferred_confirmation = create_confirmation(
+                preferred_block, strong, source_field="description",
+                excerpt="разработка информационных систем", actor_user_id=7,
+                project_version_id=version.id, rationale="Проверено содержание",
+            )
+            project.constraints_json = {
+                **project.constraints_json,
+                "curriculum_requirements": preferred_requirements,
+                "curriculum_confirmations": [preferred_confirmation],
+            }
+            preferred_problem = build_joint_frontier(version, db, limit=10)
+            assert preferred_problem.required_core_blocks == ()
+            assert len(preferred_problem.preferred_core_blocks) == 1
+            assert preferred_problem.preferred_core_blocks[0].course_ids == (strong.id,)
     finally:
         engine.dispose()
 

@@ -123,6 +123,39 @@ def test_final_core_boundary_requires_current_server_evidence_for_block():
         assert confirmed["core_coverage"][0]["selected_course_ids"] == [17]
 
 
+def test_joint_planner_reports_preferred_coverage_and_stage_times(monkeypatch):
+    from app.planner import joint_planner
+    from app.planner.joint_contract import PlanningResult
+
+    version = SimpleNamespace(
+        id=15, project=SimpleNamespace(domain1="IT", domain2="", constraints_json={}),
+        learning_outcomes=[],
+    )
+    schedule = {1: [{"course_id": 1, "credits": 5, "domain": "IT"}]}
+    monkeypatch.setattr(joint_planner, "FRONTIER_LIMITS", (1,))
+    monkeypatch.setattr(joint_planner, "build_joint_frontier",
+                        lambda *_args, **_kwargs: SimpleNamespace(
+                            frontier_truncated=False, exclusions={}, candidates=(),
+                            fixed_schedule={}, target_credits=5, domain_minima=()))
+    monkeypatch.setattr(joint_planner, "solve_joint", lambda *_args, **_kwargs: PlanningResult(
+        schedule=schedule, selected_course_ids=frozenset({1}), objective=1.0,
+        solver_seconds=.3, preferred_blocks_covered=1,
+        stage1_seconds=.1, stage2_seconds=.2,
+    ))
+    monkeypatch.setattr(joint_planner, "audit_final_course_admission",
+                        lambda *_args, **_kwargs: {"passed": True, "violations": []})
+    monkeypatch.setattr(joint_planner, "verify_curriculum_plan",
+                        lambda *_args, **_kwargs: {"feasible": True, "quality_passed": True})
+    monkeypatch.setattr(joint_planner, "project_domain_terms", lambda *_args: ("IT",))
+    monkeypatch.setattr(joint_planner, "audit_final_schedule_boundary",
+                        lambda *_args, **_kwargs: {
+                            "invalid_domain_courses": [], "admission": {"passed": True}})
+
+    _, evidence = joint_planner.build_verified_joint_schedule(version, MagicMock(), "A")
+    assert evidence["planner"]["preferred_blocks_covered"] == 1
+    assert evidence["planner"]["preference_stage_seconds"] == [0.1, 0.2]
+
+
 def test_joint_planner_rejects_verifier_disagreement_without_persistence(monkeypatch):
     from app.planner import joint_planner
     from app.planner.joint_contract import PlanningResult

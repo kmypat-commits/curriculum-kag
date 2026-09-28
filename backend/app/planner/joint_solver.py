@@ -60,7 +60,9 @@ def solve_joint(
             })
         for semester in sorted(set(course.allowed_semesters)):
             y_index[course.course_id, semester] = len(candidates) + len(y_index)
-    nvars = len(candidates) + len(y_index)
+    z_index = {block.block_id: len(candidates) + len(y_index) + index
+               for index, block in enumerate(problem.preferred_core_blocks)}
+    nvars = len(candidates) + len(y_index) + len(z_index)
     if nvars == 0:
         raise PlanningFailure(
             "no_solution_in_bounded_frontier" if problem.frontier_truncated
@@ -114,6 +116,24 @@ def solve_joint(
             add({x_index[cid]: float(by_id[cid].item["credits"])
                  for cid in sorted(selectable)},
                 float(block.min_credits - fixed_credits), np.inf)
+
+    preference_row_index = None
+    for block in problem.preferred_core_blocks:
+        eligible = set(block.course_ids)
+        fixed = eligible & fixed_credits_by_id.keys()
+        selectable = eligible & x_index.keys()
+        fixed_credits = sum(fixed_credits_by_id[cid] for cid in fixed)
+        marker = z_index[block.block_id]
+        count_row = {x_index[cid]: 1.0 for cid in sorted(selectable)}
+        count_row[marker] = -float(block.min_courses)
+        add(count_row, -float(len(fixed)), np.inf)
+        credit_row = {x_index[cid]: float(by_id[cid].item["credits"])
+                      for cid in sorted(selectable)}
+        credit_row[marker] = -float(block.min_credits)
+        add(credit_row, -float(fixed_credits), np.inf)
+    if z_index:
+        preference_row_index = len(sparse_rows)
+        add({index: 1.0 for index in z_index.values()}, 0.0, np.inf)
 
     # Different catalogue IDs may represent the same discipline, including
     # a duplicate of a mandatory regulatory unit. Enforce this during choice,
@@ -238,12 +258,63 @@ def solve_joint(
             objective[y_index[course.course_id, semester]] = (
                 1e-4 * abs(semester - recommended) if recommended else 0.0
             )
-    result = milp(
-        c=objective, integrality=np.ones(nvars, dtype=np.int32),
-        bounds=Bounds(np.zeros(nvars), np.ones(nvars)),
-        constraints=LinearConstraint(matrix, np.asarray(lower), np.asarray(upper)),
-        options={"time_limit": float(time_limit_seconds), "presolve": True},
-    )
+    lower_bounds = np.asarray(lower)
+    upper_bounds = np.asarray(upper)
+
+    def run_milp(goal, minimum, seconds):
+        return milp(
+            c=goal, integrality=np.ones(nvars, dtype=np.int32),
+            bounds=Bounds(np.zeros(nvars), np.ones(nvars)),
+            constraints=LinearConstraint(matrix, minimum, upper_bounds),
+            options={"time_limit": float(seconds), "presolve": True},
+        )
+
+    def feasible_values(outcome, minimum):
+        if outcome.status not in {0, 1} or outcome.x is None:
+            return None
+        raw = np.asarray(outcome.x, dtype=float)
+        if raw.shape != (nvars,) or not np.all(np.isfinite(raw)):
+            return None
+        rounded = np.round(raw)
+        if np.max(np.abs(raw - rounded)) > 1e-6:
+            return None
+        activity = matrix @ rounded
+        if (np.any(rounded < 0) or np.any(rounded > 1)
+                or np.any(activity < minimum - 1e-6)
+                or np.any(activity > upper_bounds + 1e-6)):
+            return None
+        return rounded
+
+    stage1_seconds = stage2_seconds = 0.0
+    preferred_optimality_proven = True
+    if z_index:
+        # One total time budget: maximise distinct confirmed block coverage,
+        # then optimise the existing course utility at that coverage level.
+        preference_objective = objective * (0.001 / (1.0 + np.sum(np.abs(objective))))
+        for marker in z_index.values():
+            preference_objective[marker] = -1.0
+        first_limit = max(0.05, (time_limit_seconds - (time.perf_counter() - started)) / 2)
+        stage_started = time.perf_counter()
+        first = run_milp(preference_objective, lower_bounds, first_limit)
+        stage1_seconds = time.perf_counter() - stage_started
+        result = first
+        incumbent = feasible_values(first, lower_bounds)
+        preferred_optimality_proven = False
+        if incumbent is not None:
+            covered_count = int(sum(incumbent[index] for index in z_index.values()))
+            remaining = time_limit_seconds - (time.perf_counter() - started)
+            if remaining >= 0.05:
+                second_lower = lower_bounds.copy()
+                second_lower[preference_row_index] = covered_count
+                stage_started = time.perf_counter()
+                second = run_milp(objective, second_lower, remaining)
+                stage2_seconds = time.perf_counter() - stage_started
+                if feasible_values(second, second_lower) is not None:
+                    result = second
+                    lower_bounds = second_lower
+                    preferred_optimality_proven = first.status == 0 and second.status == 0
+    else:
+        result = run_milp(objective, lower_bounds, time_limit_seconds)
     if result.status not in {0, 1} or result.x is None:
         status = (
             "solver_timeout" if result.status == 1 and "time" in str(result.message).lower()
@@ -281,8 +352,8 @@ def solve_joint(
     values = np.round(values)
     activity = matrix @ values
     if (np.any(values < 0) or np.any(values > 1)
-            or np.any(activity < np.asarray(lower) - 1e-6)
-            or np.any(activity > np.asarray(upper) + 1e-6)):
+            or np.any(activity < lower_bounds - 1e-6)
+            or np.any(activity > upper_bounds + 1e-6)):
         raise PlanningFailure("solver_error", {"reason": "infeasible_solution_vector"})
     schedule = {semester: [dict(item) for item in problem.fixed_schedule[semester]]
                 for semester in semesters}
@@ -298,8 +369,17 @@ def solve_joint(
                 "reason": "invalid_placement", "course_id": course.course_id,
             })
         schedule[placements[0]].append(dict(course.item))
+    chosen_ids = selected | set(fixed_credits_by_id)
+    preferred_covered = sum(
+        len(set(block.course_ids) & chosen_ids) >= block.min_courses
+        and sum((fixed_credits_by_id.get(cid) or int(by_id[cid].item["credits"]))
+                for cid in set(block.course_ids) & chosen_ids) >= block.min_credits
+        for block in problem.preferred_core_blocks
+    )
     return PlanningResult(
         schedule=schedule, selected_course_ids=frozenset(selected),
         objective=float(objective @ values), solver_seconds=time.perf_counter() - started,
-        optimality_proven=result.status == 0,
+        optimality_proven=result.status == 0 and preferred_optimality_proven,
+        preferred_blocks_covered=int(preferred_covered),
+        stage1_seconds=stage1_seconds, stage2_seconds=stage2_seconds,
     )

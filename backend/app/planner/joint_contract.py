@@ -25,6 +25,11 @@ class RequiredCoreBlock:
 
 
 @dataclass(frozen=True)
+class PreferredCoreBlock(RequiredCoreBlock):
+    """A coverage preference, never a feasibility requirement."""
+
+
+@dataclass(frozen=True)
 class PlanningProblem:
     candidates: tuple[Candidate, ...]
     fixed_schedule: dict[int, list[dict]]
@@ -38,6 +43,7 @@ class PlanningProblem:
     frontier_truncated: bool
     required_course_ids: tuple[int, ...] = ()
     required_core_blocks: tuple[RequiredCoreBlock, ...] = ()
+    preferred_core_blocks: tuple[PreferredCoreBlock, ...] = ()
 
     @property
     def candidates_by_id(self) -> dict[int, Candidate]:
@@ -51,6 +57,9 @@ class PlanningResult:
     objective: float
     solver_seconds: float
     optimality_proven: bool = True
+    preferred_blocks_covered: int = 0
+    stage1_seconds: float = 0.0
+    stage2_seconds: float = 0.0
 
 
 class PlanningFailure(RuntimeError):
