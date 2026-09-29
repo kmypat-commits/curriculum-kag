@@ -35,6 +35,43 @@ def export_cell_value(value):
     return value
 
 
+def append_core_coverage_sheet(workbook, metrics):
+    """Add the saved methodist assessment without recomputing it after export."""
+    coverage = (metrics or {}).get("core_coverage") or {}
+    if not coverage.get("enabled"):
+        return
+    required = coverage.get("required_courses") or {}
+    sheet = workbook.create_sheet("Professional Core")
+    sheet.sheet_view.showGridLines = False
+    sheet.append(["Профильное ядро", "Сохранённый результат"])
+    sheet.append(["Подтверждённые профильные кредиты", int(coverage.get("unique_core_credits") or 0)])
+    sheet.append(["Обязательные курсы", f"{len(required.get('included') or [])}/{len(required.get('requested') or [])}"])
+    sheet.append(["Снимок на момент построения. После ручной правки повторите проверку плана."])
+    sheet.append(["Не включены обязательные ID", ", ".join(map(str, required.get("missing") or [])) or "Нет"])
+    sheet.append(["Профильный блок", "Требование", "Покрытие", "Подтверждённые кредиты", "Подтверждённые ID", "Неподтверждённые ID"])
+    status_names = {"covered": "Покрыт", "unconfirmed": "Не подтверждён", "gap": "Нет покрытия"}
+    for block in coverage.get("core_coverage") or []:
+        sheet.append([
+            str(block.get("title") or ""),
+            "Обязательный" if block.get("requirement") == "required" else "Предпочтительный",
+            status_names.get(block.get("status"), "Неизвестно"),
+            int(block.get("supported_credits") or 0),
+            ", ".join(map(str, block.get("selected_course_ids") or [])),
+            ", ".join(map(str, block.get("unconfirmed_course_ids") or [])),
+        ])
+        sheet.cell(sheet.max_row, 1).data_type = "s"
+    sheet.freeze_panes = "A7"
+    for cell in sheet[6]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        cell.alignment = Alignment(wrap_text=True, vertical="center")
+    for key, width in {"A": 40, "B": 22, "C": 22, "D": 26, "E": 24, "F": 26}.items():
+        sheet.column_dimensions[key].width = width
+    for row in sheet.iter_rows(min_row=7):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
 def resolve_export_plan(db: Session, project_version_id: int, variant: str | None) -> Plan | None:
     """Use the active plan by default, or an explicitly requested A/B/C plan."""
     query = db.query(Plan).filter(Plan.project_version_id == project_version_id)
@@ -210,6 +247,7 @@ async def export_plan(
         metrics = plan.metrics_json or {}
         for key, value in metrics.items():
             ws3.append([key.replace("_", " ").title(), export_cell_value(value)])
+        append_core_coverage_sheet(wb, metrics)
         
         # Sheet 4: Deterministic verification details
         ws4 = wb.create_sheet("Verification")
