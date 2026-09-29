@@ -353,6 +353,44 @@ def test_publication_rejects_excluded_course_even_from_legacy_schedule(variant_t
             assert db.query(Plan).count() == 0
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("variant_type", ["A", "B", "C"])
+def test_persistence_rejects_missing_required_course_for_every_variant(variant_type):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.database import Base
+    from app.models.plan import Plan
+    from app.models.project import Project, ProjectVersion
+    from app.planner.plan_result_assembly import persist_plan_result
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            version = ProjectVersion(
+                version_number=1,
+                project=Project(title="Required", domain1="IT", domain2="",
+                                constraints_json={"curriculum_requirements": {
+                                    "enabled": True, "required_course_ids": [748],
+                                }}),
+            )
+            db.add(version)
+            db.flush()
+            with pytest.raises(PlanningFailure) as exc:
+                persist_plan_result(
+                    db=db, project_version_id=version.id, variant_type=variant_type,
+                    schedule={1: []}, metrics={}, verification={"feasible": True},
+                    commit=False,
+                )
+            assert exc.value.status == "required_requirements_rejected"
+            assert exc.value.details["required_courses"]["missing"] == [748]
+            assert db.query(Plan).count() == 0
+    finally:
+        engine.dispose()
+
+
 def test_planning_failure_exposes_structured_audit_context():
     from app.planner.joint_contract import PlanningFailure
 

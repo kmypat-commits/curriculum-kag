@@ -51,6 +51,19 @@ def persist_plan_result(
         raise PlanningFailure("excluded_course_selected", {
             "course_ids": selected_excluded, "variant": variant_type,
         })
+    # Recheck at the durable publication boundary as well as in the joint
+    # solver: diagnostic/legacy callers must not bypass methodist requirements.
+    from app.planner.joint_planner import _audit_core_requirement_boundary
+
+    core_coverage = _audit_core_requirement_boundary(version, db, schedule)
+    if core_coverage is not None:
+        if not core_coverage["passed"]:
+            raise PlanningFailure("required_requirements_rejected", {
+                "variant": variant_type,
+                "required_courses": core_coverage["required_courses"],
+                "core_coverage": core_coverage["core_coverage"],
+            })
+        metrics["core_coverage"] = core_coverage
     plan = Plan(
         project_version_id=project_version_id,
         variant_type=variant_type,
