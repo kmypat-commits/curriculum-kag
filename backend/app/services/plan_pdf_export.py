@@ -78,7 +78,7 @@ def build_methodist_prompt(project_version, plan, items, courses_by_id, bridges_
     outcomes = "\n".join(
         f"{lo.lo_code}: {lo.lo_text}" for lo in project_version.learning_outcomes
     )
-    return "\n".join([
+    lines = [
         "Вы выступаете как методист и предметный эксперт. Проведите критическую доработку проекта ОП.",
         "Не утверждайте нормативное соответствие без проверки актуальных требований конкретного вуза и страны.",
         f"Название: {project.title}",
@@ -87,7 +87,13 @@ def build_methodist_prompt(project_version, plan, items, courses_by_id, bridges_
         "Результаты обучения:", outcomes,
         "Текущая траектория, кредиты по семестрам и автоматические основания выбора приведены в таблицах этого PDF. Используйте их как исходные данные, а не восстанавливайте список дисциплин по памяти.",
         "Проверьте: (1) покрытие каждого LO реальными дисциплинами и заданиями; (2) недостающие и нерелевантные темы; (3) логику пререквизитов и сложности по семестрам; (4) реализуемость практик, оценивания и ресурсов; (5) конкретные замены без выдумывания источников. Верните таблицу замечаний с приоритетом и обоснованием.",
-    ])
+    ]
+    if ((plan.metrics_json or {}).get("core_coverage") or {}).get("enabled"):
+        lines.append(
+            "Отдельно разберите непокрытые и неподтверждённые профильные блоки из этого PDF. "
+            "Не засчитывайте выбранный курс как подтверждённое покрытие без проверки его содержания."
+        )
+    return "\n".join(lines)
 
 
 def build_plan_pdf(*, project_version, plan, items, courses_by_id, bridges_by_id, localizations, language: str) -> BytesIO:
@@ -154,8 +160,36 @@ def build_plan_pdf(*, project_version, plan, items, courses_by_id, bridges_by_id
             ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
             ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ])),
-        _paragraph("Учебный план и основания выбора", heading),
     ])
+    core = (plan.metrics_json or {}).get("core_coverage") or {}
+    if core.get("enabled"):
+        required = core.get("required_courses") or {}
+        story.extend([
+            _paragraph("Покрытие профильного ядра", heading),
+            _paragraph(
+                f"Подтверждённые профильные кредиты: {int(core.get('unique_core_credits') or 0)}. "
+                f"Обязательные курсы: {len(required.get('included') or [])}/{len(required.get('requested') or [])}.",
+                body,
+            ),
+        ])
+        statuses = {"covered": "покрыт", "unconfirmed": "не подтверждён", "gap": "нет покрытия"}
+        for block in core.get("core_coverage") or []:
+            status = statuses.get(block.get("status"), "статус неизвестен")
+            kind = "обязательный" if block.get("requirement") == "required" else "предпочтительный"
+            unconfirmed = block.get("unconfirmed_course_ids") or []
+            note = f"; выбранные без подтверждения: {', '.join('ID ' + str(cid) for cid in unconfirmed)}" if unconfirmed else ""
+            story.append(_paragraph(
+                f"{block.get('title') or 'Блок'} — {status}; {kind}; "
+                f"подтверждено {int(block.get('supported_credits') or 0)} кр.{note}", small,
+            ))
+        missing = required.get("missing") or []
+        if missing:
+            story.append(_paragraph(f"Не включены обязательные курсы: {', '.join('ID ' + str(cid) for cid in missing)}.", body))
+        story.append(_paragraph(
+            "Не является предметной экспертизой или разрешением на внедрение. "
+            "Неподтверждённые курсы не засчитываются в профильное покрытие.", small,
+        ))
+    story.append(_paragraph("Учебный план и основания выбора", heading))
     by_semester = {}
     for item in items:
         by_semester.setdefault(int(item.semester), []).append(item)
