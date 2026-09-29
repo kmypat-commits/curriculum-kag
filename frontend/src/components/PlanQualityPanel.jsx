@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import BridgeReplacementPanel from './BridgeReplacementPanel'
 import CompactSection from './CompactSection'
+import CoreCoveragePanel from './CoreCoveragePanel'
 import LoCoveragePanel from './LoCoveragePanel'
 
 
@@ -53,6 +54,7 @@ export default function PlanQualityPanel({
 }) {
     return (
         <>
+            <CoreCoveragePanel coverage={currentPlan?.metrics?.core_coverage} />
             {currentPlan && currentPlan.metrics_current === false && (
             <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: '#fff8e1', border: '1px solid #ffe082', color: '#6d4c41' }}>
                 <strong>{t('metrics_refresh')}</strong>
