@@ -20,6 +20,30 @@ def external_process_alive(pid: object) -> bool:
         return False
     if value <= 0:
         return False
+    if os.name == "nt":
+        # os.kill(pid, 0) calls TerminateProcess on Windows. A zero-time
+        # wait on a SYNCHRONIZE-only handle observes without sending signals.
+        import ctypes
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel.WaitForSingleObject.restype = wintypes.DWORD
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel.CloseHandle.restype = wintypes.BOOL
+        if value > 0xFFFFFFFF:
+            return False
+        handle = kernel.OpenProcess(0x00100000, False, value)  # SYNCHRONIZE
+        if not handle:
+            # Only ERROR_INVALID_PARAMETER establishes absence. Access denied
+            # and other observation failures must not authorise a duplicate run.
+            return ctypes.get_last_error() != 87
+        try:
+            return kernel.WaitForSingleObject(handle, 0) != 0  # WAIT_OBJECT_0 = exited
+        finally:
+            kernel.CloseHandle(handle)
     try:
         os.kill(value, 0)
     except ProcessLookupError:
