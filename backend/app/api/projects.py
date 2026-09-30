@@ -444,7 +444,9 @@ async def get_project(
     }
 
 
-@router.patch("/{project_id}/constraints", dependencies=[Depends(require_project_object_access)])
+@router.patch("/{project_id}/constraints", dependencies=[
+    Depends(require_project_object_access), Depends(require_permission("planner", "write")),
+])
 async def update_project_constraints(
     project_id: int,
     payload: ProjectConstraintsUpdate,

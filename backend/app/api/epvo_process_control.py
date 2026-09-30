@@ -31,7 +31,8 @@ def external_process_alive(pid: object) -> bool:
     return True
 
 
-def reconcile_external_smoke_status(status: dict, status_file: Path, metrics_path: Path) -> dict:
+def reconcile_external_smoke_status(status: dict, status_file: Path, metrics_path: Path,
+                                   *, is_alive=None, max_runtime_seconds=EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS) -> dict:
     """Convert an orphaned or overlong process record into a terminal state."""
     if status.get("state") != "running" or metrics_path.exists():
         return status
@@ -43,8 +44,8 @@ def reconcile_external_smoke_status(status: dict, status_file: Path, metrics_pat
             age_seconds = max(0, time.time() - started)
         except (TypeError, ValueError, OverflowError):
             age_seconds = None
-    if external_process_alive(status.get("pid")) and (
-        age_seconds is None or age_seconds <= EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS
+    if (is_alive or external_process_alive)(status.get("pid")) and (
+        age_seconds is None or age_seconds <= max_runtime_seconds
     ):
         return status
     result = dict(status)
@@ -55,7 +56,7 @@ def reconcile_external_smoke_status(status: dict, status_file: Path, metrics_pat
         "returncode": None,
         "message": (
             "Smoke process exceeded the maximum runtime and was marked failed. Check the logs before starting a new run."
-            if age_seconds is not None and age_seconds > EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS
+            if age_seconds is not None and age_seconds > max_runtime_seconds
             else "Smoke process is no longer available; run was marked failed. Start a new run explicitly after checking the logs."
         ),
     })

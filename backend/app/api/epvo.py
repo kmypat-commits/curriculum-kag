@@ -63,15 +63,10 @@ def _external_process_alive(pid: object) -> bool:
 
 def _reconcile_external_smoke_status(status: dict, status_file: Path, metrics_path: Path) -> dict:
     # Keep the local predicate injectable for the existing route contract.
-    if status.get("state") == "running" and not metrics_path.exists() and _external_process_alive(status.get("pid")):
-        started_at = status.get("started_at")
-        try:
-            started = time.mktime(time.strptime(str(started_at), "%Y-%m-%dT%H:%M:%SZ"))
-            if time.time() - started <= _EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS:
-                return status
-        except (TypeError, ValueError, OverflowError):
-            return status
-    return reconcile_external_smoke_status(status, status_file, metrics_path)
+    return reconcile_external_smoke_status(
+        status, status_file, metrics_path, is_alive=_external_process_alive,
+        max_runtime_seconds=_EXTERNAL_SMOKE_MAX_RUNTIME_SECONDS,
+    )
 
 
 def _cancel_external_smoke(status_file: Path, metrics_path: Path, expected_script: str) -> dict:
