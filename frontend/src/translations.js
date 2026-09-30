@@ -444,3 +444,22 @@ Object.assign(translations.en, { epvo_setup_incomplete: 'EPVO setup is incomplet
 Object.assign(translations.ru, { dashboard_overview: 'Обзор рабочего пространства', dashboard_load_error: 'Не удалось загрузить данные панели', dashboard_load_error_hint: 'Проверьте соединение с сервером и повторите попытку.', retry: 'Повторить' })
 Object.assign(translations.kk, { dashboard_overview: 'Жұмыс кеңістігіне шолу', dashboard_load_error: 'Бақылау тақтасының деректерін жүктеу мүмкін болмады', dashboard_load_error_hint: 'Сервер байланысын тексеріп, қайталап көріңіз.', retry: 'Қайталау' })
 Object.assign(translations.en, { dashboard_overview: 'Workspace overview', dashboard_load_error: 'Dashboard data could not be loaded', dashboard_load_error_hint: 'Check the server connection and try again.', retry: 'Retry' })
+
+Object.assign(translations.ru, {
+    working_catalog: 'Рабочий каталог дисциплин',
+    catalog_record_counts: 'Показано записей: {shown}. Всего в рабочем каталоге: {total}.',
+    catalog_count_unavailable: 'данные пока недоступны',
+    catalog_record_explanation: 'Счётчик показывает записи рабочего каталога, а не уникальные по смыслу дисциплины. Исходные карточки ЕПВО, нормализованные данные и рабочий каталог — разные уровни данных. В каталоге могут оставаться эквивалентные курсы с разными названиями или источниками; число смысловых уникальных дисциплин здесь не рассчитано.'
+})
+Object.assign(translations.kk, {
+    working_catalog: 'Пәндердің жұмыс каталогы',
+    catalog_record_counts: 'Көрсетілген жазбалар: {shown}. Жұмыс каталогындағы барлығы: {total}.',
+    catalog_count_unavailable: 'деректер әзірге қолжетімсіз',
+    catalog_record_explanation: 'Есептегіш мағынасы бойынша бірегей пәндерді емес, жұмыс каталогының жазбаларын көрсетеді. ЕПВО бастапқы карточкалары, қалыпқа келтірілген деректер және жұмыс каталогы — деректердің әртүрлі деңгейлері. Каталогта атаулары немесе дереккөздері әртүрлі баламалы пәндер қалуы мүмкін; мағынасы бойынша бірегей пәндер саны мұнда есептелмеген.'
+})
+Object.assign(translations.en, {
+    working_catalog: 'Working course catalog',
+    catalog_record_counts: 'Records shown: {shown}. Total working catalog records: {total}.',
+    catalog_count_unavailable: 'not available yet',
+    catalog_record_explanation: 'The counter shows working catalog records, not semantically unique courses. Original EPVO records, normalized data, and the working catalog are different data layers. Equivalent courses with different titles or sources may remain in the catalog; the number of semantically unique courses has not been calculated here.'
+})

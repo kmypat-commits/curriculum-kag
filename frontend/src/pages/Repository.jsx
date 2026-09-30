@@ -18,7 +18,7 @@ export default function Repository() {
     const navigate = useNavigate()
     const { notify } = useNotifications()
     const [courses, setCourses] = useState([])
-    const [repositoryStats, setRepositoryStats] = useState({ total_courses: 0, domains: [] })
+    const [repositoryStats, setRepositoryStats] = useState({ total_courses: null, domains: [] })
     const [loading, setLoading] = useState(true)
     const [coursesLoading, setCoursesLoading] = useState(false)
     const [filter, setFilter] = useState({ direction_code: '', group_code: '', search: '' })
@@ -282,7 +282,7 @@ export default function Repository() {
             <div className="container" style={{ paddingTop: '30px' }}>
                 <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h2 style={{ margin: 0 }}>{t('courses')} ({filteredCourses.length}/{repositoryStats.total_courses || filteredCourses.length}) {coursesLoading && <small style={{ color: '#667' }}>{t('loading')}</small>}</h2>
+                        <h2 style={{ margin: 0 }}>{t('working_catalog')} {coursesLoading && <small style={{ color: '#667' }}>{t('loading')}</small>}</h2>
                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                             <button
                                 onClick={() => { setShowGenerate(!showGenerate); setGenerateResult(null) }}
@@ -296,6 +296,11 @@ export default function Repository() {
                             <button onClick={() => setShowImport(true)} className="btn btn-primary">📥 {t('import')}</button>
                         </div>
                     </div>
+
+                    <p>{t('catalog_record_counts')
+                        .replace('{shown}', filteredCourses.length)
+                        .replace('{total}', repositoryStats.total_courses ?? t('catalog_count_unavailable'))}</p>
+                    <p style={{ color: '#475569', lineHeight: 1.5 }}>{t('catalog_record_explanation')}</p>
 
                     {/* AI Generate Panel */}
                     {showGenerate && (
