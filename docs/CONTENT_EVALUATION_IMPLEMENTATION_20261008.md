@@ -496,3 +496,26 @@ Ruling: работа в существующей feature-ветке и теку�
   записаны только в восстановленную тестовую БД; продуктовый код не менялся.
 - Далее: crash/lease recovery и реальная конкурентная обработка в изоляции,
   balanced repeated overhead; review2124 остаётся обязательным перед20→40.
+
+### 2026-10-10 — аварийное завершение и lease recovery в restored DB
+
+- Только curriculum_kag_restore_pilot_20261010, version1612; прежние live
+  API/worker не перезапускались. Операционный lease20с задан только отдельным
+  тестовым процессам, без изменения production policy или требований плана.
+- Job build-2f8f412d2c50964f99d1106c45018c3a реально прерван os._exit(73)
+  на variant_A_start, PID344. Прежний plan4418 и его snapshot сохранены
+  при аварии и перед повторным захватом. Свежий daemon PID16328 восстановил
+  ТОТ ЖЕ job после lease; exit0, final complete, recovery20.92с.
+- Два distinct owner/attempt: ordinal1 по-прежнему записан running,
+  ordinal2 complete. Успешный recovery НЕ означает, что историческая
+  попытка корректно помечена abandoned: это отдельно открытая проверка
+  представления истории. Evidence .runtime/crash-recovery-pilot-20261010.json.
+- Read-only независимая проверка persisted plan4421:244credits,
+  loads33/31/33/28/30/30/31/28,11prerequisite pairs, structuralissues[],
+  exit0; SHA256 совпал с recovery ledger:
+  02a9a7670986a89b0eb3c0b2b29bcf7386071b14017aa41f355d9789d16578e8.
+  Evidence .runtime/crash-recovery-structural-20261010.json. Это не предметная
+  экспертная пригодность и не новый successful frozen20.
+- Продуктовый код не менялся, full suites повторно не запускались.
+  Открыто: concurrent execution, balanced repeated overhead, history attempt
+  presentation и предметный review2124 перед новым полным20→40.
