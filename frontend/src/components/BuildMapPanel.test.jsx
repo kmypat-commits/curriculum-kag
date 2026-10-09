@@ -1,9 +1,20 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, it, expect } from 'vitest'
 import BuildMapPanel from './BuildMapPanel'
 import axios from 'axios'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
+
+it('uses the actual event stream state while the slower status poll still says queued', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'running', events: [], next_cursor: 0, has_more: false } })
+    render(<BuildMapPanel versionId={3} status={{ state: 'queued', job_id: 'real' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_show_graph' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_motion' }))
+    await waitFor(() => expect(screen.getByRole('region')).toHaveClass('has-motion'))
+    vi.unstubAllGlobals()
+})
 
 it('pauses opted-in light flow outside the viewport and after completion', async () => {
     let observeVisibility

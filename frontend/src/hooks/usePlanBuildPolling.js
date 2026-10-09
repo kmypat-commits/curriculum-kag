@@ -21,6 +21,12 @@ export default function usePlanBuildPolling({ onStatus, onComplete }) {
         const tick = async () => {
             try {
                 const { data } = await axios.get(`/api/planner/${versionId}/build-status`)
+                // POST /build and the first GET may race. An idle read does
+                // not mean that the submitted command has finished.
+                if (data.state === 'idle') {
+                    timerRef.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+                    return
+                }
                 callbacksRef.current.onStatus(data)
                 if (data.state === 'running' || data.state === 'queued') {
                     timerRef.current = window.setTimeout(tick, POLL_INTERVAL_MS)

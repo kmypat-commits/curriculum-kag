@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.3'
+EVALUATOR_VERSION = 'local-content-1.4'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -192,8 +192,20 @@ def evaluate_content(*, profile, courses, schedule, lo_scores=None, core_blocks=
                 sequence.append({'course_id': cid, 'prerequisite_id': parent,
                                  'semester': semester, 'prerequisite_semester': positions.get(parent),
                                  'reason': 'missing_prerequisite' if parent not in positions else 'prerequisite_order'})
+    # Publication removes display/solver metadata and may reorder rows.
+    # Fingerprint the same curricular facts before and after persistence.
+    schedule_snapshot = {
+        semester: sorted([
+            {'course_id': item.get('course_id'),
+             'bridge_module_id': item.get('bridge_module_id'),
+             'credits': int(item.get('credits') or 0),
+             'prerequisites': sorted(item.get('prerequisites') or [])}
+            for item in items
+        ], key=canonical_hash)
+        for semester, items in schedule.items()
+    }
     snapshot = {'profile': profile, 'courses': [course_record(c) for c in courses],
-                'schedule': schedule, 'scores': scores, 'blocks': blocks,
+                'schedule': schedule_snapshot, 'scores': scores, 'blocks': blocks,
                 'confirmed': {key: sorted(value) for key, value in confirmed.items()},
                 'prerequisites': parents, 'version': EVALUATOR_VERSION}
     snapshot['content_vectors'] = vectors

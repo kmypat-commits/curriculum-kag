@@ -1,6 +1,21 @@
 from types import SimpleNamespace
 
 
+def test_snapshot_survives_publication_metadata_and_row_order_but_detects_real_edits():
+    from app.planner.content_evaluation import evaluate_content
+    courses = [course(1, 'Обработка древесины', 'Технология обработки древесины.'),
+               course(2, 'Изделия из древесины', 'Проектирование изделий из древесины.')]
+    def report(schedule):
+        return evaluate_content(profile={'title': 'Деревообработка'}, courses=courses, schedule=schedule)
+    before = report({1: [{'course_id': 1, 'credits': 5, 'title': 'Обработка древесины', 'score': .8},
+                         {'course_id': 2, 'credits': 5, 'title': 'Изделия из древесины'}]})
+    saved = {1: [{'course_id': 2, 'bridge_module_id': None, 'credits': 5, 'prerequisites': []},
+                 {'course_id': 1, 'bridge_module_id': None, 'credits': 5, 'prerequisites': []}]}
+    assert before['snapshot_hash'] == report(saved)['snapshot_hash']
+    saved[1][0]['credits'] = 4
+    assert before['snapshot_hash'] != report(saved)['snapshot_hash']
+
+
 def course(cid, title, description='', **kw):
     return SimpleNamespace(id=cid, course_id=f'EPVO-{cid}', title=title,
                            description=description, topics=[], learning_outcomes=[],

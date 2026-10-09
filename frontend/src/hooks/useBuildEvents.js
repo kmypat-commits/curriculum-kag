@@ -5,10 +5,11 @@ export default function useBuildEvents(versionId, jobId, opened) {
     const [events, setEvents] = useState([])
     const [error, setError] = useState(false)
     const [noJob, setNoJob] = useState(false)
+    const [state, setState] = useState(null)
     useEffect(() => {
         if (!opened || !versionId) return
         let timer, controller, disposed = false, busy = false, finished = false, cursor = 0, currentJob = jobId
-        setEvents([]); setError(false); setNoJob(false)
+        setEvents([]); setError(false); setNoJob(false); setState(null)
         const tick = async () => {
             if (disposed || document.hidden || busy || finished) return
             busy = true
@@ -26,6 +27,7 @@ export default function useBuildEvents(versionId, jobId, opened) {
                 if (disposed) return
                 cursor = data.next_cursor
                 setError(false)
+                setState(data.state)
                 setEvents(previous => [...previous, ...data.events].slice(-500))
                 if (!data.has_more && (['complete', 'cancelled', 'failed', 'rejected', 'timed_out', 'infeasible', 'superseded'].includes(data.state)
                     || data.events.some(e => ['complete', 'cancelled', 'failed', 'rejected', 'timed_out', 'infeasible'].includes(e.data?.state)))) {
@@ -50,5 +52,5 @@ export default function useBuildEvents(versionId, jobId, opened) {
         tick()
         return () => { disposed = true; window.clearTimeout(timer); controller?.abort(); document.removeEventListener('visibilitychange', visibility) }
     }, [versionId, jobId, opened])
-    return { events, error, noJob }
+    return { events, error, noJob, state }
 }

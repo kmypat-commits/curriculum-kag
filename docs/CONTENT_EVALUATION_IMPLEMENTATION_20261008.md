@@ -189,3 +189,43 @@ Ruling: работа в существующей feature-ветке и теку�
   unit checks не заменяют эту приёмку. Новый массовый прогон не запущен:
   prerequisite review2124 по-прежнему не согласован, прежний report8/1
   сохранён. Для20→40 требуется сначала устранить эту причину.
+
+## Реальный UI job и snapshot оценки — 2026-10-10
+
+- Создан отдельный проект1632 из frozen10251, canonical input SHA256
+  9ce08917f85642f258b9e9e23c5db4c1ad02538a40b36b3069e82fbf481f6a7d.
+  Это UI контроль, НЕ замена и НЕ продолжение остановленной серии20.
+  Старые проекты и prerequisite edges не изменялись этим контролем.
+- Первый настоящий UI job завершён за109.8с. Повторы с кешем завершались
+  за6.2–7.5с; это измерения этого проекта, не обещание общего ускорения.
+- Выявлена гонка первого GET idle с POST build: polling прекращался до
+  принятия команды. RED->GREEN regression usePlanBuildPolling: idle не
+  завершает опрос, после202 статус принят и опрос восстановлен. Синхронный
+  или ошибочный запрос останавливает polling в finally.
+- Event stream state используется для переливов: событие running приходит
+  раз в2с, резервный status poll раз в30с мог оставаться queued всю короткую
+  генерацию. RED->GREEN component regression. В настоящем job наблюдались
+  has-motion, animation=build-map-light-flow, opacity0.700673 и ненулевой
+  transform; после complete animation=none. Карта показала120 кандидатов.
+- Snapshot v1.4 канонизирует только course/bridge ID, semester, credits и
+  prerequisites, а не служебные поля и порядок строк. RED->GREEN тест
+  публикации; редактирование кредитов меняет hash. Старые оценки1.3
+  остаются legitimately stale после обновления оценщика, не переименованы.
+- API и persistent daemon обновлены только после проверки active jobs=0.
+  Backend wrapper10152 actual17012 loopback8000; worker wrapper15872.
+  Дефект первого открытия оценки был при обращении к заменённому plan_id
+  до обновления variants резервным polling; повтор после обновления успешен.
+  Оптимизация этого короткого окна и отдельный graph-overhead эксперимент
+  ещё открыты, не заявлять полной пилотной приёмки.
+- Последний plan4437 job build-8448be9ab7ec8ef4195cb13bc793384d: complete7.5с,
+  244кредита, нагрузки33/31/33/28/30/30/31/28, independent issues[].
+  Оценщик1.4 сохранён при публикации, stale=false, saved/current hash
+  f072edb48678aacd02b79127d237cc247226c12a15c996c98583aa27fb43928e.
+  Evidence .runtime/ui-lightflow-evidence-20261010.json.
+- Содержание:50курсов,17needs_review,16supported professional,1possible
+  duplicate group; core_definition_missing=true. Нулевой core_gaps при
+  незаданном ядре НЕ доказывает его полноту. Известные ограничения
+  supporting-role/culture generic terms/517vs734 остаются на review.
+- Frontend33/33+build exit0, backend448/448 exit0 (14 content/API target),
+  .runtime/content-v14-backend-20261010.log. Самопроверка, не внешний review.
+  2124 всё ещё требует согласованного prerequisite review;40 не запускались.

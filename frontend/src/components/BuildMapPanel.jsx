@@ -55,11 +55,12 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
     const [visible, setVisible] = useState(!document.hidden)
     const [inViewport, setInViewport] = useState(false)
     const panel = useRef(null)
-    const { events, error, noJob } = useBuildEvents(versionId, status?.job_id, opened)
+    const { events, error, noJob, state: eventState } = useBuildEvents(versionId, status?.job_id, opened)
     const elements = useMemo(() => buildEventGraph(events, title, t('build_map_aggregate')), [events, title, t])
     const candidate = [...events].reverse().find(e => e.type === 'candidates')?.data
     const lastStage = [...events].reverse().find(e => e.type === 'stage')?.data
-    const animate = motion && visible && inViewport && !textOnly && status?.state === 'running'
+    const terminal = ['complete', 'cancelled', 'failed', 'rejected', 'timed_out', 'infeasible', 'superseded'].includes(status?.state)
+    const animate = motion && visible && inViewport && !textOnly && !terminal && (eventState || status?.state) === 'running'
     useEffect(() => {
         if (!opened || !panel.current) return
         if (!window.IntersectionObserver) { setInViewport(true); return }

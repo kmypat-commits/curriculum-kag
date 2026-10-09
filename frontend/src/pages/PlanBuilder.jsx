@@ -384,6 +384,8 @@ export default function PlanBuilder() {
             const buildResponse = await buildRequest
             if (buildResponse.status === 202 || buildResponse.data?.state === 'queued') {
                 handedToAsyncWorker = true
+                applyBuildStatus(buildResponse.data)
+                startBuildStatusPolling(versionId)
                 return
             }
             await fetchVariants(versionId)
@@ -422,6 +424,7 @@ export default function PlanBuilder() {
             // A 202 only confirms durable queue acceptance. Polling owns the
             // busy state until a terminal job status arrives.
             if (!handedToAsyncWorker) setBuilding(false)
+            if (!handedToAsyncWorker) stopBuildStatusPolling()
         }
     }
 
