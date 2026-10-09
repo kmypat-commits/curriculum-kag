@@ -107,3 +107,7 @@ Ruling: работа в существующей feature-ветке и теку�
   docker curriculum-kag-postgres-shadow, target .runtime/content-catalogue-80267ad-20261009.dump.
   Пока нет host metadata/exit0, backup НЕ подтверждён; restore НЕ проверен.
   Snapshot относится к каталогу до новой серии, версия code сохраняется отдельно.
+- Backup завершился exit0:2356558525bytes,404.96с;
+  .runtime/content-catalogue-80267ad-20261009.dump и .json.
+  SHA2566269d88764e109572d6c9705b44852f568dde58cd9c9d6c5212d37c868f74aef.
+  Restore всё ещё не проверен. Повторно pg_dump не запускать.
