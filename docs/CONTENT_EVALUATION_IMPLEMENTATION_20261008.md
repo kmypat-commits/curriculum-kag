@@ -471,3 +471,28 @@ Ruling: работа в существующей feature-ветке и теку�
   transport и не UIкнопка отмены. Starlette/httpx deprecation warning отмечен;
   приложение/test dependencies в этом шаге не менялись. Новых генераций и
   изменений DB не выполнялось, продуктовый код не менялся.
+
+### 2026-10-10 — два задания и свежий исполнитель в restored DB
+
+- Только curriculum_kag_restore_pilot_20261010; проверен current_database().
+  Из неизменённого frozen10251 созданы isolated test versions1612/1613;
+  source canonical hash9ce08917f85642f258b9e9e23c5db4c1ad02538a40b36b3069e82fbf481f6a7d.
+  Обаqueued202 до старта исполнителя. Producer13400 завершился;
+  новый runner2880 StartTime10окт01:32:23 local, exec55348, прочёл durable jobs.
+  Штатный _build_one и build_plan, но явно только эти2job: archived queued
+  записи восстановленной БД не подбирались, live server/worker не остановлены.
+- Первый запуск скрипта отказал ДО записи: конфигурация cwdroot выключала
+  ASYNC. Scratch launcher исправлен на cwdbackend/.env; это ошибка запуска
+  теста, не продуктовый regression/fix. Credentials/URL не выводились.
+- exec55348exit0, ledger .runtime/isolated-queue-pilot-20261010.json passed:
+  jobbuild-1e147768e57f9ba0c4c3c5835227d364 version1612plan4418 complete68.7с;
+  jobbuild-893d9beb816e29f30bc88cee2a69934a version1613plan4419 complete41.2с.
+  Оба244credits и independent structuralissues[]. Всего110.17с.
+  First100 events каждого содержат только свойjob_id, запрос foreignjob
+  в своейversion вернул0events. Это проверка указанных порций, не всех страниц.
+- При свободных5.3GB использовано последовательное исполнение двух pending
+  команд. Это НЕ два одновременно считающих worker/daemon SKIP_LOCKED stress,
+  НЕ crash recovery mid-build и НЕ содержательная приёмка20. Новые rows/plans
+  записаны только в восстановленную тестовую БД; продуктовый код не менялся.
+- Далее: crash/lease recovery и реальная конкурентная обработка в изоляции,
+  balanced repeated overhead; review2124 остаётся обязательным перед20→40.
