@@ -1,6 +1,49 @@
 from types import SimpleNamespace
 
 
+def test_copied_language_descriptions_do_not_override_target_language_in_title():
+    text = 'Развитие межкультурного делового общения и письменной профессиональной коммуникации.'
+    rows = [course(1, 'Профессиональный иностранный язык', text),
+            course(2, 'Профессиональный казахский (русский) язык', text),
+            course(3, 'Английский язык B1', text),
+            course(4, 'Немецкий язык B1', text)]
+    result = evaluate(rows, content_vectors={c.id: {'model': 'local', 'vector': [1, 0]} for c in rows})
+    assert result['duplicate_groups'] == []
+
+
+def test_professional_kazakh_russian_is_supporting_outside_language_programme():
+    result = evaluate([course(1, 'Профессиональный казахский (русский) язык',
+        'Деловая коммуникация в производстве изделий из древесины и деревообработке.')])
+    assert result['courses'][0]['role'] == 'supporting'
+    assert result['courses'][0]['priority_adjustment'] == 0
+
+
+def test_generic_culture_in_other_subject_does_not_earn_culturology_priority():
+    from app.planner.content_evaluation import evaluate_content
+    rows = [course(1, 'Основы экологии', 'Формирование экологической культуры и охрана окружающей среды.'),
+            course(2, 'Противодействие коррупции', 'Формирование антикоррупционной культуры и изучение законодательства.'),
+            course(3, 'Теория культуры', 'Изучение культурологических теорий и методов анализа культурных процессов.')]
+    result = evaluate_content(profile={'title': '6В03102 Культурология'}, courses=rows, schedule={})
+    assert [r['status'] for r in result['courses']] == ['needs_review', 'needs_review', 'supported']
+    assert [r['priority_adjustment'] for r in result['courses']] == [0, 0, .15]
+
+
+def test_language_of_art_is_not_misclassified_as_foreign_language_support():
+    from app.planner.content_evaluation import assess_course
+    row = assess_course({'title': 'Культурология'}, course(1, 'Язык искусства',
+        'Семиотика искусства и теория культуры в анализе художественных произведений.'))
+    assert row['role'] == 'professional'
+    assert row['status'] == 'supported'
+
+
+def test_named_cultural_subject_retains_priority_with_substantive_cultural_evidence():
+    from app.planner.content_evaluation import assess_course
+    row = assess_course({'title': 'Культурология'}, course(1, 'Культура Ренессанса',
+        'Изучение культуры эпохи Возрождения, художественных традиций и общественных изменений.'))
+    assert row['status'] == 'supported'
+    assert row['priority_adjustment'] == .15
+
+
 def test_snapshot_survives_publication_metadata_and_row_order_but_detects_real_edits():
     from app.planner.content_evaluation import evaluate_content
     courses = [course(1, 'Обработка древесины', 'Технология обработки древесины.'),

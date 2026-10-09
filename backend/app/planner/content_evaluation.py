@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.4'
+EVALUATOR_VERSION = 'local-content-1.5'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -52,6 +52,30 @@ def _level(title):
                             normalise(title)))
 
 
+def _language_purpose(title):
+    """Target language is not the repository's language of instruction.
+
+    Unknown target categories remain distinct; this does not establish course
+    equivalence or satisfy any prerequisite.
+    """
+    title = normalise(title)
+    if not re.search(r'язык|\blanguage\b', title) or 'программирован' in title:
+        return ()
+    targets = tuple(name for name, pattern in (
+        ('kazakh', r'казах|қазақ|kazakh'), ('russian', r'русск|russian'),
+        ('english', r'англий|english'), ('german', r'немец|german'),
+        ('french', r'француз|french'), ('chinese', r'китай|chinese'),
+        ('arabic', r'араб|arabic'), ('spanish', r'испан|spanish'))
+        if re.search(pattern, title))
+    if targets:
+        return targets
+    if 'восточн' in title:
+        return ('eastern_unspecified',)
+    if 'страны специализации' in title:
+        return ('specialisation_country_unspecified',)
+    return ('foreign_unspecified',) if 'иностран' in title else ('unspecified',)
+
+
 @lru_cache(maxsize=4096)
 def _cached_course(profile_json, course_json, scores_json):
     profile, course, scores = map(json.loads, (profile_json, course_json, scores_json))
@@ -66,6 +90,8 @@ def _cached_course(profile_json, course_json, scores_json):
     regulatory = str(course.get('course_id') or '').upper().startswith('GOSO-KZ-')
     support = any(marker in normalise(title) for marker in
                   ('иностранный язык', 'психология управления', 'общий менеджмент'))
+    language_purpose = _language_purpose(title)
+    support = support or (bool(language_purpose) and language_purpose != ('unspecified',))
     if any(marker in normalise(profile_text) for marker in
            ('лингвист', 'филолог', 'перевод', 'linguistic', 'translation')):
         support = False
@@ -79,6 +105,19 @@ def _cached_course(profile_json, course_json, scores_json):
         focus_terms |= _terms('древесина деревообработка мебель лесопиление пиломатериалы woodworking furniture timber')
     for field, text in substantive.items():
         overlap = sorted(_terms(text) & focus_terms)
+        if 'культуролог' in normalise(profile.get('title')):
+            # "Ecological/anti-corruption culture" is not evidence of the
+            # disciplinary study of culture. Keep uncertainty instead of a
+            # priority bonus based on the seven-character shared stem.
+            overlap = [term for term in overlap if term != 'культур']
+            anchors = re.findall(
+                r'культуролог\w*|(?:теори\w*|истори\w*|философи\w*|социологи\w*)\s+культур\w*'
+                r'|культурн\w*\s+(?:наследи\w*|политик\w*)|семиотик\w*', normalise(text))
+            cultural_title = ('культур' in normalise(title)
+                              and not re.search(r'эколог|антикорруп|безопасн', normalise(title)))
+            if cultural_title:
+                anchors.extend(re.findall(r'\bкультур\w*', normalise(text)))
+            overlap.extend(sorted(set(anchors)))
         evidence.append({'source_reference': str(course.get('course_id') or course['id']),
                          'source_field': field, 'excerpt': text[:500],
                          'matched_terms': overlap,
@@ -141,7 +180,8 @@ def evaluate_content(*, profile, courses, schedule, lo_scores=None, core_blocks=
         record = course_record(c)
         text = ' '.join(source_text(record.get(f)) for f in FIELDS[:3])
         if len(re.findall(r'[^\W\d_]+', text, re.UNICODE)) >= 5 and len(normalise(text)) >= 40:
-            groups[(normalise(text), normalise(c.language), _level(c.title))].append(int(c.id))
+            groups[(normalise(text), normalise(c.language), _level(c.title),
+                    _language_purpose(c.title))].append(int(c.id))
     for ids in groups.values():
         if len(ids) > 1:
             duplicates.append({'course_ids': ids, 'status': 'needs_review',
@@ -164,6 +204,7 @@ def evaluate_content(*, profile, courses, schedule, lo_scores=None, core_blocks=
         for b in vector_courses[i + 1:]:
             if (tuple(sorted((a.id, b.id))) in exact_pairs or _level(a.title) != _level(b.title)
                     or normalise(a.language) != normalise(b.language)
+                    or _language_purpose(a.title) != _language_purpose(b.title)
                     or not (_terms(a.title) & _terms(b.title))
                     or vectors[a.id]['model'] != vectors[b.id]['model']):
                 continue
