@@ -4,10 +4,19 @@ import {
     localizeQualityEvidenceText,
     planBuildElapsedLabel,
     planBuildStageLabel,
+    planBuildStageDetail,
 } from './planBuilderPresentation'
 
 
 describe('plan builder presentation', () => {
+    it('explains cancellation and retry in each interface language', () => {
+        expect(planBuildStageLabel('cancelled', 'ru')).toBe('Построение отменено')
+        expect(planBuildStageLabel('cancelled', 'kk')).toBe('Құру тоқтатылды')
+        expect(planBuildStageLabel('cancelled', 'en')).toBe('Generation cancelled')
+        expect(planBuildStageDetail({state:'cancelled'}, 'ru')).toContain('Можно повторить')
+        expect(planBuildStageDetail({state:'cancelled'}, 'kk')).toContain('Қайта')
+        expect(planBuildStageDetail({state:'cancelled'}, 'en')).toContain('retry')
+    })
     it('keeps build-stage labels available in all interface languages', () => {
         expect(planBuildStageLabel('variant_B', 'ru')).toContain('вариант B')
         expect(planBuildStageLabel('variant_B', 'kk')).toContain('B')

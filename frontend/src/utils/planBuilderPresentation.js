@@ -42,11 +42,17 @@ export const localizeQualityEvidenceText = (text = '', language = 'ru') => {
 }
 
 export const planBuildStageLabel = (stage = 'idle', language = 'ru') => {
+    if (stage === 'cancelled') return localizedCopy(language,
+        'Построение отменено', 'Құру тоқтатылды', 'Generation cancelled')
     const labels = BUILD_STAGE_LABELS[language] || BUILD_STAGE_LABELS.ru
     return labels[stage] || stage
 }
 
 export const planBuildStageDetail = (status = {}, language = 'ru') => {
+    if (status.state === 'cancelled' || status.stage === 'cancelled') return localizedCopy(language,
+        'Новый результат не опубликован. Можно повторить построение.',
+        'Жаңа нәтиже жарияланбады. Қайта құруға болады.',
+        'No new result was published. You can retry generation.')
     if (status.state === 'timed_out' || status.stage === 'timed_out') {
         return localizedCopy(language,
             'Срок lease истёк. Предыдущий план сохранён; построение можно запустить повторно.',

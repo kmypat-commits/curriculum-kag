@@ -8,6 +8,12 @@ export default function PlanBuildProgress({
     elapsedLabel,
     longRunningHint,
 }) {
+    if (status?.state === 'cancelled') return (
+        <div className="card build-progress-card" role="status" aria-live="polite">
+            <h3>{stageLabel('cancelled')}</h3>
+            {stageDetail && <p>{stageDetail}</p>}
+        </div>
+    )
     const timedOut = status?.state === 'timed_out'
     if (!active && !timedOut) return null
 

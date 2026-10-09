@@ -408,3 +408,31 @@ Ruling: работа в существующей feature-ветке и теку�
   объявлять количественный overhead доказанным. Повторять этиjobs не нужно.
 - Открыто: строгий matched/repeated overhead experiment, реальные
   cancel/retry/parallel/restart, review2124 и содержательная frozen20→40 приемка.
+
+### 2026-10-10 — реальная отмена и повтор из UI
+
+- Только isolated1633, локальный cancel handler после require_version_access
+  для владельца1; это НЕ HTTP middleware/кнопка отмены. Первый запрос пропустил
+  короткое окно: job успел complete, отмена не выполнена. Старое evidence
+  .runtime/cancel-pilot-20261010.json сохранено, этот запуск не назван cancelled.
+- Во втором bounded pilot обработчик подготовлен ДО отправки job, ожидает
+  новыйrunning/queued максимум45с, без повторной отмены. Job
+  build-d559ea2f75ee9edbf9ab6c05ae35abef cancelled; plan4442 всё ещё active1
+  и тот же SHA2561693dad16f96895247746e73135bb610097d2fbc865c4184c3884f01074ca1f3.
+  Evidence .runtime/cancel-pilot-v2-20261010.json; ничего не удалялось вручную.
+- Найдено: UI послеcancelled скрывал progress и не объяснял результат.
+  Две RED regression→GREEN: отмена показывается как status без progressbar/
+  обещания ожидания; RU/KK/EN label/detail. Frontend49/49, Vite build exit0,
+  развёрнут .runtime/dist. Browser показывает «Построение отменено» и
+  «Новый результат не опубликован. Можно повторить построение».
+  Screenshot .runtime/ui-cancel-message-20261010.jpg. Backend не менялся.
+- Повтор отправлен через обычную UIкнопку, НЕ endpointbuild-retry:
+  новыйjobbuild-9faa4a0378dcb922088c386dbaaa0397 complete5.5с plan4443.
+  244credits loads33/30/28/33/29/32/31/28; structuralissues[];
+  content1.6stalefalse,51courses10supported24reviewcoreundefined.
+  Evidence .runtime/cancel-retry-evidence-20261010.json. Durable job history
+  сохранила cancelled/complete отдельно, у новогоcancel_requested0,
+  program_spec_hash обоих совпал. .runtime/cancel-history-evidence-20261010.json.
+- Отмена/повтор реального worker подтверждены в указанном scope. Отдельная
+  UIкнопка отмены/HTTP cancel transport, parallel/restart, matched overhead,
+  review2124 и frozen20→40 ещё НЕ завершены.

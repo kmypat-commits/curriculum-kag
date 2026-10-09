@@ -5,6 +5,16 @@ import PlanBuildProgress from './PlanBuildProgress'
 
 
 describe('PlanBuildProgress', () => {
+    it('keeps a cancellation explanation visible without a live progress bar', () => {
+        render(<PlanBuildProgress active={false} progress={5}
+            status={{state:'cancelled', stage:'cancelled'}} title="Построение плана"
+            stageLabel={() => 'Отменено'} stageDetail="Новый результат не опубликован."
+            longRunningHint="Подождите завершения" />)
+        expect(screen.getByRole('status')).toHaveTextContent('Отменено')
+        expect(screen.getByText('Новый результат не опубликован.')).toBeInTheDocument()
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+        expect(screen.queryByText('Подождите завершения')).not.toBeInTheDocument()
+    })
     it('renders live progress and bounds an invalid value', () => {
         render(
             <PlanBuildProgress
