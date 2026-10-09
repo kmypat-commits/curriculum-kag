@@ -340,3 +340,20 @@ Ruling: работа в существующей feature-ветке и теку�
 - Это подтверждает reopening завершённого job, но НЕ реальный offline retry,
   отмену работающего задания, parallel/restart или измерение overhead. Эти
   проверки и предметный prerequisite review2124 остаются открытыми.
+
+### 2026-10-10 — isolated restore pilot запущен
+
+- Проверено: Docker shadow healthy,896GB свободно; существующий dump2.3GB.
+  SHA256 host и container совпадает с metadata:
+  6269d88764e109572d6c9705b44852f568dde58cd9c9d6c5212d37c868f74aef.
+- Единственный runner .runtime/restore-content-pilot-20261010.py, actualPID21472,
+  StartTime2026-10-10 01:01:41 local; exec session75015. Ledger
+  .runtime/restore-content-pilot-20261010.json state=restoring при запуске.
+  Цель только curriculum_kag_restore_pilot_20261010, создана template0;
+  createdb откажет при существующей цели, overwrite/drop не предусмотрены.
+- pg_restore --exit-on-error --no-owner восстанавливает существующий снимок,
+  рабочая curriculum_kag_shadow НЕ цель восстановления. После завершения
+  runner проверяет courses/plans/items/prerequisites, orphan relations,
+  invalid indexes/unvalidated constraints и migration. Пока завершение и
+  проверки НЕ подтверждены. Не дублировать runner и не объявлять restore ready.
+- Тестовую БД оставляем для проверки; никакие рабочие edges/планы не меняются.
