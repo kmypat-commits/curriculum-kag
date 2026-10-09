@@ -379,3 +379,32 @@ Ruling: работа в существующей feature-ветке и теку�
   frontend47/47 повторно passed. Продуктовый код не менялся.
 - Остаются real open/closed overhead и cancel/retry/parallel/restart проверки,
   предметный review2124 и содержательная frozen20→40 приемка.
+
+### 2026-10-10 — три реальных контроля карты
+
+- Созданы отдельные проекты1633/1634/1635 из одного неизменённого frozen10251.
+  Input canonical SHA2569ce08917f85642f258b9e9e23c5db4c1ad02538a40b36b3069e82fbf481f6a7d.
+  Shadow mode, A, последовательные реальные UI build; код не менялся.
+  Это bounded pilot, не серия20, не статистический overhead experiment и не
+  доказательство зафиксированного снимка всего каталога.
+- Закрытая карта1633: jobbuild-bab265a7d77d7a9da3a5953602f62fa0,
+  plan4439, complete63.2с. Статичная карта1634:
+  jobbuild-f25ce5be90695784ad05c26dfd58072f, plan4440, complete44.3с.
+  Переливы1635: jobbuild-7bb50a56c3c20c0b265f13993be03b9b,
+  plan4441, complete39.8с. Каждая244credits и independent structural issues[].
+- Открытые графы действительно были видимы: graph rect106–566 при viewport672.
+  Static panel безhas-motion. Motion panel во время работыhas-motion,
+  checkbox checked, hidden=false/reducedMotion=false. После complete класс
+  has-motion снят автоматически, checkbox остался включённым. Screenshot
+  .runtime/ui-map-overhead-motion-20261010.jpg показывает завершённый реальный
+  граф120кандидатов и статусГотово, не анимированный placeholder.
+- Content1.6 всех трёх stale=false, одинаковые saved/current snapshot hashes:
+  57dc03bb5959d46cba57a3409a283f887001d98ac84b9ea7cce8ee8a349d4826.
+  Каждый51courses10supported24needs_review0duplicates;
+  core_definition_missing=true. Это НЕ предметная пригодность/полнота ядра.
+- Evidence .runtime/map-overhead-pilot-results-20261010.json и
+  .runtime/map-pilot-content-20261010.json. По1 наблюдению на режим, порядок и
+  прогрев не сбалансированы: нельзя приписывать разницу скорости карте или
+  объявлять количественный overhead доказанным. Повторять этиjobs не нужно.
+- Открыто: строгий matched/repeated overhead experiment, реальные
+  cancel/retry/parallel/restart, review2124 и содержательная frozen20→40 приемка.
