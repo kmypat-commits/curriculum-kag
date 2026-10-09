@@ -1,0 +1,347 @@
+{
+  "frozen_at": "2026-10-10",
+  "label_authority": "Assistant source-fragment review; not independent methodist validation",
+  "source": "local-content-shadow-v15-20261010-eleven.json; unchanged course records; profile projected to title for bounded classification checks",
+  "cases": [
+    {
+      "profile": {
+        "title": "6В03102 Культурология"
+      },
+      "course": {
+        "id": 530,
+        "course_id": "EPVO-26419",
+        "title": "Правовые основы противодействия коррупции",
+        "domain": "forensics",
+        "credits": 5,
+        "language": "ru",
+        "description": "Цель дисциплины - сформировать способность анализировать деятельность органов государственной власти, политических и общественных организаций в сфере противодействия коррупции. Курс формирует объективные знания о проблемах коррупции и антикоррупционной культуры в современном обществе. Дисциплина направлена на изучение основных положений антикоррупционного законодательства, содержание национального плана противодействия коррупции, навыков преодоления коррупции.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1602,
+      "expected": {
+        "role": "professional",
+        "status": "needs_review"
+      },
+      "rationale": "Anti-corruption law and civic culture alone do not substantiate culturology."
+    },
+    {
+      "profile": {
+        "title": "6В03102 Культурология"
+      },
+      "course": {
+        "id": 3427,
+        "course_id": "EPVO-40808",
+        "title": "Основы экологии и безопасной жизнедеятельности",
+        "domain": "it",
+        "credits": 5,
+        "language": "ru",
+        "description": "Дисциплина формирует у студентов современное экологическое образование и культуру, развивает навыки применения методов повышения безопасности технических средств и технологических процессов для безопасной жизнедеятельности. Раскрывает основные закономерности функционирования экосистем различного уровня организации, биосферы в целом, противоречия, возникающие во взаимоотношениях человека и природы, а также необходимость бережного отношения к природе и экологии.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1602,
+      "expected": {
+        "role": "professional",
+        "status": "needs_review"
+      },
+      "rationale": "Ecological education and safety do not substantiate disciplinary culturology."
+    },
+    {
+      "profile": {
+        "title": "6В03102 Культурология"
+      },
+      "course": {
+        "id": 28340,
+        "course_id": "EPVO-146039",
+        "title": "Культура Ренессанса",
+        "domain": "Социальные науки",
+        "credits": 5,
+        "language": "ru",
+        "description": "Цель дисциплины – формирование способности критически дифференцировать историко-философские и социокультурные условия формирования культуры Ренессанса, этапы развития культуры Ренессанса; основные тенденции развития культуры Ренессанса; применять культурфилософский подход в изучении философско-теоретического материала по культуре Возрождения; систематизировать результаты исследования о социокультурных основаниях формирования средневековой теологической философии и христианской религии в западной Европе.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1602,
+      "expected": {
+        "role": "professional",
+        "status": "supported"
+      },
+      "rationale": "Description explicitly studies Renaissance culture and cultural-philosophical approaches."
+    },
+    {
+      "profile": {
+        "title": "6В03102 Культурология"
+      },
+      "course": {
+        "id": 28368,
+        "course_id": "EPVO-6705",
+        "title": "Массовая культура",
+        "domain": "Социальные науки",
+        "credits": 5,
+        "language": "ru",
+        "description": "Дисциплина направлена на изучение современных концепций массовой культуры, анализу социокультурных механизмов формирования массовой аудитории, выработки у ней определенных вкусов и потребностей в соответствии с образцами, выступающими в качестве эталона и распространяемыми средствами массовой информации.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1602,
+      "expected": {
+        "role": "professional",
+        "status": "supported"
+      },
+      "rationale": "Description studies mass culture, its concepts and social mechanisms."
+    },
+    {
+      "profile": {
+        "title": "6В07212 Проектирование изделий из древесины"
+      },
+      "course": {
+        "id": 23678,
+        "course_id": "EPVO-38970",
+        "title": "Современное состояние черной и цветной металлургии в Казахстане",
+        "domain": "Производственные и обрабатывающие отрасли",
+        "credits": 3,
+        "language": "ru",
+        "description": "Рассматриваются: основные направления развития сырьевой базы горно-металлургического комплекса Казахстана и структура металлургической отрасли, как крупного национального комплекса по производству черных и цветных металлов; Республиканское и региональное развитие металлургических предприятий отрасли,  характеризующееся видами и количеством выпускаемой продукции, наличием технологического оборудования, исключающее вредные выбросы в окружающую среду. Приобретаются навыки работы с технической литературой и развитие научного логического мышления обучающихся.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1603,
+      "expected": {
+        "role": "professional",
+        "status": "profile_mismatch"
+      },
+      "rationale": "Description identifies ferrous and non-ferrous metallurgy, not wood products."
+    },
+    {
+      "profile": {
+        "title": "6В07212 Проектирование изделий из древесины"
+      },
+      "course": {
+        "id": 28901,
+        "course_id": "EPVO-12561",
+        "title": "Cтандартизация и метрология в деревообработке",
+        "domain": "Производственные и обрабатывающие отрасли",
+        "credits": 3,
+        "language": "ru",
+        "description": "Данная дисциплина изучает Закон Республики Казахстан «О техническом регулировании», Государственную систему обеспечения единства измерений, управления качеством, систему менеджмента качества, сертификацию продукции.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1603,
+      "expected": {
+        "role": "professional",
+        "status": "needs_review"
+      },
+      "rationale": "Profile title alone cannot repair a description containing only generic certification and quality management."
+    },
+    {
+      "profile": {
+        "title": "6В08401 Рыбное хозяйство и промышленное рыболовство"
+      },
+      "course": {
+        "id": 31916,
+        "course_id": "EPVO-7486",
+        "title": "курсовая работа Искусственное воспроизводство рыб",
+        "domain": "Рыбное хозяйство",
+        "credits": 5,
+        "language": "ru",
+        "description": "курсовая работа",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1611,
+      "expected": {
+        "role": "professional",
+        "status": "insufficient_data"
+      },
+      "rationale": "Description only says course work and does not provide subject content."
+    },
+    {
+      "profile": {
+        "title": "6B05203 Экология и природопользование"
+      },
+      "course": {
+        "id": 30200,
+        "course_id": "EPVO-33329",
+        "title": "Окружающая среда и устойчивое развитие Казахстана (на ангийском языке)",
+        "domain": "Окружающая среда",
+        "credits": 4,
+        "language": "ru",
+        "description": "Краткая физико-географическая характеристика Казахстана; влияние загрязнения на окружающую среду Казахстана; экологические последствия деятельности человека; зоны экологической катастрофы и экологического бедствия; охрана окружающей среды в Республике Казахстан; международное и региональное сотрудничество Казахстана в интересах устойчивого развития общества.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1607,
+      "expected": {
+        "role": "professional",
+        "status": "supported"
+      },
+      "rationale": "Environmental pollution, ecological disasters and environmental protection match ecology; instruction-language note is not a language subject."
+    },
+    {
+      "profile": {
+        "title": "6B04102/B046 Мировая экономика"
+      },
+      "course": {
+        "id": 517,
+        "course_id": "EPVO-572",
+        "title": "Профессионально-ориентированный иностранный язык",
+        "domain": "it",
+        "credits": 3,
+        "language": "ru",
+        "description": "Выстраивание  программы речевого  поведения в ситуациях  профессионального общения   в соответствии с нормами  языка, культуры, специфики  сферы общения.  Составление бытовых, социально-культурных, официально-деловых текстов  в соответствии с общепринятыми  нормами.   Участие  в коммуникации  в различных  ситуациях  разных сфер общения.   Перевод   профессиональных текстов.  Использование  языковых и речевых средств  для решения  тех или иных  задач  профессионального общения.      ",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1605,
+      "expected": {
+        "role": "supporting",
+        "status": "supporting"
+      },
+      "rationale": "Professional foreign-language communication supports economics but does not itself prove economics core."
+    },
+    {
+      "profile": {
+        "title": "6B04102/B046 Мировая экономика"
+      },
+      "course": {
+        "id": 734,
+        "course_id": "EPVO-566",
+        "title": "Профессиональный казахский (русский) язык",
+        "domain": "it",
+        "credits": 3,
+        "language": "ru",
+        "description": "Выстраивание  программы речевого  поведения в ситуациях  профессионального общения   в соответствии с нормами  языка, культуры, специфики  сферы общения.  Составление бытовых, социально-культурных, официально-деловых текстов  в соответствии с общепринятыми  нормами.   Участие  в коммуникации  в различных  ситуациях  разных сфер общения.   Перевод   профессиональных текстов.  Использование  языковых и речевых средств  для решения  тех или иных  задач  профессионального общения.   ",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1605,
+      "expected": {
+        "role": "supporting",
+        "status": "supporting"
+      },
+      "rationale": "Kazakh/Russian communication is distinct from unspecified foreign-language learning."
+    },
+    {
+      "profile": {
+        "title": "6B04102/B046 Мировая экономика"
+      },
+      "course": {
+        "id": 1813,
+        "course_id": "EPVO-5033",
+        "title": "Казахский (руский) язык 1 (А2)",
+        "domain": "it",
+        "credits": 5,
+        "language": "ru",
+        "description": "Дисциплина направлена на умение осуществлять правильный выбор языковых и речевых средств для решения тех или иных задач общения, использовать достаточный объем лексики и грамматические формы на предпороговом уровне А2 (CEFR). Результаты обучения достигаемы через обучения таких тем, как государственный язык, семья и мое окружение, моя профессия, жилье и общественные места. ",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1605,
+      "expected": {
+        "role": "supporting",
+        "status": "supporting"
+      },
+      "rationale": "CEFR A2 language instruction is supporting for economics; level differs from A1."
+    },
+    {
+      "profile": {
+        "title": "6B04102/B046 Мировая экономика"
+      },
+      "course": {
+        "id": 5071,
+        "course_id": "EPVO-5005",
+        "title": "Казахский (руский) язык 1 (А1)",
+        "domain": "it",
+        "credits": 5,
+        "language": "ru",
+        "description": "Дисциплина позволяет формирование коммуникативных компетенций всех уровней использования языка для изучающих казахский (русский) язык как иностранный – элементарный уровень А1 (CEFR) у студентов без опыта изучения государственного (русского) языка. Результаты обучения направлены на обеспечение знакомства студентов с общенациональной идеей духовной модернизации Казахстана и качественного усвоения языка как средства межкультурного общения на уровне выживания.",
+        "topics": [],
+        "learning_outcomes": [],
+        "assessment_methods": [
+          "экспертная оценка",
+          "проектное задание"
+        ]
+      },
+      "version_id": 1605,
+      "expected": {
+        "role": "supporting",
+        "status": "supporting"
+      },
+      "rationale": "CEFR A1 language instruction is supporting for economics; level differs from A2."
+    },
+    {
+      "profile": {
+        "title": "6В03102 Культурология"
+      },
+      "course": {
+        "id": 20480,
+        "course_id": "GOSO-KZ-KZ_RU_1",
+        "title": "Казахский (русский) язык 1",
+        "domain": "general_goso_kz",
+        "credits": 5,
+        "language": "ru",
+        "description": "Академическая, социальная и профессиональная коммуникация на языке обучения.",
+        "topics": [],
+        "learning_outcomes": [
+          "Осуществлять академическую и профессиональную коммуникацию на государственном, русском и иностранном языках."
+        ],
+        "assessment_methods": [
+          "экзамен",
+          "практические задания"
+        ]
+      },
+      "version_id": 1602,
+      "expected": {
+        "role": "regulatory",
+        "status": "regulatory"
+      },
+      "rationale": "GOSO-KZ source identifies a normative component, not professional-core coverage."
+    }
+  ]
+}

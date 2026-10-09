@@ -1,6 +1,44 @@
 from types import SimpleNamespace
 
 
+def test_cyrillic_cefr_levels_are_kept_distinct_for_copied_language_descriptions():
+    text = 'Развитие коммуникативных компетенций и навыков устного и письменного общения.'
+    rows = [course(1, 'Казахский (руский) язык 1 (А2)', text),
+            course(2, 'Казахский (руский) язык 1 (А1)', text),
+            course(3, 'Английский язык (В1)', text),
+            course(4, 'Английский язык (В2)', text)]
+    assert evaluate(rows, content_vectors={c.id: {'model': 'local', 'vector': [1, 0]}
+                                         for c in rows})['duplicate_groups'] == []
+
+
+def test_instruction_language_note_does_not_turn_ecology_into_language_support():
+    from app.planner.content_evaluation import assess_course
+    row = assess_course({'title': '6B05203 Экология и природопользование'}, course(30200,
+        'Окружающая среда и устойчивое развитие Казахстана (на ангийском языке)',
+        'Краткая физико-географическая характеристика Казахстана; влияние загрязнения на окружающую '
+        'среду Казахстана; экологические последствия деятельности человека; зоны экологической '
+        'катастрофы и экологического бедствия; охрана окружающей среды в Республике Казахстан; '
+        'международное и региональное сотрудничество Казахстана в интересах устойчивого развития общества.'))
+    assert row['role'] == 'professional'
+    assert row['status'] == 'supported'
+
+
+def test_geographic_kazakhstan_reference_does_not_imply_kazakh_language_target():
+    rows = [course(1, 'Иностранный язык для специалистов Казахстана',
+                   'Развитие навыков межкультурной деловой коммуникации в профессиональной деятельности.'),
+            course(2, 'Иностранный язык для специалистов',
+                   'Развитие навыков межкультурной деловой коммуникации в профессиональной деятельности.')]
+    result = evaluate(rows)
+    assert len(result['duplicate_groups']) == 1
+    assert result['duplicate_groups'][0]['course_ids'] == [1, 2]
+
+
+def test_western_and_unspecified_foreign_languages_keep_distinct_target_categories():
+    text = 'Формирование навыков межкультурного делового общения и профессиональной коммуникации.'
+    assert evaluate([course(1, 'Иностранный язык: западные языки', text),
+                     course(2, 'Иностранный язык', text)])['duplicate_groups'] == []
+
+
 def test_copied_language_descriptions_do_not_override_target_language_in_title():
     text = 'Развитие межкультурного делового общения и письменной профессиональной коммуникации.'
     rows = [course(1, 'Профессиональный иностранный язык', text),

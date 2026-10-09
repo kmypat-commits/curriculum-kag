@@ -262,3 +262,36 @@ Ruling: работа в существующей feature-ветке и теку�
 - Серия20 по-прежнему остановлена на2124 (8passed/1failed/9completed);
   новые prerequisite edges без согласованного review не изменены.40 не
   запускались. Статья/start.ps1 не затрагивались.
+
+## Расширенный контроль и развёртывание1.6 — 2026-10-10
+
+- Read-only аудит11 сохранённых программ выявил ложный supporting у30200:
+  `_language_purpose` распознавал «казах» внутри «Казахстана» и не отличал
+  заметку о языке преподавания от языкового предмета. Четыре RED→GREEN
+  регрессии закрывают этот случай, географическое упоминание, западные языки
+  и кириллические CEFR уровни. Нормализуются только отдельные уровневые токены.
+- Добавлены13 замороженных реальных course records с отдельной разметкой
+  по исходным фрагментам, не по результату оценщика; это разметка ассистента,
+  не независимая университетская экспертиза.15 acceptance checks офлайн.
+- Итог backend472/472 exit0, dependency warnings остаются;
+  `.runtime/content-v16-backend-20261010.log`. Self-review, subagent tool нет.
+- Read-only11/11 в2.891с: `.runtime/local-content-shadow-v16-20261010-eleven.json`,
+  canonical SHA2562cc37cb9abc94c75c2a19c583dde47682816175bfc5b2cb5a4f65999cb86618b,
+  file SHA256cc8b60ad3977684e307a6aa03bb5897eb18681c0e82a2f1d3f2811a67f83ed5e.
+  Fixture file SHA2563504afaeb00bace2e11f8bcdd35b7ff8d56b33b7067c1858a8b54b7fcb3e8b75.
+  Подробности и реальные оставшиеся риски: docs/CONTENT_REVIEW_V16_20261010_RU.md.
+- В1603 сохраняются5 металлургических mismatch. В1606/1607/1610 остаются
+  возможные повторы; они требуют review, не автоматического удаления.
+  В1602/1605/1607/1608 текущий граф даёт по2missing prerequisites для5029;
+  это не доказывает момент записи и не переписывает результаты старого gate.
+- Перед локальным обновлением подтверждено activejobs=0 и identities старых
+  API/worker. Новый API wrapper408 actual2216 loopback8000, workerwrapper1892
+  actual20816. Startup complete и реальный GET planner1632content-evaluation
+  HTTP200; браузер показывает local-content-1.6,50courses20review12supported
+  0duplicates, core_definition_missing. Старый report1.4 честно stale по версии,
+  не сохранён поверх прежнего evidence. Сам план4437 не изменён.
+- Screenshot `.runtime/content-ui-v16-20261010.jpg`. Frontend исходники
+  в этом шаге не менялись. Генерации не запускались, потому что prerequisite
+  review2124 остаётся несогласованным; не дублировать заведомо failing20.
+- Следующий безопасный этап: UI окно старогоplan_id после publication и
+  reconnect/overhead pilot; требования20→40 и предметного ядра ещё не приняты.

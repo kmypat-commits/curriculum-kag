@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.5'
+EVALUATOR_VERSION = 'local-content-1.6'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -48,8 +48,12 @@ def _terms(text):
 
 
 def _level(title):
+    # EPVO titles often spell CEFR А1/В2 with Cyrillic lookalikes. Normalise
+    # only isolated level tokens, not the course's subject or identity.
+    title = re.sub(r'\b[авс][12]\b', lambda match: match[0].translate(
+        str.maketrans({'а': 'a', 'в': 'b', 'с': 'c'})), normalise(title))
     return tuple(re.findall(r'\b(?:[1-9]|i{1,3}|iv|a[12]|b[12]|c[12]|advanced|базовый|продвинутый)\b',
-                            normalise(title)))
+                            title))
 
 
 def _language_purpose(title):
@@ -59,10 +63,13 @@ def _language_purpose(title):
     equivalence or satisfy any prerequisite.
     """
     title = normalise(title)
+    # Medium notes describe how a subject is taught, not a language course.
+    # Preserve the subject title and any actual target-language qualification.
+    title = re.sub(r'\bна\s+[\w-]+\s+языке\b|\bin\s+[\w-]+\s+language\b', '', title)
     if not re.search(r'язык|\blanguage\b', title) or 'программирован' in title:
         return ()
     targets = tuple(name for name, pattern in (
-        ('kazakh', r'казах|қазақ|kazakh'), ('russian', r'русск|russian'),
+        ('kazakh', r'\bказах(?!стан)\w*|\bқазақ\w*|\bkazakh\b'), ('russian', r'русск|russian'),
         ('english', r'англий|english'), ('german', r'немец|german'),
         ('french', r'француз|french'), ('chinese', r'китай|chinese'),
         ('arabic', r'араб|arabic'), ('spanish', r'испан|spanish'))
@@ -71,6 +78,8 @@ def _language_purpose(title):
         return targets
     if 'восточн' in title:
         return ('eastern_unspecified',)
+    if 'западн' in title:
+        return ('western_unspecified',)
     if 'страны специализации' in title:
         return ('specialisation_country_unspecified',)
     return ('foreign_unspecified',) if 'иностран' in title else ('unspecified',)
