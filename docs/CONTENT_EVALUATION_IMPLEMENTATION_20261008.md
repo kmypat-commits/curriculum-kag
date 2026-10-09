@@ -138,3 +138,33 @@ Ruling: работа в существующей feature-ветке и теку�
   После internal20/20 обязательны independent structural/hash/identity audit
   и content review, включая517/734 и supporting/culture ложные основания.
   До этих проверок40 не запускать. Live backend не перезапускался.
+
+## Новый отказ2124 — 2026-10-09,11:48–11:54
+
+- Новый clinicalboundary20 завершён failed:8passed/1failed,9completed;
+  runner14560 отсутствует. Отчёт и обе попытки сохранены.
+  20373 в этой серии прошёл, прежний semester bug не повторился.
+- 2124 обе попытки infeasible_with_complete_frontier:276 candidates,
+  ON2 scored8/scoped8/admitted0. Отдельный read-only повтор воспроизвёл
+  отказ; отчёт .runtime/diag-2124-localcontent-20261009.json.
+- Полная ON2 цепочка в .runtime/diag-2124-localcontent-chains-20261009.json;
+  missing-parent audit в .runtime/diag-2124-missing-parents-20261009.json.
+  517→5029→3542+3667;734/742 наследуют эту цепочку. Курсы3542/3667
+  «Иностранный язык (английский В1/B1)» имеют одинаковый уровень и почти
+  одинаковое описание. Их EPVO scope не содержитB074/6B073, domain=it;
+  уровень bachelor допустим, но нет MatchScore evidence в данном проекте.
+  Прочие ON2 roots также имеют недопустимые родители. Это не timeout.
+- Read-only сравнение с прежним prerequisite snapshot подтвердило:
+  четыре ранее reviewed edges отсутствуют по-прежнему. В старом snapshot
+  у517/5029 были только эти четыре связи; теперь присутствуют517→5029,
+  5029→3542/3667. Точный момент записи новых edges не установлен;
+  _assign_epvo_prerequisites может назначать двум ранним курсам связи
+  по пересечению title tokens, без explicit EPVO подтверждения.
+- Ruling: не удалять новые связи и не подменять их GOSO foreign-language
+  эквивалентом. У GOSO нет подтверждения EnglishB1; языковые prerequisites
+  могут быть содержательно оправданы, но AND двух одноуровневых копий
+  требует предметного review. Из одного диагноза нельзя заключать,
+  что оба требования ложные. Нужен согласованный review этих новых
+  inferred edges/контракт эквивалентных prerequisite альтернатив с evidence.
+  Product code в этой проверке не менялся. Новый массовый прогон не запускать
+  до решения причины. Статус первых20 НЕ20/20;40 не разрешены.
