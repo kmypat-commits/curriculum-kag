@@ -453,3 +453,21 @@ Ruling: работа в существующей feature-ветке и теку�
   со structural/hash/content проверкой, matched repeated overhead и parallel/
   restart pilot; сетевой доступ с weak admin запрещён. Не называть advisory
   оценку предметной экспертной оценкой или готовностью к внедрению.
+
+### 2026-10-10 — ownership/RBAC/auth границы ASGI
+
+- Реальный составной planner.router, real live DB, TestClient без lifespan
+  запуска нового сервера/worker. Только authenticated actor dependency
+  заменена фикстурой: methodist ownerID1 против чужого methodistID987654321;
+  записи пользователей/ролей не создавались, права не выдавались.
+- GET status/events/content evaluation и POST cancel: owner200, foreign404
+  во всех4 случаях. Foreign404 намеренно не раскрывает существование объекта.
+  Owner cancel проверял terminal no-op, не отмену livejob. Status row/payload
+  до/после одинаковы. Wrong job из project1635 при запросе project1634 вернул
+  0events. Evidence .runtime/planner-access-pilot-20261010.json.
+- Отдельный real auth dependency БЕЗ override и БЕЗ credentials: теже4маршрута
+  вернули401. .runtime/planner-anonymous-pilot-20261010.json.
+- Это ASGI route/dependency integration, НЕ входpassword/JWT, не сетевой
+  transport и не UIкнопка отмены. Starlette/httpx deprecation warning отмечен;
+  приложение/test dependencies в этом шаге не менялись. Новых генераций и
+  изменений DB не выполнялось, продуктовый код не менялся.
