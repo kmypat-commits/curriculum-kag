@@ -990,6 +990,7 @@ def build_plan(
             "change_report": change_report,
             "active_variant": best_variant,
             "publication_status": "partial" if rejected_variants else "complete",
+            "published_variants": list(variants),
             "rejected_variants": rejected_variants,
             "drafts": draft_summaries,
             "elapsed_seconds": round(time.perf_counter() - build_started, 1),

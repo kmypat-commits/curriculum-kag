@@ -120,6 +120,8 @@ def _validate_curriculum_volume(constraints: Dict) -> None:
 
 
 def _validate_optional_requirements(constraints: Dict) -> None:
+    if constraints.get('content_evaluation_mode', 'shadow') not in {'shadow', 'prioritise'}:
+        raise ValueError('Неверный режим оценки содержания')
     # Confirmations are issued by the server, never accepted from a client.
     constraints.pop("curriculum_confirmations", None)
     if "curriculum_requirements" in constraints:

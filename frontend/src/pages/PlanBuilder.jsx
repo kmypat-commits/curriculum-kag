@@ -7,6 +7,8 @@ import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import CompactSection from '../components/CompactSection'
 import PlanBuildProgress from '../components/PlanBuildProgress'
+import BuildMapPanel from '../components/BuildMapPanel'
+import ContentEvaluationPanel from '../components/ContentEvaluationPanel'
 import PlanSemesterGrid from '../components/PlanSemesterGrid'
 import PlanQualityPanel from '../components/PlanQualityPanel'
 import PlanVerificationPanels from '../components/PlanVerificationPanels'
@@ -287,6 +289,14 @@ export default function PlanBuilder() {
             axios.patch, Number(id), project?.constraints || {}, requirements,
         )
         setProject(current => ({ ...current, constraints }))
+        setRequiresRegeneration(true)
+    }
+
+    const saveContentEvaluationMode = async (mode) => {
+        const { data } = await axios.patch(`/api/projects/${Number(id)}/constraints`, {
+            constraints: { ...project.constraints, content_evaluation_mode: mode },
+        })
+        setProject(current => ({ ...current, constraints: data.constraints || data }))
         setRequiresRegeneration(true)
     }
 
@@ -934,6 +944,9 @@ export default function PlanBuilder() {
                     elapsedLabel={buildElapsedLabel()}
                     longRunningHint={buildLongRunningHint()}
                 />
+                <BuildMapPanel versionId={project?.latest_version?.id} status={buildStatus} title={project?.title || ''} t={t} stageLabel={buildStageLabel} />
+                <ContentEvaluationPanel versionId={project?.latest_version?.id} planId={currentPlan?.plan_id} t={t}
+                    mode={project?.constraints?.content_evaluation_mode || 'shadow'} onModeChange={saveContentEvaluationMode} />
                 {['rejected', 'failed', 'timed_out'].includes(buildStatus.state) && buildStatus.error && (
                     <div className="card inline-alert inline-alert-error" role="alert" style={{ marginBottom: '20px' }}>
                         <strong>{t('build_result_error')}</strong>

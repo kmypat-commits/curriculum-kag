@@ -221,3 +221,23 @@ def test_selection_evidence_snapshot_retains_method_for_a_course_without_score()
         "top_lo_matches": [],
         "selection_method": "real_epvo_credit_top_up",
     }
+
+
+def test_strict_cohort_stops_after_first_failed_case(tmp_path, monkeypatch):
+    from scripts import audit_quality_cohort as runner
+    output = tmp_path / 'strict.json'
+    monkeypatch.setattr(runner.sys, 'argv', ['cohort', '--count', '2', '--variants', 'A',
+                                          '--output', str(output), '--stop-on-failure'])
+    monkeypatch.setattr(runner, 'database_preflight', lambda: None)
+    monkeypatch.setattr(runner.atexit, 'register', lambda *args: None)
+    monkeypatch.setattr(runner, 'validate_child_report', lambda *args: ({'passed': False, 'level': 'bachelor', 'profile': 'it'}, None))
+    calls = []
+    class Child:
+        def __init__(self, args, **kwargs): self.args = args; self.returncode = 0; calls.append(args)
+        def poll(self): return 0
+        def communicate(self): return None, None
+    monkeypatch.setattr(runner.subprocess, 'Popen', Child)
+    assert runner.main() == 1
+    result = json.loads(output.read_text(encoding='utf-8'))
+    assert result['requested'] == 2 and result['completed'] == 1 and result['failed'] == 1
+    assert len(calls) == 1

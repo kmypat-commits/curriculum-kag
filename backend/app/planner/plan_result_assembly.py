@@ -64,6 +64,9 @@ def persist_plan_result(
                 "core_coverage": core_coverage["core_coverage"],
             })
         metrics["core_coverage"] = core_coverage
+    from app.services.content_evaluation import evaluate_schedule
+
+    metrics['content_evaluation'] = evaluate_schedule(version, db, schedule)
     plan = Plan(
         project_version_id=project_version_id,
         variant_type=variant_type,

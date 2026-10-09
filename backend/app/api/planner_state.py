@@ -161,6 +161,8 @@ def set_build_status(project_version_id: int, **payload: Any) -> dict[str, Any]:
             extra={"project_version_id": project_version_id},
         )
         return current
+    previous_stage = current.get('stage')
+    previous_state = current.get('state')
     current.update(payload)
     current = _serialise(current)
     if current.get("state") == "running":
@@ -195,6 +197,17 @@ def set_build_status(project_version_id: int, **payload: Any) -> dict[str, Any]:
             row.lease_expires_at = datetime.fromisoformat(current["lease_expires_at"]) if current.get("lease_expires_at") else None
             row.cancel_requested = int(current.get("cancel_requested") or 0)
             row.idempotency_key = current.get("idempotency_key")
+            if (settings.BUILD_TELEMETRY_ENABLED and row.job_id
+                    and (previous_stage != row.stage or previous_state != row.state)):
+                from app.services.build_events import append_event
+                db.flush()
+                append_event(db, project_version_id, row.job_id, 'stage', {
+                    'stage': row.stage, 'state': row.state, 'progress': row.progress,
+                    'elapsed_seconds': current.get('elapsed_seconds'),
+                    'error': current.get('error'),
+                    'publication_status': current.get('publication_status'),
+                    'published_variants': current.get('published_variants'),
+                }, worker_id=expected_owner)
             if row.state in {"complete", "failed", "cancelled", "timed_out", "rejected", "infeasible"}:
                 _record_terminal_job_state(db, current, row.state, datetime.now(timezone.utc))
             db.commit()

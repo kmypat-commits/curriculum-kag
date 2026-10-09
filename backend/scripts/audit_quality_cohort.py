@@ -293,6 +293,8 @@ def main() -> int:
     )
     parser.add_argument("--output", default=".runtime/quality-cohort.json")
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument('--stop-on-failure', action='store_true',
+                        help='Stop this strict acceptance slice on its first failed programme')
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -574,6 +576,8 @@ def main() -> int:
         else:
             reports.append(report)
         atomic_write_json(output, {"schema_version": REPORT_SCHEMA_VERSION, "run_id": run_id, "status": "running", "runner_pid": os.getpid(), "runner_identity": runner_identity, "recovered_from_stale": recovered_from_stale, "completed": len(reports), "requested": args.count, "manifest": manifest, "reports": reports})
+        if args.stop_on_failure and report.get('passed') is not True:
+            break
     passed = [row for row in reports if row.get("passed") is True]
     failed = [row for row in reports if row.get("passed") is not True]
     infrastructure_failures = sum(

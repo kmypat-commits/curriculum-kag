@@ -80,6 +80,7 @@ class Handler(BaseHTTPRequestHandler):
     do_HEAD = do_GET
     do_POST = lambda self: self._proxy()
     do_PUT = do_POST
+    do_PATCH = do_POST
     do_DELETE = do_POST
 
 

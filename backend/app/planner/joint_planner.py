@@ -101,6 +101,20 @@ def build_verified_joint_schedule(
     for limit in FRONTIER_LIMITS:
         frontier_started = time.perf_counter()
         problem = build_joint_frontier(version, db, limit=limit)
+        from app.config import settings
+        if settings.BUILD_TELEMETRY_ENABLED:
+            from app.services.build_events import emit_build_event
+            emit_build_event(version.id, 'candidates', {
+                'variant': variant_type, 'count': len(getattr(problem, 'candidates', ())),
+                'exclusions': getattr(problem, 'exclusions', {}),
+                'nodes': [{'course_id': c.course_id, 'title': c.item.get('title'),
+                           'lo_codes': sorted(code for code, value in c.lo_scores.items() if value >= .5),
+                           'prerequisites': list(c.prerequisites)}
+                          for c in getattr(problem, 'candidates', ())[:100]],
+                'learning_outcomes': [{'code': lo.lo_code, 'text': lo.lo_text}
+                                      for lo in version.learning_outcomes
+                                      if not str(lo.lo_code).startswith('LO-GOSO-')][:12],
+            })
         frontier_seconds = time.perf_counter() - frontier_started
         last_frontier_hash = _frontier_fingerprint(problem)
         rejected_placements: list[frozenset[tuple[int, int]]] = []
@@ -191,6 +205,15 @@ def build_verified_joint_schedule(
                     "variant": variant_type,
                     "required_courses": core_coverage["required_courses"],
                     "core_coverage": core_coverage["core_coverage"],
+                })
+            if settings.BUILD_TELEMETRY_ENABLED:
+                emit_build_event(version.id, 'selected', {
+                    'variant': variant_type, 'course_ids': sorted(result.selected_course_ids),
+                    'schedule': {str(sem): [{'course_id': item.get('course_id'),
+                                            'title': item.get('title'), 'credits': item.get('credits')}
+                                           for item in items] for sem, items in schedule.items()},
+                    'verified': True, 'published': False,
+                    'optimality_proven': result.optimality_proven,
                 })
             return schedule, {
                 "verification": verification,

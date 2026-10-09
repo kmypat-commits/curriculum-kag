@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import cProfile
+from copy import deepcopy
 import faulthandler
 import hashlib
 import json
@@ -32,6 +33,11 @@ from sqlalchemy import text as sqlalchemy_text
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+
+def freeze_content_report(metrics):
+    """Keep advisory evidence after disposable project/plan cleanup."""
+    return deepcopy(metrics.get('content_evaluation'))
 
 from app.database import SessionLocal
 from app.kag.scoring import compute_all_matches
@@ -460,6 +466,7 @@ def main() -> None:
                 if bridge_id in bridge_rows
             ]
             variants[code] = {
+                "content_evaluation": freeze_content_report(metrics),
                 "credit_adjustment_required": verification.get("credit_adjustment_required", False),
                 "credit_adjustment_warning": verification.get("credit_adjustment_warning"),
                 "credits": sum(int(item.get("credits") or 0) for items in schedule.values() for item in items),

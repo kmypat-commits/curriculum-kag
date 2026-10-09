@@ -463,3 +463,78 @@ Object.assign(translations.en, {
     catalog_count_unavailable: 'not available yet',
     catalog_record_explanation: 'The counter shows working catalog records, not semantically unique courses. Original EPVO records, normalized data, and the working catalog are different data layers. Equivalent courses with different titles or sources may remain in the catalog; the number of semantically unique courses has not been calculated here.'
 })
+
+const contentAndMapCopy = {
+    build_map_open: ['Как строится план', 'Жоспар қалай құрылады', 'How the plan is built'],
+    build_map_close: ['Закрыть карту', 'Картаны жабу', 'Close map'],
+    build_map_expand: ['Развернуть', 'Кеңейту', 'Expand'],
+    build_map_restore: ['Свернуть', 'Жинау', 'Restore'],
+    build_map_explanation: ['Реальные кандидаты и этапы подбора. Часть дисциплин объединена в группы. Карта не отображает полный перебор комбинаций.', 'Нақты үміткер пәндер мен іріктеу кезеңдері. Кейбір пәндер топталған. Карта барлық комбинацияларды көрсетпейді.', 'Actual candidates and selection stages. Some courses are grouped. The map does not represent an exhaustive combination search.'],
+    build_map_candidates: ['Кандидаты', 'Үміткерлер', 'Candidates'],
+    build_map_selected: ['Выбраны, проверены', 'Таңдалған, тексерілген', 'Selected, verified'],
+    build_map_published: ['Сохранены', 'Сақталған', 'Saved'],
+    build_map_stage: ['Этап', 'Кезең', 'Stage'],
+    build_map_variant: ['Вариант', 'Нұсқа', 'Variant'],
+    build_map_graph: ['Связи результатов обучения и дисциплин', 'Оқу нәтижелері мен пәндер байланысы', 'Learning outcome and course connections'],
+    build_map_graph_unavailable: ['Карта недоступна. Этапы перечислены ниже.', 'Карта қолжетімсіз. Кезеңдер төменде көрсетілген.', 'Map unavailable. Stages are listed below.'],
+    build_map_no_job: ['Нет сохранённого запуска для отображения.', 'Көрсету үшін сақталған іске қосу жоқ.', 'No saved build is available to display.'],
+    build_map_connection_error: ['Связь прервана. Повторяем подключение; обычный статус остаётся доступным.', 'Байланыс үзілді. Қайта қосылуда; әдеттегі күй қолжетімді.', 'Connection interrupted. Reconnecting; regular status remains available.'],
+    build_map_events: ['Этапы и события', 'Кезеңдер мен оқиғалар', 'Stages and events'],
+    build_map_exclusions: ['Причины отсева', 'Іріктеуден шығару себептері', 'Exclusion reasons'],
+    build_map_aggregate: ['Другие кандидаты:', 'Басқа үміткерлер:', 'Other candidates:'],
+    build_event_candidates: ['Сформирован список кандидатов', 'Үміткерлер тізімі құрылды', 'Candidate set assembled'],
+    build_event_selected: ['Решение прошло проверки', 'Шешім тексеруден өтті', 'Solution passed verification'],
+    content_evaluation_open: ['Оценка содержания', 'Мазмұнды бағалау', 'Content evaluation'],
+    content_evaluation_mode: ['Оценка при следующей генерации:', 'Келесі генерациядағы бағалау:', 'Evaluation for the next build:'],
+    content_mode_shadow: ['Сравнение без изменения подбора', 'Іріктеуді өзгертпей салыстыру', 'Review without re-ranking'],
+    content_mode_prioritise: ['Приоритет профильного содержания', 'Бейіндік мазмұнға басымдық', 'Prioritise professional content'],
+    content_evaluation_error: ['Не удалось выполнить действие. Повторите попытку.', 'Әрекет орындалмады. Қайталап көріңіз.', 'The action failed. Please retry.'],
+    content_evaluation_advisory: ['Локальная оценка помогает методисту проверить план. Выводы опираются на доступное содержание и требуют предметной проверки.', 'Жергілікті бағалау әдіскерге жоспарды тексеруге көмектеседі. Қорытындылар қолжетімді мазмұнға негізделіп, пәндік тексеруді қажет етеді.', 'Local evaluation assists the methodist. Findings rely on available content and require subject review.'],
+    content_evaluation_stale: ['Сохранённая оценка отсутствует или устарела. Ниже показана текущая проверка.', 'Сақталған бағалау жоқ немесе ескірген. Төменде ағымдағы тексеру көрсетілген.', 'The saved evaluation is missing or outdated. The current review is shown below.'],
+    content_evaluation_refresh: ['Сохранить текущую оценку', 'Ағымдағы бағалауды сақтау', 'Save current evaluation'],
+    content_evaluation_no_core: ['Профильные блоки не заданы; полнота профессионального ядра не установлена.', 'Бейіндік блоктар берілмеген; кәсіби өзектің толықтығы анықталмаған.', 'No professional blocks are defined; core completeness is undetermined.'],
+    content_status_supported: ['Есть основания соответствия', 'Сәйкестік негіздері бар', 'Relevance evidence available'],
+    content_status_profile_mismatch: ['Признаки другого профессионального контекста', 'Басқа кәсіби контекст белгілері', 'Signs of a different professional context'],
+    content_status_insufficient_data: ['Недостаточно данных', 'Деректер жеткіліксіз', 'Insufficient data'],
+    content_status_supporting: ['Поддерживающая дисциплина', 'Қосымша пән', 'Supporting course'],
+    content_status_regulatory: ['Нормативный компонент', 'Нормативтік компонент', 'Regulatory component'],
+    content_status_needs_review: ['Требует предметной проверки', 'Пәндік тексеру қажет', 'Subject review needed'],
+    content_status_covered: ['Подтверждённое покрытие', 'Расталған қамту', 'Confirmed coverage'],
+    content_status_unconfirmed: ['Покрытие не подтверждено', 'Қамту расталмаған', 'Coverage unconfirmed'],
+    content_role_professional: ['Профильный кандидат', 'Бейіндік үміткер', 'Professional candidate'],
+    content_role_supporting: ['Поддержка', 'Қосымша қолдау', 'Supporting'],
+    content_role_regulatory: ['Нормативный компонент', 'Нормативтік компонент', 'Regulatory'],
+    content_indicator_reviewed_courses: ['Проверено дисциплин', 'Тексерілген пәндер', 'Courses reviewed'],
+    content_indicator_profile_mismatch_count: ['Признаки несоответствия профилю', 'Бейінге сәйкес келмеу белгілері', 'Possible profile mismatches'],
+    content_indicator_insufficient_data_count: ['Недостаточно содержания', 'Мазмұн жеткіліксіз', 'Insufficient content'],
+    content_indicator_needs_review_count: ['Нужна предметная проверка', 'Пәндік тексеру қажет', 'Subject review needed'],
+    content_indicator_supported_professional_count: ['Профильные кандидаты с основаниями', 'Негізі бар бейіндік үміткерлер', 'Professional candidates with evidence'],
+    content_indicator_core_gaps: ['Неподтверждённые блоки', 'Расталмаған блоктар', 'Unconfirmed blocks'],
+    content_indicator_duplicate_groups: ['Возможные группы дублей', 'Мүмкін қайталану топтары', 'Possible duplicate groups'],
+    content_indicator_sequence_findings: ['Замечания к последовательности', 'Реттілікке ескертулер', 'Sequence findings'],
+    content_possible_duplicates: ['Проверьте эквивалентность дисциплин', 'Пәндердің баламалылығын тексеріңіз', 'Review course equivalence'],
+    content_sequence_missing_prerequisite: ['Не найден пререквизит', 'Пререквизит табылмады', 'Missing prerequisite'],
+    content_sequence_prerequisite_order: ['Пререквизит должен предшествовать дисциплине', 'Пререквизит пәннен бұрын болуы керек', 'Prerequisite must precede the course'],
+}
+for (const [key, values] of Object.entries(contentAndMapCopy)) {
+    ;['ru', 'kk', 'en'].forEach((language, i) => { translations[language][key] = values[i] })
+}
+
+const buildMapAdditionalCopy = {
+    build_map_show_graph: ['Показывать граф', 'Графты көрсету', 'Show graph'],
+    build_map_text_alternative: ['Текстовый режим: этапы и дисциплины без анимации.', 'Мәтіндік режим: кезеңдер мен пәндер анимациясыз.', 'Text mode: stages and courses without animation.'],
+    build_exclusion_goso_duplicate: ['Повтор обязательного компонента ГОСО', 'Міндетті компоненттің қайталануы', 'Duplicate statutory component'],
+    build_exclusion_missing_or_inadmissible_prerequisite: ['Нет допустимой цепочки пререквизитов', 'Жарамды пререквизит тізбегі жоқ', 'No admissible prerequisite chain'],
+    build_exclusion_unverified_course_evidence: ['Не подтверждено соответствие РО', 'Оқыту нәтижесіне сәйкестік расталмаған', 'Unverified outcome evidence'],
+    build_exclusion_illegal_prerequisite_semester: ['Невозможная последовательность пререквизитов', 'Пререквизиттердің реті жарамсыз', 'Invalid prerequisite sequence'],
+    build_exclusion_frontier_capacity: ['За пределами текущего размера пула', 'Ағымдағы пул шегінен тыс', 'Outside current pool capacity'],
+    build_exclusion_seed_truncated: ['За пределами текущей выборки кандидатов', 'Ағымдағы кандидаттар іріктеуінен тыс', 'Outside current candidate sample'],
+    build_exclusion_preferred_seed_omitted: ['Предпочтительный кандидат не вошёл в пул', 'Қалаулы кандидат пулға енбеген', 'Preferred candidate omitted from pool'],
+    build_exclusion_excluded_by_methodist: ['Исключено методистом', 'Әдіскер алып тастаған', 'Excluded by methodist'],
+    build_exclusion_foreign_professional_context: ['Чужой профессиональный контекст', 'Басқа кәсіби контекст', 'Foreign professional context'],
+    build_exclusion_out_of_domain_or_level: ['Не подходит область или уровень', 'Саласы немесе деңгейі сәйкес емес', 'Domain or level mismatch'],
+    build_exclusion_no_legal_semester: ['Нет допустимого семестра', 'Жарамды семестр жоқ', 'No admissible semester'],
+}
+for (const [key, values] of Object.entries(buildMapAdditionalCopy)) {
+    ;['ru', 'kk', 'en'].forEach((language, i) => { translations[language][key] = values[i] })
+}

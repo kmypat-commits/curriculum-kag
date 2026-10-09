@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     EMBEDDING_DIMENSION: int = 768
     ENABLE_SBERT: bool = False
+    # Independent rollout switches: shadow records reports without re-ranking.
+    CONTENT_EVALUATION_MODE: str = 'shadow'
+    BUILD_TELEMETRY_ENABLED: bool = True
     SBERT_DEVICE: str = "auto"
     # Larger inference batches reduce Python/transformer call overhead while
     # the upper bound keeps local CPU/RAM usage predictable on staging hosts.

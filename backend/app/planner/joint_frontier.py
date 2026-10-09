@@ -436,6 +436,16 @@ def build_joint_frontier(
             prerequisites=raw_parents.get(cid, ()), lo_scores=evidence.get(cid, {}),
             domain_shares=shares, utility=ranking.get(cid, 0.0),
         )
+    from app.config import settings
+    from app.planner.content_evaluation import prioritise_candidates
+    from app.services.content_evaluation import profile_for_version
+    mode = constraints.get('content_evaluation_mode', settings.CONTENT_EVALUATION_MODE)
+    updated = prioritise_candidates(tuple(catalogue.values()), loaded,
+                                    profile_for_version(version), mode=mode)
+    catalogue = {candidate.course_id: candidate for candidate in updated}
+    if mode == 'prioritise':
+        ranked_ids = sorted(ranked_ids, key=lambda cid: (
+            -catalogue[cid].utility if cid in catalogue else -ranking.get(cid, 0.0), cid))
     candidates, chain_exclusions = admit_candidate_chains(
         catalogue, tuple(ranked_ids), duplicate_ids=duplicate_ids, limit=limit,
         fixed_semesters={
