@@ -436,3 +436,20 @@ Ruling: работа в существующей feature-ветке и теку�
 - Отмена/повтор реального worker подтверждены в указанном scope. Отдельная
   UIкнопка отмены/HTTP cancel transport, parallel/restart, matched overhead,
   review2124 и frozen20→40 ещё НЕ завершены.
+
+### 2026-10-10 — актуальность оценки после изменения кредита
+
+- Owner-scoped _report на реальном isolated version1634/plan4440/item163897.
+  До изменения5credits stalefalse. В транзакции5→4: staletrue, новый snapshot
+  474a75553772d7300feef5cb529a4ba0db6d93521d98b5204eca0f6bff3cdcfd.
+  Saved report и metrics не заменены. Обязательный rollback восстановил5 и
+  hash57dc03bb5959d46cba57a3409a283f887001d98ac84b9ea7cce8ee8a349d4826;
+  после rollback stalefalse. Никаких committed изменений плана/каталога.
+- Evidence .runtime/content-manual-staleness-20261010.json; проверены реальные
+  DB adapter и evaluator, НЕ HTTP/UI ручное редактирование. Прямого редактора
+  кредитов на текущей странице не обнаружено. Не считать эту проверку выпуском
+  редактора. Продуктовый код не менялся; suites в этом шаге не перезапускались.
+- Общая приёмка остаётся открытой: новый review prerequisites2124, frozen20→40
+  со structural/hash/content проверкой, matched repeated overhead и parallel/
+  restart pilot; сетевой доступ с weak admin запрещён. Не называть advisory
+  оценку предметной экспертной оценкой или готовностью к внедрению.
