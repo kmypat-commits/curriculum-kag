@@ -111,3 +111,30 @@ Ruling: работа в существующей feature-ветке и теку�
   .runtime/content-catalogue-80267ad-20261009.dump и .json.
   SHA2566269d88764e109572d6c9705b44852f568dde58cd9c9d6c5212d37c868f74aef.
   Restore всё ещё не проверен. Повторно pg_dump не запускать.
+
+## Отказ20373 и clinical boundary — 2026-10-09
+
+- Первый v1.3 повтор завершён failed:4passed/1failed,5completed из20;
+  runner22364 отсутствует. Старый отчёт сохранён без изменений.
+- Обе попытки20373: MILP optimal, hard0, verifier quality rejection
+  semester_appropriateness. Полная трасса:
+  .runtime/trace-joint-20373-localcontent-v13-20261009-verification.json.
+  Курс7849 «Основы сестринского дела и практика первой доврачебной помощи»
+  размещался в6/7 семестре при проверяемом медицинском deadline4.
+- Первопричина: foundation_max_semester использовал substring «врачебн»
+  внутри «доврачебной», в отличие от boundary-aware verifier. Изменена
+  проверка клинического термина на has_domain_term; verifier не ослаблен.
+  Не менялись кредиты, входы, LO, prerequisite edges или catalog.
+- RED: test_preclinical_first_aid_foundation_is_not_advanced_physician_practice,
+  actual8 vs expected3; GREEN:66 curriculum/frontier tests.
+  Полный backend447/447 exit0: .runtime/clinical-boundary-backend-20261009.log.
+  Первый full-suite command имел ошибку PYTHONPATH при collection; повтор
+  с repo+backend в PYTHONPATH прошёл. Dependency deprecations сохраняются.
+- Исходный20373 отдельно PASSED244credits hard0 qualitytrue wrong_semester0,
+  31.92с. Report .runtime/diag-20373-clinicalboundary-20261009-20260926.json
+  (старый helper добавляет дату20260926 к новому label; это не старый результат).
+- Следующий шаг: новый полный повтор тех же20 offset0A prioritise,
+  .runtime/system-20-localcontent-clinicalboundary-20261009.json.
+  После internal20/20 обязательны independent structural/hash/identity audit
+  и content review, включая517/734 и supporting/culture ложные основания.
+  До этих проверок40 не запускать. Live backend не перезапускался.

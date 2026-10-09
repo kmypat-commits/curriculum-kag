@@ -54,7 +54,7 @@ def cycle_min_semester(item: Dict, num_semesters: int) -> int:
 
 def foundation_max_semester(title: str | None, num_semesters: int) -> int:
     key = _title_key(title)
-    if any(marker in key for marker in ("клиническ", "диагност", "врачебн", "хирург", "терапи", "педиатр", "акуш", "гинек", "онколог", "кардио", "clinical", "diagnostic", "surgery")):
+    if _has_domain_term(key, ("клиническ", "диагност", "врачебн", "хирург", "терапи", "педиатр", "акуш", "гинек", "онколог", "кардио", "clinical", "diagnostic", "surgery")):
         return num_semesters
     if any(marker in key for marker in ("информационной безопасности", "кибербезопасности", "цифровой криминалистики", "digital forensics", "cybersecurity")):
         return max(2, min(num_semesters, math.ceil(num_semesters * 0.65)))

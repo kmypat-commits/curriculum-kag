@@ -257,6 +257,15 @@ def test_research_methodology_title_variants_share_semantic_key():
     } == {"semantic research methodology"}
 
 
+def test_preclinical_first_aid_foundation_is_not_advanced_physician_practice():
+    title = "Основы сестринского дела и практика первой доврачебной помощи"
+    # The fragment 'врачебн' inside 'доврачебной' must not remove the
+    # foundation deadline. The final verifier already enforces this boundary.
+    assert _foundation_max_semester(title, 8) == 3
+    assert _semantic_max_semester(title, 8) == 3
+    assert _foundation_max_semester("Основы общей врачебной практики", 8) == 8
+
+
 def test_foundation_source_semester_is_advisory_except_for_clinical_depth():
     ai = {
         "title": "Основы искусственного интеллекта",
