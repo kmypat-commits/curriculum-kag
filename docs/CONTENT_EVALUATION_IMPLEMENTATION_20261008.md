@@ -357,3 +357,25 @@ Ruling: работа в существующей feature-ветке и теку�
   invalid indexes/unvalidated constraints и migration. Пока завершение и
   проверки НЕ подтверждены. Не дублировать runner и не объявлять restore ready.
 - Тестовую БД оставляем для проверки; никакие рабочие edges/планы не меняются.
+
+### 2026-10-10 — restore завершён и стоимость чтения событий
+
+- Exec75015 exit0, ledger state=passed, pg_restore exit0/stderr empty,
+  elapsed439.05с. В isolated curriculum_kag_restore_pilot_20261010 восстановлены
+  courses51047, plans111, plan_items4897, prerequisite_edges73662.
+  Orphan plan items/prerequisites0, invalid indexes0, unvalidated constraints0;
+  migration20260914_planner_build_drafts. Рабочая БД не была целью restore.
+  Это восстановление содержимого снимка9октября, не сверка с изменившейся liveБД
+  и не подтверждение содержательного качества восстановленных программ.
+  TestDB сохранена, старые metadata dump не переписаны; evidence отдельный
+  .runtime/restore-content-pilot-20261010.json. Не повторять restore.
+- Read-only30 samples каждого сценария read_events+JSON на реальном job1632:
+  reopening median5.329ms p956.507ms payload32149bytes9events;
+  caught-up median2.434ms p953.057ms payload126bytes0events.
+  Evidence .runtime/build-event-service-cost-20261010.json. Во время измерения
+  шёл restore; это warm local service cost, НЕ HTTP/render latency и НЕ
+  open-vs-closed generation overhead acceptance. Генерации не запускались.
+- HTTP test fixtures уточнены по реальному schema sequence/job_id/timestamp;
+  frontend47/47 повторно passed. Продуктовый код не менялся.
+- Остаются real open/closed overhead и cancel/retry/parallel/restart проверки,
+  предметный review2124 и содержательная frozen20→40 приемка.

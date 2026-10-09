@@ -4,9 +4,10 @@ import axios from 'axios'
 import useBuildEvents from './useBuildEvents'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
-const event = (seq, stage) => ({ seq, type: 'stage', data: { stage } })
+const event = (sequence, stage) => ({ sequence, job_id: 'saved',
+    timestamp: '2026-10-10T00:00:00+00:00', type: 'stage', data: { stage } })
 const page = (events, cursor, state = 'running', more = false) => ({
-    data: { events, next_cursor: cursor, state, has_more: more },
+    data: { job_id: 'saved', events, next_cursor: cursor, state, has_more: more },
 })
 beforeEach(() => { vi.useFakeTimers(); axios.get.mockReset() })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
@@ -30,7 +31,7 @@ it('reopens the saved stream from the beginning without duplicated events', asyn
     await act(async () => {})
     rerender({ opened: false }); rerender({ opened: true })
     await act(async () => {})
-    expect(result.current.events.map(e => e.seq)).toEqual([3])
+    expect(result.current.events.map(e => e.sequence)).toEqual([3])
     expect(axios.get.mock.calls[1][1].params.after).toBe(0)
 })
 
@@ -57,7 +58,7 @@ it('keeps the cursor through a transient error and clears the error on recovery'
     expect(result.current.error).toBe(true)
     await act(async () => vi.advanceTimersByTimeAsync(5000))
     expect(result.current.error).toBe(false)
-    expect(result.current.events.map(e => e.seq)).toEqual([1, 2])
+    expect(result.current.events.map(e => e.sequence)).toEqual([1, 2])
     expect(axios.get.mock.calls[2][1].params.after).toBe(1)
 })
 
@@ -74,7 +75,7 @@ it('pauses in a hidden tab and resumes from the last received cursor', async () 
     expect(axios.get).toHaveBeenCalledTimes(1)
     hidden = false
     await act(async () => document.dispatchEvent(new Event('visibilitychange')))
-    expect(result.current.events.map(e => e.seq)).toEqual([1, 2])
+    expect(result.current.events.map(e => e.sequence)).toEqual([1, 2])
     expect(axios.get.mock.calls[1][1].params.after).toBe(1)
 })
 
