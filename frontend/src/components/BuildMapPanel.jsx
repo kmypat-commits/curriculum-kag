@@ -3,7 +3,7 @@ import useBuildEvents from '../hooks/useBuildEvents'
 import { buildEventGraph } from '../utils/buildEventGraph'
 import './BuildMapPanel.css'
 
-function LiveGraph({ elements, t, onInspect }) {
+function LiveGraph({ elements, t, onInspect, motion }) {
     const host = useRef(null)
     const cy = useRef(null)
     const [ready, setReady] = useState(false)
@@ -37,9 +37,9 @@ function LiveGraph({ elements, t, onInspect }) {
         if (!ready || !cy.current) return
         cy.current.json({ elements })
         cy.current.layout({ name: 'dagre', rankDir: 'BT', nodeSep: 18, rankSep: 80,
-            animate: !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+            animate: motion && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
             animationDuration: 350, fit: true, padding: 35 }).run()
-    }, [ready, elements])
+    }, [ready, elements, motion])
     return <div className="build-map-graph" ref={host} role="img" aria-label={t('build_map_graph')}>
         {failed && <p>{t('build_map_graph_unavailable')}</p>}
     </div>
@@ -51,11 +51,27 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
     const [inspected, setInspected] = useState(null)
     const [graphEnabled, setGraphEnabled] = useState(true)
     const [textOnly, setTextOnly] = useState(false)
+    const [motion, setMotion] = useState(false)
+    const [visible, setVisible] = useState(!document.hidden)
+    const [inViewport, setInViewport] = useState(false)
     const panel = useRef(null)
     const { events, error, noJob } = useBuildEvents(versionId, status?.job_id, opened)
     const elements = useMemo(() => buildEventGraph(events, title, t('build_map_aggregate')), [events, title, t])
     const candidate = [...events].reverse().find(e => e.type === 'candidates')?.data
     const lastStage = [...events].reverse().find(e => e.type === 'stage')?.data
+    const animate = motion && visible && inViewport && !textOnly && status?.state === 'running'
+    useEffect(() => {
+        if (!opened || !panel.current) return
+        if (!window.IntersectionObserver) { setInViewport(true); return }
+        const observer = new IntersectionObserver(entries => setInViewport(entries.some(entry => entry.isIntersecting)))
+        observer.observe(panel.current)
+        return () => { observer.disconnect(); setInViewport(false) }
+    }, [opened])
+    useEffect(() => {
+        const update = () => setVisible(!document.hidden)
+        document.addEventListener('visibilitychange', update)
+        return () => document.removeEventListener('visibilitychange', update)
+    }, [])
     useEffect(() => {
         const preference = window.matchMedia?.('(max-width: 600px), (prefers-reduced-motion: reduce)')
         const update = () => setTextOnly(Boolean(preference?.matches))
@@ -72,24 +88,26 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
     }, [expanded])
     return <div className="build-map-wrapper">
         <button className="btn btn-secondary" type="button" aria-expanded={opened} onClick={() => setOpened(v => !v)}>{t(opened ? 'build_map_close' : 'build_map_open')}</button>
-        {opened && <section ref={panel} tabIndex={-1} className={`build-map-panel${expanded ? ' is-expanded' : ''}`} aria-label={t('build_map_open')}>
-            <div className="build-map-toolbar"><h3>{t('build_map_open')}</h3>
+        {opened && <section ref={panel} tabIndex={-1} className={`build-map-panel${expanded ? ' is-expanded' : ''}${animate ? ' has-motion' : ''}`} aria-label={t('build_map_open')}>
+            <div className="build-map-toolbar"><div className="build-map-heading"><h3>{t('build_map_open')}</h3><p>{title}</p></div>
                 <button type="button" onClick={() => setExpanded(v => !v)}>{t(expanded ? 'build_map_restore' : 'build_map_expand')}</button>
                 <button type="button" onClick={() => { setOpened(false); setExpanded(false) }}>{t('build_map_close')}</button>
             </div>
             <p className="build-map-explanation">{t('build_map_explanation')}</p>
             <div className="build-map-facts" aria-live="polite">
-                <span>{t('build_map_candidates')}: {candidate?.count ?? '—'}</span>
-                <span>{t('build_map_stage')}: {stageLabel(lastStage?.stage || status?.stage || 'idle')}</span>
-                <span>{t('build_map_variant')}: {candidate?.variant || '—'}</span>
+                <span><small>{t('build_map_candidates')}</small><strong>{candidate?.count ?? '—'}</strong></span>
+                <span><small>{t('build_map_stage')}</small><strong>{stageLabel(lastStage?.stage || status?.stage || 'idle')}</strong></span>
+                <span><small>{t('build_map_variant')}</small><strong>{candidate?.variant || '—'}</strong></span>
             </div>
             {error && <p role="status">{t('build_map_connection_error')}</p>}
             {noJob && <p>{t('build_map_no_job')}</p>}
-            {!textOnly && <label><input type="checkbox" checked={graphEnabled} onChange={e => setGraphEnabled(e.target.checked)} /> {t('build_map_show_graph')}</label>}
+            <div className="build-map-controls">{!textOnly && <label><input type="checkbox" checked={graphEnabled} onChange={e => setGraphEnabled(e.target.checked)} /> {t('build_map_show_graph')}</label>}
+                <label><input type="checkbox" checked={motion} disabled={textOnly} onChange={e => setMotion(e.target.checked)} /> {t('build_map_motion')}</label>
+            </div>
             {textOnly || !graphEnabled ? <>
                 <p>{t('build_map_text_alternative')}</p>
                 <ul>{elements.filter(e => e.data.courseId).map(e => <li key={e.data.id}>{e.data.label} · ID {e.data.courseId} — {t(e.data.state === 'published' ? 'build_map_published' : e.data.state === 'selected' ? 'build_map_selected' : 'build_map_candidates')}</li>)}</ul>
-            </> : !noJob && <LiveGraph elements={elements} t={t} onInspect={setInspected} />}
+            </> : !noJob && <LiveGraph elements={elements} t={t} onInspect={setInspected} motion={animate} />}
             <div className="build-map-legend"><span>{t('build_map_candidates')}</span><span>{t('build_map_selected')}</span><span>{t('build_map_published')}</span></div>
             {inspected && <p>{inspected.label}{inspected.courseId ? ` · ID ${inspected.courseId}` : ''}{inspected.detail ? ` · ${inspected.detail}` : ''}</p>}
             <details><summary>{t('build_map_events')}</summary><ol>

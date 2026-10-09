@@ -522,6 +522,7 @@ for (const [key, values] of Object.entries(contentAndMapCopy)) {
 
 const buildMapAdditionalCopy = {
     build_map_show_graph: ['Показывать граф', 'Графты көрсету', 'Show graph'],
+    build_map_motion: ['Переливы во время генерации', 'Генерация кезінде жарық ауысуы', 'Light flow during generation'],
     build_map_text_alternative: ['Текстовый режим: этапы и дисциплины без анимации.', 'Мәтіндік режим: кезеңдер мен пәндер анимациясыз.', 'Text mode: stages and courses without animation.'],
     build_exclusion_goso_duplicate: ['Повтор обязательного компонента ГОСО', 'Міндетті компоненттің қайталануы', 'Duplicate statutory component'],
     build_exclusion_missing_or_inadmissible_prerequisite: ['Нет допустимой цепочки пререквизитов', 'Жарамды пререквизит тізбегі жоқ', 'No admissible prerequisite chain'],
