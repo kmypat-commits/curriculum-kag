@@ -94,6 +94,17 @@ def _record_job_transition(
         db.flush()
     if requested_state != "running":
         return
+    # The status-row lock and lease check already admitted this new owner.
+    # A same-owner re-entry returns before this function. Close abandoned
+    # executions of this logical job, not the recoverable job itself.
+    for previous_attempt in db.query(PlannerBuildAttempt).filter(
+        PlannerBuildAttempt.job_id == job.id,
+        PlannerBuildAttempt.state == "running",
+    ).all():
+        previous_attempt.state = "timed_out"
+        previous_attempt.failure_code = "lease_expired"
+        previous_attempt.finished_at = now
+        previous_attempt.lease_expires_at = None
     job.state = "running"
     job.started_at = job.started_at or now
     # Heartbeats refresh only an attempt lease, never this absolute deadline.

@@ -519,3 +519,25 @@ Ruling: работа в существующей feature-ветке и теку�
 - Продуктовый код не менялся, full suites повторно не запускались.
   Открыто: concurrent execution, balanced repeated overhead, history attempt
   presentation и предметный review2124 перед новым полным20→40.
+
+### 2026-10-10 — закрытие аварийной attempt при повторном захвате
+
+- Причина historical running: _record_job_transition создавал новую attempt,
+  но не закрывал предыдущую после истечения lease. Терминальное завершение
+  обновляло только текущего owner, поэтому старая attempt оставалась running.
+- Regression на real SQLAlchemy SQLite: действующий lease не перехватывается
+  чужим owner; после expiry тот же job получает нового owner и ordinal2;
+  ordinal1 timed_out/failure_code lease_expired/finished_at/lease null;
+  финальное завершение сохраняет историю [timed_out,complete]. Первоначально
+  исправлена test fixture: same-owner reentry разрешён и не моделирует чужой
+  процесс. Затем правильный RED: expected timed_out, actual running.
+- Минимальный fix в planner_state._record_job_transition внутри существующего
+  atomic claim; новые executions закрывают прежние running attempts того же
+  job, сам job не становится timed_out и не теряет identity. Gates, кредиты,
+  пререквизиты и publication не изменены, новых DB migrations нет.
+- Target2/2 GREEN; full backend/tests exit0 (exec60919), без cacheprovider,
+  fresh unique TEMP/TMP/basetemp. Deprecation warnings зависимостей сохранены.
+  Старое crash evidence не переписано: оно относится к прежнему коду.
+- Live API2216/worker20816 не перезапускались, поэтому live rollout и новый
+  PostgreSQL crash recovery с исправлением ещё не подтверждены. Не исправлять
+  старые исторические rows задним числом без отдельной migration policy.
