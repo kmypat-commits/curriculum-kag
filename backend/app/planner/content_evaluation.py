@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.2'
+EVALUATOR_VERSION = 'local-content-1.3'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -71,7 +71,12 @@ def _cached_course(profile_json, course_json, scores_json):
         support = False
     role = 'regulatory' if regulatory else 'supporting' if support else 'professional'
     evidence = []
-    focus_terms = _terms(source_text(profile.get('title'))) | _terms(source_text(profile.get('goal')))
+    # Generic mission statements (science, development, production) are not
+    # professional anchors. Use the named programme profile; unknown synonyms
+    # remain uncertain instead of inventing positive evidence from its goal.
+    focus_terms = _terms(source_text(profile.get('title')))
+    if any(term.startswith(('дерево', 'древес', 'мебел', 'wood', 'furnit', 'timber')) for term in focus_terms):
+        focus_terms |= _terms('древесина деревообработка мебель лесопиление пиломатериалы woodworking furniture timber')
     for field, text in substantive.items():
         overlap = sorted(_terms(text) & focus_terms)
         evidence.append({'source_reference': str(course.get('course_id') or course['id']),

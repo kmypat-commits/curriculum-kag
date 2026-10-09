@@ -114,3 +114,14 @@ def test_corrupt_optional_embedding_does_not_prevent_content_review():
     assert result['indicators']['reviewed_courses'] == 2
     assert result['duplicate_groups'] == []
     assert result['embedding_findings'][0]['reason'] == 'invalid_embedding'
+
+
+def test_generic_programme_goal_does_not_validate_unrelated_food_course():
+    from app.planner.content_evaluation import evaluate_content
+    result = evaluate_content(profile={
+        'title': 'Проектирование изделий из древесины',
+        'goal': 'Фундаментально образованные специалисты для научного и социального развития национального производства.',
+        'learning_outcomes': {}}, courses=[course(7, 'Испытание муки и кондитерских изделий',
+        'Научные исследования пищевой продукции для социального развития национального производства.')], schedule={})
+    assert result['courses'][0]['status'] == 'needs_review'
+    assert result['courses'][0]['priority_adjustment'] == 0
