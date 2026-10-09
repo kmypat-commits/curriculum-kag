@@ -5,6 +5,20 @@ import axios from 'axios'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
 
+it('signals a freshly published job once without waiting for the slow status poll', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'complete', events: [], next_cursor: 0, has_more: false } })
+    const onPublished = vi.fn()
+    const view = render(<BuildMapPanel versionId={3} status={{ state: 'running', job_id: 'real' }}
+        title="Programme" t={x => x} onPublished={onPublished} />)
+    fireEvent.click(screen.getByRole('button', {name: 'build_map_open'}))
+    await waitFor(() => expect(onPublished).toHaveBeenCalledWith(3))
+    view.rerender(<BuildMapPanel versionId={3} status={{ state: 'queued', job_id: 'real' }}
+        title="Programme" t={x => x} onPublished={onPublished} />)
+    expect(onPublished).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+})
+
 it('uses the actual event stream state while the slower status poll still says queued', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     axios.get.mockResolvedValue({ data: { state: 'running', events: [], next_cursor: 0, has_more: false } })

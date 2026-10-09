@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 
-export default function ContentEvaluationPanel({ versionId, planId, t, mode = 'shadow', onModeChange }) {
+export default function ContentEvaluationPanel({ versionId, planId, t, mode = 'shadow', onModeChange, unavailable = false }) {
     const [opened, setOpened] = useState(false)
     const [result, setResult] = useState(null)
     const [error, setError] = useState(false)
@@ -11,8 +11,9 @@ export default function ContentEvaluationPanel({ versionId, planId, t, mode = 's
         revision.current += 1
         setResult(null); setError(false); setOpened(false); setBusy(false)
         return () => { revision.current += 1 }
-    }, [versionId, planId])
+    }, [versionId, planId, unavailable])
     const load = async (save = false) => {
+        if (unavailable || !planId) return
         const requestedRevision = revision.current
         setBusy(true); setError(false)
         try {
@@ -28,12 +29,13 @@ export default function ContentEvaluationPanel({ versionId, planId, t, mode = 's
     const report = result?.report
     return <section className="content-evaluation-section">
         <div className="content-evaluation-actions">
-            <button type="button" className="btn btn-secondary" disabled={!planId || busy} aria-expanded={opened} onClick={toggle}>{t('content_evaluation_open')}</button>
-            <label>{t('content_evaluation_mode')} <select value={mode} disabled={busy || !onModeChange} onChange={async e => {
+            <button type="button" className="btn btn-secondary" disabled={!planId || busy || unavailable} aria-expanded={opened} onClick={toggle}>{t('content_evaluation_open')}</button>
+            <label>{t('content_evaluation_mode')} <select value={mode} disabled={busy || unavailable || !onModeChange} onChange={async e => {
                 setBusy(true); setError(false)
                 try { await onModeChange(e.target.value) } catch (_) { setError(true) } finally { setBusy(false) }
             }}><option value="shadow">{t('content_mode_shadow')}</option><option value="prioritise">{t('content_mode_prioritise')}</option></select></label>
         </div>
+        {unavailable && <p role="status">{t('content_evaluation_wait_for_plan')}</p>}
         {error && <p role="alert">{t('content_evaluation_error')}</p>}
         {opened && <div className="content-evaluation-report">
             <h3>{t('content_evaluation_open')}</h3>

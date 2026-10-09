@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -167,10 +167,10 @@ export default function PlanBuilder() {
     const { start: startBuildStatusPolling, stop: stopBuildStatusPolling } = usePlanBuildPolling({
         onStatus: applyBuildStatus,
         onComplete: async (versionId) => {
-            setBuilding(false)
             await fetchVariants(versionId)
         },
     })
+    const refreshPublishedBuild = useCallback(versionId => startBuildStatusPolling(versionId), [startBuildStatusPolling])
     const semesterRefs = useRef({})
     const onShowSemester = (semester) => {
         semesterRefs.current[semester]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -380,7 +380,7 @@ export default function PlanBuilder() {
             setBuildProgress(5)
             setBuildStatus({ state: 'running', stage: 'matching', progress: 5 })
             const buildRequest = axios.post(`/api/planner/${versionId}/build`, { variants: buildVariants === 'all' ? ['A', 'B', 'C'] : [buildVariants] })
-            startBuildStatusPolling(versionId)
+            startBuildStatusPolling(versionId, { ignoreJobId: buildStatus?.job_id })
             const buildResponse = await buildRequest
             if (buildResponse.status === 202 || buildResponse.data?.state === 'queued') {
                 handedToAsyncWorker = true
@@ -947,8 +947,9 @@ export default function PlanBuilder() {
                     elapsedLabel={buildElapsedLabel()}
                     longRunningHint={buildLongRunningHint()}
                 />
-                <BuildMapPanel versionId={project?.latest_version?.id} status={buildStatus} title={project?.title || ''} t={t} stageLabel={buildStageLabel} />
+                <BuildMapPanel versionId={project?.latest_version?.id} status={buildStatus} title={project?.title || ''} t={t} stageLabel={buildStageLabel} onPublished={refreshPublishedBuild} />
                 <ContentEvaluationPanel versionId={project?.latest_version?.id} planId={currentPlan?.plan_id} t={t}
+                    unavailable={building || applyingQuality}
                     mode={project?.constraints?.content_evaluation_mode || 'shadow'} onModeChange={saveContentEvaluationMode} />
                 {['rejected', 'failed', 'timed_out'].includes(buildStatus.state) && buildStatus.error && (
                     <div className="card inline-alert inline-alert-error" role="alert" style={{ marginBottom: '20px' }}>

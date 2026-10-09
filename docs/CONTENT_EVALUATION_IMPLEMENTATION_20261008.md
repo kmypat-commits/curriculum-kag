@@ -295,3 +295,31 @@ Ruling: работа в существующей feature-ветке и теку�
   review2124 остаётся несогласованным; не дублировать заведомо failing20.
 - Следующий безопасный этап: UI окно старогоplan_id после publication и
   reconnect/overhead pilot; требования20→40 и предметного ядра ещё не приняты.
+
+### 2026-10-10 — обновление UI после публикации результата
+
+- RED→GREEN регрессии: завершение ждёт загрузки новых вариантов; поздний
+  ответ остановленного опроса игнорируется; прежний complete job не завершает
+  новую отправку; запоздавшие варианты не заменяют свежие. Оценка и выбор
+  режима недоступны во время построения/применения изменений.
+- Открытая карта после реального complete текущего job запускает немедленное
+  обновление статуса. Проверяются version/job identity и одно уведомление на
+  job. При закрытой карте прежний резервный опрос сохранён.
+- Frontend: 39/39 tests, Vite build exit0; dist развёрнут в .runtime/dist.
+  Backend в этом шаге не изменялся; его полный suite повторно не запускался.
+- Один реальный UI контроль проекта1632, shadow, исходный frozen10251:
+  job build-b9ab5d06d35f352595cd5fc46c9f46a5 complete за7.2с; новый plan4438.
+  Во время работы оценка disabled с объяснением; после публикации GET оценки
+  plan4438 HTTP200, local-content-1.6, stale=false. Старый plan_id4437 не
+  использован для запроса оценки нового результата.
+- 244 кредита; нагрузки33/31/33/28/30/30/31/28; independent structural issues[].
+  50 дисциплин,12 supported,20 needs_review,0 duplicate_groups. При этом
+  core_definition_missing=true: это НЕ подтверждение полноты ядра или
+  академической пригодности. Один UI контроль НЕ заменяет серию20.
+- Новое evidence: .runtime/ui-publication-refresh-evidence-20261010.json;
+  сохранённый/current snapshot SHA256 одинаков:
+  604d5150339006c67bd3f76bcec0c399c383d459bb7822933ed9effc0ec2ce2b.
+  Screenshot: .runtime/ui-publication-refresh-20261010.jpg. Прежний UI evidence
+  сохранён. Пререквизиты не менялись, failing20 не перезапускался.
+- Открыто: предметный review2124, затем frozen20→40; измерение overhead карты,
+  reconnect/cancel/retry/parallel/restart и isolated backup restore pilot.

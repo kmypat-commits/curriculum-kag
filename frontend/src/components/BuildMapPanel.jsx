@@ -45,7 +45,7 @@ function LiveGraph({ elements, t, onInspect, motion }) {
     </div>
 }
 
-export default function BuildMapPanel({ versionId, status, title, t, stageLabel = stage => stage }) {
+export default function BuildMapPanel({ versionId, status, title, t, stageLabel = stage => stage, onPublished }) {
     const [opened, setOpened] = useState(false)
     const [expanded, setExpanded] = useState(false)
     const [inspected, setInspected] = useState(null)
@@ -55,7 +55,17 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
     const [visible, setVisible] = useState(!document.hidden)
     const [inViewport, setInViewport] = useState(false)
     const panel = useRef(null)
-    const { events, error, noJob, state: eventState } = useBuildEvents(versionId, status?.job_id, opened)
+    const publishedJob = useRef(null)
+    const { events, error, noJob, state: eventState, job: eventJob } = useBuildEvents(versionId, status?.job_id, opened)
+    useEffect(() => {
+        if (eventState !== 'complete' || eventJob?.versionId !== versionId
+            || eventJob?.jobId !== status?.job_id || !['queued', 'running'].includes(status?.state)
+            || !onPublished) return
+        const key = `${versionId}:${eventJob.jobId}`
+        if (publishedJob.current === key) return
+        publishedJob.current = key
+        onPublished(versionId)
+    }, [eventState, eventJob, versionId, status?.job_id, status?.state, onPublished])
     const elements = useMemo(() => buildEventGraph(events, title, t('build_map_aggregate')), [events, title, t])
     const candidate = [...events].reverse().find(e => e.type === 'candidates')?.data
     const lastStage = [...events].reverse().find(e => e.type === 'stage')?.data

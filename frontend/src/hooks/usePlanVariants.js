@@ -1,14 +1,17 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import axios from 'axios'
 
 export default function usePlanVariants() {
     const [variants, setVariants] = useState(null)
     const [activeVariant, setActiveVariant] = useState('A')
+    const revision = useRef(0)
 
     const fetchVariants = useCallback(async (versionId, includeDescriptions = false, includeExplanations = false) => {
+        const requestedRevision = ++revision.current
         const response = await axios.get(`/api/planner/${versionId}/variants`, {
             params: { include_descriptions: includeDescriptions, include_explanations: includeExplanations },
         })
+        if (revision.current !== requestedRevision) return
         if (!response.data || response.data.length === 0) return
         const next = Object.fromEntries(response.data.map(item => [item.variant_type, item]))
         setVariants(next)
