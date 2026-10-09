@@ -323,3 +323,20 @@ Ruling: работа в существующей feature-ветке и теку�
   сохранён. Пререквизиты не менялись, failing20 не перезапускался.
 - Открыто: предметный review2124, затем frozen20→40; измерение overhead карты,
   reconnect/cancel/retry/parallel/restart и isolated backup restore pilot.
+
+### 2026-10-10 — восстановление карты и контракт опроса
+
+- Добавлены8 characterization tests реального useBuildEvents с подменой только
+  HTTP транспорта: все страницы terminal job дочитываются; reopening не
+  дублирует события; поздний ответ другого job игнорируется; после transient
+  error сохранён cursor и сброшена ошибка при восстановлении; hidden вкладка
+  приостанавливает запросы; cancelled/failed/superseded прекращают опрос.
+  Тесты сразу GREEN: это покрытие существующего поведения, НЕ новое исправление
+  и НЕ заявленный RED→GREEN. Продуктовый код в этом шаге не менялся.
+- Полный frontend47/47,13files; Vite build exit0. Backend не менялся.
+- Реальный UI: закрыта и повторно открыта карта project1632 того же job
+  build-b9ab5d06d35f352595cd5fc46c9f46a5; восстановлены этапы подбора, проверки и
+  сохранения, без новой генерации. Screenshot .runtime/ui-map-reopen-20261010.jpg.
+- Это подтверждает reopening завершённого job, но НЕ реальный offline retry,
+  отмену работающего задания, parallel/restart или измерение overhead. Эти
+  проверки и предметный prerequisite review2124 остаются открытыми.
