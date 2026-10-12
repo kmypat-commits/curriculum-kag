@@ -4,10 +4,18 @@ from sqlalchemy.orm import selectinload
 from app.models.course import Course, CourseChunk
 from app.models.embedding import MatchScore, Embedding
 import json
+import hashlib
 from app.planner.content_evaluation import evaluate_content, normalise
 from app.planner.core_evidence import verified_matches
 from app.planner.core_requirements import effective_requirements
 from app.planner.match_aggregation import semantic_evidence_score
+
+
+def description_cache_matches(chunk_text, current_description):
+    """Description chunks index the complete text, not a surviving substring."""
+    cached = normalise(chunk_text or '')
+    current = normalise(current_description or '')
+    return bool(cached and current) and hashlib.sha256(cached.encode('utf-8')).digest() == hashlib.sha256(current.encode('utf-8')).digest()
 
 
 def profile_for_version(version):
@@ -43,7 +51,7 @@ def evaluate_schedule(version, db, schedule):
             CourseChunk.course_id.in_(sorted(ids)), CourseChunk.chunk_type == 'description',
         ).order_by(CourseChunk.id).all()
         for chunk, embedding in embedded:
-            if not chunk.chunk_text or normalise(chunk.chunk_text) not in normalise(by_id[chunk.course_id].description):
+            if not description_cache_matches(chunk.chunk_text, by_id[chunk.course_id].description):
                 continue  # Old embeddings must not evaluate edited descriptions.
             vector = embedding.vector
             if isinstance(vector, str):

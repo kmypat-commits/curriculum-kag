@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.7'
+EVALUATOR_VERSION = 'local-content-1.8'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -203,6 +203,10 @@ def evaluate_content(*, profile, courses, schedule, lo_scores=None, core_blocks=
     embedding_findings = []
     for cid, record in (content_vectors or {}).items():
         try:
+            if str(record.get('model', '')).startswith('feature-hash'):
+                embedding_findings.append({'course_id': cid, 'reason': 'non_semantic_embedding',
+                                           'model': record['model']})
+                continue
             vector = np.asarray(record['vector'], dtype=float)
             if vector.ndim != 1 or not len(vector) or not np.isfinite(vector).all() or not record.get('model'):
                 raise ValueError('invalid vector')

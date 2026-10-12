@@ -1,6 +1,17 @@
 from types import SimpleNamespace
 
 
+def test_feature_hash_similarity_does_not_claim_semantic_duplicates():
+    rows = [course(1, 'Анализ данных', 'Статистические методы для исследований.'),
+            course(2, 'Анализ систем', 'Проектирование архитектуры и системных связей.')]
+    result = evaluate(rows, content_vectors={c.id: {'model': 'feature-hash-v2', 'vector': [1, 0]} for c in rows})
+    assert result['duplicate_groups'] == []
+    assert result['embedding_findings'] == [
+        {'course_id': 1, 'reason': 'non_semantic_embedding', 'model': 'feature-hash-v2'},
+        {'course_id': 2, 'reason': 'non_semantic_embedding', 'model': 'feature-hash-v2'},
+    ]
+
+
 def test_generic_product_inflections_do_not_confirm_professional_profile():
     from app.planner.content_evaluation import assess_course
     for noun in ('изделия', 'изделий', 'изделиями', 'изделию'):

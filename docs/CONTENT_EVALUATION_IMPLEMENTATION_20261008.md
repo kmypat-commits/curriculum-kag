@@ -828,3 +828,12 @@ scoring теперь кодирует обе стороны сравнения �
 сравнение текстов. Все20 embedding/scoring frontier tests GREEN; полный backend
 повторно exit0 (2 skipped). Изменение пока не развёрнуто в live; это не завершение
 честного semantic/lexical coverage, description cache или содержательной приёмки.
+
+Следующий TDD шаг: полное нормализованное описание проверяется SHA256 вместо
+substring (2 RED→GREEN); добавление тем больше не сохраняет валидность старого
+description vector. Физические chunks и пользовательские данные не удалялись.
+Регрессия показала ложный similar_content_embedding от одинаковых feature-hash
+векторов разных курсов. Evaluator local-content-1.8 исключает такие векторы из
+семантических дублей и выдаёт non_semantic_embedding с фактической моделью.
+Полный backend exit0, 2 skipped; live rollout ещё не выполнен. Полная аттестация
+encoder/schema provenance, интерфейс coverage и fresh20/40 остаются открытыми.
