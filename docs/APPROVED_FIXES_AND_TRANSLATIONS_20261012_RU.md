@@ -194,6 +194,29 @@ guarded updated1 + exact committed readback1. Source machine_translation_title_o
 needs_review; KK/EN полные описания по-прежнему отложены. Userlist90 языковых правок,
 44 полностью обработанные карточки + одна с исправленным только RU названием.
 
+### Источники двух отложенных карточек
+
+Read-only просмотр всех exact normalized source_keys7881 (8 raw records) и20866
+(1 raw record) выполнен. Courses44751 description совпадает с повреждённым
+raw1488284. Raw672761 содержит неповреждённые «коммуникативной» и
+«коммуникационных» в соответствующих контекстах; сам672761 повреждён в других
+местах, целиком заменять описание нельзя. Возможна точечная source-backed
+коррекция двух фрагментов с отдельным snapshot и защитой draft/manual полей,
+пока НЕ применена. Другие raw PR описания содержательно отличаются, одного
+названия недостаточно для их взаимозаменяемости. Raw2126433 также обрывается
+на «модель К»; полного continuation в exact-code источниках не найдено.
+Evidence source-recovery-candidates-userlist-20261013.json, database_updates0.
+
+Затем source-repair выполнен отдельно: dry-run подтвердил2точных повреждённых
+фрагмента,3eligible sourcecopydraft. Snapshot pr-source-repair-snapshot-20261013.json
+включает courses/normalized content_json/localizations before+after и sourcekeys.
+Guarded transaction исправила только2слова в Course44751,normalized7881RU и3draft
+копиях. RawEPVO не изменён, manual/verified не затронуты. SQL после commit:
+оба восстановленных слова присутствуют, U+FFFD отсутствует, count57392.
+Новый исходник передан Luna для KK/EN; сами переводы ещё НЕ применены.
+Существующие score/vector caches и course chunks не удалялись; перерасчёт/проверка
+актуальности содержания остаётся отдельной задачей до содержательной приёмки.
+
 Прочитаны все30KK/EN title+description и15точных исходников пакет03; guarded apply
 prepared31/updated31/skipped0 exit0, snapshot userlist-translation-snapshot-20261013-03.json.
 ДобавленRUtitle35009 Продукт, ориентированный на сообщество и KKtitle Қауымдастыққа
