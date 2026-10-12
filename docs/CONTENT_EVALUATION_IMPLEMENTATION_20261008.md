@@ -846,3 +846,20 @@ semantic admission coverage, экспертный EPVO сигнал не мен�
 provenance пока совместимы и требуют отдельной проверки, не считаются доказанно
 semantic. Полный backend exit0, 2 skipped; live не обновлён. Fresh cohort после
 rollout требует новых расчётов, исторические20/20 не переименовывать в приёмку1.8.
+
+После rollout один неизменённый frozen10251 A control content-v18-20261013
+завершёнpassed1/1 exit0; runner26040 terminal. Independent helper
+check-content-v18-control-20261013.json: exactfile/canonical/report hashestrue,
+check_variant issues[], evaluatorlocal-content-1.8. 46курсов/16needs_review,
+15supportedprofessional,0duplicate/sequence. Старый feature-hash3427 явно
+non_semantic_embedding. Это реальный CLI контроль, не UIjob/экспертная приёмка
+и не новая полная20серия; core_gaps0 без подтверждённого ядра не доказывает полноту.
+
+Содержательный просмотр10251 выявил false negative28441 «Теории и история
+искусства»: описание прямо содержит theory/history of art, но фильтр культуры
+не принимал эти конкретные anchors. RED positive→GREEN, negative «Искусство
+управления» не получает бонус. Evaluator1.9 добавляет только bounded text anchors
+теория/история искусства, сохраняет genericculture/LO/prereq gates. Full backend
+exit0,2skipped; live пока1.8, реальные freshконтроли1.9 ещё не выполнены.
+Baselinecapture для B/C по проверке моделей/API/UI отсутствует; последнюю A
+нельзя подменять за исходный вузовский план. Нужен подтверждённый immutable source.

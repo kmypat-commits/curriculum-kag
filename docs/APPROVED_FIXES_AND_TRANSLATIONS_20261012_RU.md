@@ -191,6 +191,31 @@ Hold26776kk неверно относил повреждение старого 
 на отдельный перевод без угадывания. Другие4holds требуют восстановления source.
 Агенту поручены следующие20 вне уже рассмотренных41, безDBwrites.
 
+26776kk отдельно переведён из целого exact source, полностью прочитан main;
+guarded updated1 и committed exact readback1, snapshot luna-26776-snapshot-20261013.
+Recovery37/100. Старый отказ по damaged source для этой пары опровергнут, а не
+обойдён угадыванием. Другие повреждённые источники всё ещё отложены.
+Перед live rollout SQL queued/running0; API listener16136 StartTime13Oct01:48:32,
+uvicorn loopback8000, parent16744 отсутствует. pids.json stale: штатный restart
+может пропустить orphan API. Live пока не перезапущен; требуется адресная проверка
+API/worker identities и контролируемый запуск, не изменение пользовательского start.ps1.
+
+Повторный CIM full query опроверг предыдущую запись об absent parents:16744/23644
+существовали с ожидаемыми commandline/StartTime. Ошибку наблюдения не выдавать за
+реальную потерю процесса. После freshSQL active0 и identity guards выполнен адресный
+restart только API/worker trees. Новые wrappers15296/12328 StartTime13Oct02:26:02,
+children20456/14832. Healthhealthy/PostgreSQLconnected, workerstarted подтверждены.
+Same shadow5433/prioritise/loopback, threads4; frontend2024/dist/start.ps1 неизменны.
+Runtime pids.json обновлён. Код4609ca0/evaluator1.8 загружается новым процессом;
+это availability rollout, не fresh generation/content/load acceptance.
+
+Luna revised03: все20 полных source+target прочитаны main, сохранены уровни
+магистратуры, GEONETCast/ILWIS, CAD/NASTRAN, SAR и КОМПАС. Exactexport/allprevious
+exclusion guards, updated20/skipped0; committedreadback20, count57392unchanged.
+Snapshot epvo-recovery-revised-snapshot-20261013-03 до записи. Recovery57/100,
+4holds повреждённых source (26761en/kk,26771en/kk), оставшиеся39 ещё не обработаны.
+Следующие20 поручены Luna в revised04, безDBwrites; никакой humanapproval не заявлен.
+
 ### Пользовательский список: пакет04 применён
 
 Полностью прочитаны16карточек source+30KK/EN targets, включая последнюю

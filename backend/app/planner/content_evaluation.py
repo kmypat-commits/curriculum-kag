@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.8'
+EVALUATOR_VERSION = 'local-content-1.9'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -129,6 +129,10 @@ def _cached_course(profile_json, course_json, scores_json):
                               and not re.search(r'эколог|антикорруп|безопасн', normalise(title)))
             if cultural_title:
                 anchors.extend(re.findall(r'\bкультур\w*', normalise(text)))
+            # Art history/theory is a concrete cultural field; the metaphor
+            # "art of management" alone does not establish that content.
+            anchors.extend(re.findall(
+                r'(?:теори\w*|истори\w*)\s+(?:\w+\s+){0,2}искусств\w*', normalise(text)))
             overlap.extend(sorted(set(anchors)))
         evidence.append({'source_reference': str(course.get('course_id') or course['id']),
                          'source_field': field, 'excerpt': text[:500],

@@ -1,6 +1,22 @@
 from types import SimpleNamespace
 
 
+def test_art_history_content_supports_culturology_without_generic_culture_word():
+    from app.planner.content_evaluation import assess_course
+    row = assess_course({'title': '6В03102 Культурология'}, course(1,
+        'Теории и история искусства',
+        'Основные понятия, периоды и направления в теории и истории искусства; интерпретация произведений искусства.'))
+    assert row['status'] == 'supported'
+    assert row['priority_adjustment'] == .15
+
+
+def test_art_of_management_is_not_art_history_evidence_for_culturology():
+    from app.planner.content_evaluation import assess_course
+    row = assess_course({'title': '6В03102 Культурология'}, course(1,
+        'Искусство управления', 'Методы управления персоналом и организация работы предприятия.'))
+    assert row['priority_adjustment'] == 0
+
+
 def test_feature_hash_similarity_does_not_claim_semantic_duplicates():
     rows = [course(1, 'Анализ данных', 'Статистические методы для исследований.'),
             course(2, 'Анализ систем', 'Проектирование архитектуры и системных связей.')]
