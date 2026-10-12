@@ -128,6 +128,46 @@ outer exec18025 пока не вернул terminalexit; не выдавать �
 
 ## Пользовательский пакет03 и реальный контроль A
 
+### Проверка отчёта восстановления EPVO, 13 октября
+
+Получен epvo-recovery-verdict-20261013-01.json: 100 языковых записей,
+71 accepted / 29 rejected по машинному обзору Luna. Это НЕ проверка человеком:
+поле human_semantic_review_complete ошибочно, запрошена отдельная исправленная
+версия отчёта без переписывания исходного evidence. Агрегат exact matches100
+противоречит отдельным db_checks=false; текущую БД этот агрегат не подтверждает.
+Основной агент отдельно сопоставил все100 verdict с export по identity, EPVO ID,
+source/target title+description: несовпадений0. Это сравнение файлов, НЕ live SQL.
+Импорт этих записей пока не выполнялся. Отклонённые переводы включают подмену
+магистрантов на undergraduates, дистанционных методов на дистанционное обучение,
+технических СВЧ-генераторов на бытовые печи и пропуски профильного содержания.
+Предстоят исправленные provenance, полный обзор принимаемых текстов и guarded
+current-source проверка перед snapshot-backed записью; verified/manual защищены.
+
+Основной read-only current DB check затем подтвердил eligibility всех71 draft,
+courses57392, updates0; epvo-recovery-current-check-20261013-01.json. Это не
+семантическое одобрение71. Прочитаны полностью первые8 принятых пар; отдельные
+KK термины всё ещё требуют исправления (spacecraft передано как «ғарыш», embedded
+systems как «енгізілген жүйелер»). Не импортированы автоматически по verdict.
+Ограниченно восстановлены4 пары:26764en,26766kk,26767en,26768en, title+description.
+Snapshot epvo-recovery-applied-snapshot-20261013-01.json записан эксклюзивно и
+fsync до UPDATE; guarded apply exit0 updated4, courses57392→57392. SQL readback
+подтверждает source epvo_translation_recovered_reviewed/status needs_review.
+Это машинный обзор с обязательной последующей проверкой, не human approval.
+После readback английское title26764 уточнено: spacecraft вместо space.
+Отдельный before/after snapshot epvo-26764-en-title-correction-20261013.json;
+guarded UPDATE1 и SQL readback подтверждены, описание/статус не менялись.
+
+Следующие12 принятых Luna пар полностью прочитаны основным агентом. В26771kk
+найдено искажение трибомеханики («тайпемеханикалық»),26770kk требует грамматической
+переработки,26775kk меняет создаваемые системы на созданные; эти3 не импортированы.
+Применены9пар:26768kk,26770en,26772en/kk,26773en/kk,26775en,26776en,26779en.
+KK названия26768/26773 уточнены до жерсеріктік байланыс/қашықтықтан зондтау;
+EN описание26770 грамматически исправлено без добавления темы. Snapshot02 до записи,
+guarded updated9 и exact readback title/description/status9, count57392→57392.
+Всего из100 recovery применено13 языковых записей; это не завершение каталога.
+Исправленный verdict-v2 явно machine_semantic_review_luna_not_human, withdraws
+старые db_checks и ограничивает exactcrossmatch сравнением export/artifacts.
+
 Прочитаны все30KK/EN title+description и15точных исходников пакет03; guarded apply
 prepared31/updated31/skipped0 exit0, snapshot userlist-translation-snapshot-20261013-03.json.
 ДобавленRUtitle35009 Продукт, ориентированный на сообщество и KKtitle Қауымдастыққа
