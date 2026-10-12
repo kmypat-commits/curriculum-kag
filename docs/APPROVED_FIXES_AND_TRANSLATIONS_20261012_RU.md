@@ -168,6 +168,32 @@ guarded updated9 и exact readback title/description/status9, count57392→57392
 Исправленный verdict-v2 явно machine_semantic_review_luna_not_human, withdraws
 старые db_checks и ограничивает exactcrossmatch сравнением export/artifacts.
 
+Следующие10пар (accepted индексы20–29) прочитаны полностью. Восстановлены8:
+26779kk,26780en/kk,26782en,26783en/kk,26784en,26786en. Уточнены EN titles
+Applied Earth Sciences and Environmental Management / Testing Systems for Space
+Equipment и KK жерсеріктік деректер; snapshot03 до записи, updated8/readback8,
+courses57392→57392.26782kk требует проверки термина reinforcement learning;
+26785en использует polygraphy вместо printing для полиграфии — эти2 не применены.
+Recovery всего21/100, остальные не считаются завершёнными; machine needs_review.
+
+### Пользовательский список: пакет04 применён
+
+Полностью прочитаны16карточек source+30KK/EN targets, включая последнюю
+Управление брендингом. Frozen batch SHA256
+b9a6218cb792a10da79730667f86ee1e75053d8ffb5714ef17acb3ce171ee4b8 проверен
+до guarded apply. Prepared30/updated30/skipped0, snapshot04 записан до UPDATE.
+Отдельная read-only проверка после commit подтверждает точные30 title/description/
+source/status; count57392. Userlist теперь89языковыхзаписей44карточек из46.
+44751 Связи с общественностью — повреждённый исходник;35002 Промышленный маркетинг
+— description обрывается на «модель К», пока не переведены полностью. Переводы
+не считаются академически утверждёнными: machine_translation_gpt6_luna/needs_review.
+Казахское название35002 в RU также остаётся отдельным открытым исправлением.
+Затем RU название35002 отдельно исправлено до «Промышленный маркетинг» без
+изменения обрезанного описания. Snapshot userlist-35002-ru-title-snapshot-20261013.json,
+guarded updated1 + exact committed readback1. Source machine_translation_title_only,
+needs_review; KK/EN полные описания по-прежнему отложены. Userlist90 языковых правок,
+44 полностью обработанные карточки + одна с исправленным только RU названием.
+
 Прочитаны все30KK/EN title+description и15точных исходников пакет03; guarded apply
 prepared31/updated31/skipped0 exit0, snapshot userlist-translation-snapshot-20261013-03.json.
 ДобавленRUtitle35009 Продукт, ориентированный на сообщество и KKtitle Қауымдастыққа
