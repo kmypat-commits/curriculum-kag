@@ -98,3 +98,16 @@ Readonly export100KK/EN candidates просмотрел101 строку, отк�
 текст с кириллицей; .runtime/epvo-recovery-review-20261013-01.json. DATABASE writes0.
 После пользовательского пакета03 Luna проверяет все100 перед guarded import.
 Массовый старый SQLite upsert не используется: он перезаписывает existing поля.
+
+## Защита от повторного импорта при генерации
+
+Обнаружен действующий путь planner_build→register_course_translations, который
+безусловно заменял существующие переводы. Реальные SQLite ORM регрессии RED
+воспроизвели перезапись manual/verified,epvo/verified,Luna/needs_review и уже
+переведённого automaticdraft. Теперь обновляются только automatic_course_draft/draft
+и только пустые либо sourcecopy поля; прочие строки сохраняются. Отдельный
+characterization тест подтверждает восстановление описания без замены уже
+переведённого названия. Первый GREEN выявил NameError из-за import в другой
+одноимённой области; scopedimport исправлен, ненужный import удалён. Suite5670
+exit0,двеopt-inskipped; после finaltest повторный fullsuite50763 проверен отдельно.
+Это sourcefix, НЕlive rollout и НЕзавершение переводов каталога.

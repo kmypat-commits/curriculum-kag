@@ -270,7 +270,7 @@ def register_course_translations(records, db=None):
     if not records:
         return 0
     if db is not None:
-        from app.models.course import CourseLocalization
+        from app.models.course import Course, CourseLocalization
 
         stored = 0
         verified_statuses = {
@@ -292,6 +292,18 @@ def register_course_translations(records, db=None):
                     CourseLocalization.course_id == int(course_id),
                     CourseLocalization.language == language,
                 ).first()
+                if row is not None:
+                    if row.source != 'automatic_course_draft' or row.status != 'draft':
+                        continue
+                    course = db.query(Course).filter(Course.id == int(course_id)).first()
+                    if course is None:
+                        continue
+                    replace_title = not (row.title or '').strip() or row.title == course.title
+                    replace_description = not (row.description or '').strip() or row.description == course.description
+                    if not replace_title and not replace_description:
+                        continue
+                else:
+                    replace_title = replace_description = True
                 if row is None:
                     row = CourseLocalization(
                         course_id=int(course_id),
@@ -299,9 +311,10 @@ def register_course_translations(records, db=None):
                         title=title,
                     )
                     db.add(row)
-                row.title = title
+                if replace_title:
+                    row.title = title
                 description = str((descriptions or {}).get(language) or "").strip()
-                if description:
+                if description and replace_description:
                     row.description = description
                 row.source = source
                 row.status = status
