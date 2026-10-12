@@ -53,3 +53,15 @@ Hegel завершил25 переводов (13EN/12KK,21курс). Главны
 Пользователь прямо разрешил все недостающие переводы и коммиты/push. Код и отчёты опубликованы f1e7b3d; frontend59/59, backend fullsuite exit0 и Vite build exit0 проверены перед публикацией. start.ps1 и локальные данные не включались.
 
 Batch04:25title+description переводов сверены с исходными текстами; guarded apply prepared25/updated25/skipped0 exit0, snapshot .runtime/luna-translation-snapshot-20261012-04.json. PostgreSQL read-back40EN+38KK=78needs_review, courses57392unchanged. Hegel продолжает batch05 на50 актуальных языковых записей с расширением предметной выборки; полнота каталога не заявляется. A/B/C разные objectives ещё не реализованы: joint_solver пока минимизирует общую отрицательную utility с двухфазным предпочтением покрытия.
+
+## Возобновление 13 октября
+
+Batch05 найден на диске: strict JSON валиден,50уникальныхпар (26EN/24KK), damagedsource U+FFFD0. Старый агент Hegel возвращает not_found, не считается работающим. Пакет ещё НЕ применён: нужна содержательная сверка всех текстов. Первый PostgreSQL read-back попал в запуск контейнера (socket ещё отсутствовал); docker logs подтверждают штатную остановку18:18UTC и новый старт20:22UTC, ready-to-accept, не повреждение данных. Повторный read-back выполнен отдельно. Перезапуск или новая генерация не инициировались.
+
+## Batch05 и пользовательский список
+
+Luna Aristotle01a131c9-0369-76b3-a284-16b205e018a2 отдельно reviewed50/accepted50; отчёт .runtime/luna-translation-review-20261013-05.json, совпадение всех targetpairs проверено главным агентом. Exactsource dryrun prepared50/skipped0; apply prepared50/updated50/skipped0 exit0, snapshot .runtime/luna-translation-snapshot-20261013-05.json. Read-back66EN+62KK=128машинныхязыковыхзаписей needs_review. Выявленные sourceissues26737/26751/26758/26742 сохраняются, перевод не подтверждает предметную пригодность.
+
+Пользовательский pastedlist содержит46missingmarkers/45EPVOcodes; первый курс Лидерство и стили руководства без кода требует точного сопоставления. Aristotle готовит приоритетный .runtime/luna-translation-userlist-20261013-01.json, DBreadonly. EPVO-190709 internal57969: пользователь подтвердил ошибку казахского названия вRU. Guarded correction одногоRUtitle на Изучение наследия Узбекали Жанибекова, statusneeds_review/provenanceuser_reported_translation_correction; KK/ENunchanged read-backverified. Snapshot .runtime/ozbekali-ru-correction-20261013.json совместим с apply_localization_batch.py --restore. Course.title/rawEPVOнепереписаны, localizationsсодержатисправление.
+
+Пользователь прямо согласовал контракт A/B/C: B относительно исходного плана вуза, не A; отсутствие исходной базы должно быть явной диагностикой. Реализация этой целевой функции пока не выполнена.
