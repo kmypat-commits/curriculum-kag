@@ -111,3 +111,17 @@ characterization тест подтверждает восстановление 
 одноимённой области; scopedimport исправлен, ненужный import удалён. Suite5670
 exit0,двеopt-inskipped; после finaltest повторный fullsuite50763 проверен отдельно.
 Это sourcefix, НЕlive rollout и НЕзавершение переводов каталога.
+
+## Контролируемый rollout13октября
+
+Перед перезапуском actual API25800/child29484 и worker19896/child18768 проверены
+поCIM. Текущих plan_build_status queued/running0; historical job1/version137 имеет
+deadline и lease от8сентября, не изменялся. Первая launcher попытка RestartBackend
+остановила процессы, затем exit1 из-за taskkill уже остановленного child18768.
+После подтверждения отсутствия всех старых PID повтор безRestartBackend создал
+API16744/worker23644 (01:48:32/38 local), frontend22360 сохранён, same shadow5433.
+HTTP health healthy/databasepostgresql. Launcher readiness log подтверждён, но
+outer exec18025 пока не вернул terminalexit; не выдавать его за exit0.
+Новый запуск наследует CONTENT_EVALUATION_MODE=prioritise. Обновлены A и защита
+переводов; B/C остаются opt-in solver без исходного snapshot/UI. Generationcontrol
+после rollout ещё не выполнен, health не подтверждает содержательную пригодность.
