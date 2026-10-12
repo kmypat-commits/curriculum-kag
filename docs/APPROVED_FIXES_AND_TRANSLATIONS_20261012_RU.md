@@ -125,3 +125,21 @@ outer exec18025 пока не вернул terminalexit; не выдавать �
 Новый запуск наследует CONTENT_EVALUATION_MODE=prioritise. Обновлены A и защита
 переводов; B/C остаются opt-in solver без исходного snapshot/UI. Generationcontrol
 после rollout ещё не выполнен, health не подтверждает содержательную пригодность.
+
+## Пользовательский пакет03 и реальный контроль A
+
+Прочитаны все30KK/EN title+description и15точных исходников пакет03; guarded apply
+prepared31/updated31/skipped0 exit0, snapshot userlist-translation-snapshot-20261013-03.json.
+ДобавленRUtitle35009 Продукт, ориентированный на сообщество и KKtitle Қауымдастыққа
+негізделген өнім вместо untranslatedEnglish; ENназвание сохранено. Исправлена
+переносная опечатка seg-mentation в EN35011. Userlist total59языковыхзаписей29карточек,
+44751 damagedsource остаётся отложенным; дальнейшие16карточек ещё не применены.
+
+Один immutable frozen10251 A control ledger recheck-abc-a-20261013-cases-20260927.json
+terminalpassed1/1, actualrunner14688 завершён. Report diag-10251-abc-a-20261013-20260927.json:
+48.70s,243credits,hard0. Independent check_variant issues[],8семестров/27–33нагрузка.
+Первый helper ошибочно сравнил fileSHA с reportedcanonicalSHA и выдалfalse; исходник
+не менялся. Исправленный отдельный evidence check-abc-a-control-20261013-v2.json:
+fileSHA и canonicalSHA совпадают с frozenmanifest, canonicalSHA с report — true.
+Содержательно46courses/16needs_review/core_definition_missingtrue: это не экспертная
+приёмка и не допуск40. Старый неверный helperoutput сохранён, не подменён.
