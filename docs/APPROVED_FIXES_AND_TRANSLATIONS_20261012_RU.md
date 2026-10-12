@@ -71,3 +71,15 @@ Luna Aristotle01a131c9-0369-76b3-a284-16b205e018a2 отдельно reviewed50/a
 Первые5 карточек пользовательского списка сопоставлены с Course50855/50850/50849/50841/46676; первая карточка без кода однозначно соответствует EPVO-29033. Все10KK/EN названий и описаний прочитаны перед применением. Найденные в EPVO переводы импортированы с честным source=epvo_translation_recovered_reviewed и status=needs_review, не обозначены заново сгенерированными Luna. Явная опечатка EN46676 исправлена на International Customs Law. Exact-source guarded apply prepared10/updated10/skipped0 exit0; PostgreSQL read-back всех10 записей и RU57969 подтверждён. Snapshot .runtime/userlist-translation-snapshot-20261013-01.json поддерживает защищённый откат. Подтверждённые/manual записи не перезаписывались. Aristotle готовит следующие10 карточек в userlist-20261013-02; на момент проверки файл ещё отсутствует, это не применённый пакет.
 
 Режим A подключён в исходном коде (5abf48e), а не только opt-in solver: weighted-max-lo-1, веса и стратегия включены в frontier hash. B/C и отдельный исходный snapshot ещё не реализованы. Live rollout нового A не подтверждён. Текущая running строка planner_build_jobs id1 имеет updated_at 2026-09-08; одной этой строки недостаточно для утверждения о живом процессе или разрешения перезапуска.
+
+## Приоритетный пользовательский пакет02
+
+Главный агент прочитал18 переводов title/description и точные исходники9карточек:
+39888/38772/37955/37799/35479/35212/35153/35021/35020. Exactsource guarded apply
+prepared18/updated18/skipped0 exit0. Snapshot .runtime/userlist-translation-snapshot-20261013-02.json.
+Неизменённые EPVO переводы помечены epvo_translation_recovered_reviewed, исправленные
+и source-aligned переводы — machine_translation_gpt6_luna; provenance сохранён
+в snapshot, все needs_review. Карточка44751 Связи с общественностью содержит
+U+FFFD в исходнике и не изменялась. По пользовательскому списку пока применено
+28языковыхзаписей14карточек, одна из первых15 требует восстановления источника.
+Aristotle продолжает следующие15карточек в пакет03; это не завершённый каталог.
