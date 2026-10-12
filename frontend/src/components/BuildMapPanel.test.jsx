@@ -1,9 +1,87 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { vi, it, expect } from 'vitest'
 import BuildMapPanel from './BuildMapPanel'
 import axios from 'axios'
+import userEvent from '@testing-library/user-event'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
+
+it('shows passed gate marks only for a verified solution and does not imply publication', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'running', next_cursor: 1, has_more: false, events: [
+        { sequence: 1, type: 'selected', data: { variant: 'A', verified: true, published: false, course_ids: [8087],
+            schedule: { 1: [{ course_id: 8087, title: 'Timber design', credits: 5 }] } } },
+    ] } })
+    render(<BuildMapPanel versionId={3} status={{ state: 'running', job_id: 'real' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    expect(await screen.findAllByText('build_map_gate_passed')).toHaveLength(4)
+    expect(screen.getByText('build_map_not_published')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+})
+
+it('renders recorded course relationships as inspectable geometry with bounded light trails', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'running', next_cursor: 1, has_more: false, events: [
+        { sequence: 1, type: 'candidates', data: { variant: 'A', count: 1,
+            learning_outcomes: [{ code: 'ON1', text: 'Design structures' }],
+            nodes: [{ course_id: 8087, title: 'Timber design', lo_codes: ['ON1'] }] } },
+    ] } })
+    const view = render(<BuildMapPanel versionId={3} status={{ state: 'running', job_id: 'real' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    const graphCourse = await within(screen.getByRole('img')).findByRole('button', { name: 'Timber design', hidden: false })
+    expect(graphCourse.closest('svg')).not.toBeNull()
+    expect(view.container.querySelectorAll('animateMotion')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_motion' }))
+    await waitFor(() => expect(view.container.querySelectorAll('animateMotion')).toHaveLength(6))
+    fireEvent.click(graphCourse)
+    expect(screen.getByRole('status')).toHaveTextContent('ID 8087')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_motion' }))
+    expect(view.container.querySelectorAll('animateMotion')).toHaveLength(0)
+    vi.unstubAllGlobals()
+})
+
+it('keeps verification pending when a selection has no verified flag', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'running', next_cursor: 1, has_more: false, events: [
+        { sequence: 1, type: 'selected', data: { variant: 'A', course_ids: [8087],
+            schedule: { 1: [{ course_id: 8087, title: 'Timber design', credits: 5 }] } } },
+    ] } })
+    render(<BuildMapPanel versionId={3} status={{ state: 'running', job_id: 'real' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    await waitFor(() => expect(screen.getByRole('group', { name: 'build_map_schedule' })).toHaveTextContent('Timber design'))
+    expect(screen.queryByText('build_event_selected')).not.toBeInTheDocument()
+    expect(screen.getByText('build_map_checks_pending')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+})
+
+it('shows actual semester courses in the laboratory without inventing a saved result', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'running', next_cursor: 2, has_more: false, events: [
+        { sequence: 1, type: 'candidates', data: { variant: 'A', count: 12, nodes: [] } },
+        { sequence: 2, type: 'selected', data: { variant: 'A', course_ids: [8087], schedule: { 2: [{ course_id: 8087, title: 'Timber design', credits: 5 }] } } },
+    ] } })
+    render(<BuildMapPanel versionId={3} status={{ state: 'running', job_id: 'real' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    expect(await screen.findByRole('heading', { name: 'build_map_lab' })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'build_map_schedule' })).toHaveTextContent('Timber design')
+    vi.unstubAllGlobals()
+})
+
+it('lets keyboard users inspect outcome evidence in the text alternative', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'complete', next_cursor: 1, has_more: false,
+        events: [{ sequence: 1, type: 'candidates', data: { count: 1, variant: 'A',
+            learning_outcomes: [{ code: 'ON1', text: 'Design safe timber structures' }],
+            nodes: [{ course_id: 8087, title: 'Timber design', lo_codes: ['ON1'] }] } }] } })
+    const user = userEvent.setup()
+    render(<BuildMapPanel versionId={3} status={{ job_id: 'real', state: 'complete' }} title="Programme" t={x => x} />)
+    await user.click(screen.getByRole('button', { name: 'build_map_open' }))
+    const outcome = await screen.findByRole('button', { name: 'ON1' })
+    outcome.focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByText(/Design safe timber structures/)).toBeInTheDocument()
+    vi.unstubAllGlobals()
+})
 
 it('signals a freshly published job once without waiting for the slow status poll', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
@@ -90,4 +168,16 @@ it('does not invent a graph for an old completed job without recorded events', a
     fireEvent.click(screen.getByRole('button', {name: 'build_map_open'}))
     expect(await screen.findByText('build_map_no_job')).toBeInTheDocument()
     vi.unstubAllGlobals()
+})
+
+it('locks background scrolling only while the opened panel is expanded', async () => {
+    axios.get.mockResolvedValue({ data: { state: 'idle' } })
+    document.body.style.overflow = 'auto'
+    render(<BuildMapPanel versionId={3} status={{ state: 'idle' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    await screen.findByText('build_map_no_job')
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_expand' }))
+    expect(document.body.style.overflow).toBe('hidden')
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_restore' }))
+    expect(document.body.style.overflow).toBe('auto')
 })

@@ -131,7 +131,18 @@ def has_foreign_professional_title(course, project_domains: list[str]) -> bool:
         (("тамож", "customs", "внешнеэкономическ", "foreign trade"), ("тамож", "customs", "внешнеэкономическ", "foreign trade")),
         (("трудов", "социального обеспеч", "labor law", "social security"), ("трудов", "социального обеспеч", "labor", "social security")),
     )
-    return any(_has_domain_term(title, title_markers) and not _has_domain_term(domains, allowed) for title_markers, allowed in context_groups)
+    industrial_support = (
+        _has_domain_term(domains, ("производствен", "обрабатывающ", "manufactur"))
+        and _has_domain_term(title, ("деревообрабатыва", "мебельн", "woodworking", "furniture"))
+    )
+    for index, (title_markers, allowed) in enumerate(context_groups):
+        # Explicit industrial application removes only the generic business
+        # mismatch; it never waives other sector filters or proves core coverage.
+        if index == 0 and industrial_support:
+            continue
+        if _has_domain_term(title, title_markers) and not _has_domain_term(domains, allowed):
+            return True
+    return False
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 

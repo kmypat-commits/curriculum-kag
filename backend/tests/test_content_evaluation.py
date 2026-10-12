@@ -1,6 +1,26 @@
 from types import SimpleNamespace
 
 
+def test_generic_product_inflections_do_not_confirm_professional_profile():
+    from app.planner.content_evaluation import assess_course
+    for noun in ('изделия', 'изделий', 'изделиями', 'изделию'):
+        row = assess_course({'title': f'Проектирование {noun} из древесины'},
+                            course(1, 'Технология швейного производства',
+                                   f'Конструирование швейных {noun} и сборка одежды.'),
+                            {'ON1': .9})
+        assert row['status'] == 'needs_review', noun
+        assert row['priority_adjustment'] == 0, noun
+
+
+def test_wood_evidence_survives_generic_product_filter():
+    from app.planner.content_evaluation import assess_course
+    row = assess_course({'title': 'Проектирование изделий из древесины'},
+                        course(1, 'Мебельные конструкции',
+                               'Конструирование мебельных изделий и обработка древесины.'))
+    assert row['status'] == 'supported'
+    assert row['priority_adjustment'] == .15
+
+
 def test_cyrillic_cefr_levels_are_kept_distinct_for_copied_language_descriptions():
     text = 'Развитие коммуникативных компетенций и навыков устного и письменного общения.'
     rows = [course(1, 'Казахский (руский) язык 1 (А2)', text),

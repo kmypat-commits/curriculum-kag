@@ -30,6 +30,7 @@ from app.models.user import User
 from app.models.plan_build_status import PlanBuildStatus
 from app.api.planner_state import claim_build_status, get_build_status, set_build_status
 from app.schemas.planner import PlannerBuildRequest
+from app.services.generation_capacity import generation_slot, CapacityBusy
 
 
 logger = logging.getLogger("planner-worker")
@@ -50,18 +51,22 @@ def _normalise_requested_variants(value):
 def _build_one(*, version_id: int, user_id: int, variants, job_id: str, idempotency_key: str | None) -> int:
     db = SessionLocal()
     try:
-        os.environ["CURRICULUM_KAG_EXPECTED_JOB_ID"] = job_id
-        user = db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise RuntimeError("Build owner no longer exists")
-        build_plan(
-            project_version_id=version_id,
-            payload=PlannerBuildRequest(variants=variants),
-            db=db,
-            current_user=user,
-            idempotency_key=idempotency_key,
-        )
-        return 0
+        with generation_slot(db.get_bind()):
+            os.environ["CURRICULUM_KAG_EXPECTED_JOB_ID"] = job_id
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is None:
+                raise RuntimeError("Build owner no longer exists")
+            build_plan(
+                project_version_id=version_id,
+                payload=PlannerBuildRequest(variants=variants),
+                db=db,
+                current_user=user,
+                idempotency_key=idempotency_key,
+            )
+            return 0
+    except CapacityBusy:
+        logger.info("capacity occupied; build not started", extra={"job_id": job_id})
+        return 2
     except Exception:
         logger.exception("planner build failed", extra={"job_id": job_id, "version_id": version_id})
         return 1
@@ -69,7 +74,25 @@ def _build_one(*, version_id: int, user_id: int, variants, job_id: str, idempote
         db.close()
 
 
-def _run_daemon(poll_seconds: float, max_jobs: int) -> int:
+def _claim_and_build(db, row, status, *, job_id, user_id, variants):
+    """Keep busy jobs queued; retain resource ownership through publication."""
+    with generation_slot(db.get_bind()):
+        running = claim_build_status(
+            int(row.project_version_id), _expected_job_id=job_id, job_id=job_id,
+            request_hash=status.get("request_hash"),
+            program_spec_json=status.get("program_spec_json"),
+            program_spec_hash=status.get("program_spec_hash"),
+            requested_by_user_id=int(user_id), state="running", stage="matching", progress=5,
+            idempotency_key=status.get("idempotency_key"),
+        )
+        if running is None:
+            return None
+        return _build_one(version_id=int(row.project_version_id), user_id=int(user_id),
+                          variants=variants, job_id=job_id,
+                          idempotency_key=status.get("idempotency_key"))
+
+
+def _run_daemon(poll_seconds: float, max_jobs: int, *, job_ids=None, heartbeat_file=None) -> int:
     """Run a bounded PostgreSQL-backed queue consumer until shutdown.
 
     The worker claims one job at a time by default.  A queued row is never
@@ -77,6 +100,7 @@ def _run_daemon(poll_seconds: float, max_jobs: int) -> int:
     restart leaves it recoverable through lease reconciliation.
     """
     global _shutdown
+    heartbeat = Path(heartbeat_file) if heartbeat_file is not None else HEARTBEAT_FILE
     # The daemon is the authoritative executor for durable jobs.  Mark its
     # process explicitly so ``build_plan`` runs the claimed job instead of
     # enqueueing it again when ASYNC_BUILDS is enabled.
@@ -91,8 +115,8 @@ def _run_daemon(poll_seconds: float, max_jobs: int) -> int:
         # launcher uses this heartbeat to distinguish a live worker from a
         # stale PID.
         try:
-            HEARTBEAT_FILE.parent.mkdir(parents=True, exist_ok=True)
-            HEARTBEAT_FILE.touch()
+            heartbeat.parent.mkdir(parents=True, exist_ok=True)
+            heartbeat.touch()
         except OSError:
             logger.warning("worker heartbeat write failed", exc_info=True)
         claimed = False
@@ -100,6 +124,10 @@ def _run_daemon(poll_seconds: float, max_jobs: int) -> int:
         try:
             rows = (
                 db.query(PlanBuildStatus)
+                # Optional allowlist is applied before LIMIT/claims so an
+                # isolated pilot cannot consume historical or unrelated jobs.
+                .filter(PlanBuildStatus.job_id.in_(tuple(job_ids))
+                        if job_ids is not None else True)
                 .filter(
                     or_(
                         and_(
@@ -162,28 +190,15 @@ def _run_daemon(poll_seconds: float, max_jobs: int) -> int:
                 if not job_id or not user_id or variants is None:
                     logger.error("queued job is not recoverable", extra={"version_id": row.project_version_id, "job_id": job_id})
                     continue
-                running = claim_build_status(
-                    int(row.project_version_id),
-                    _expected_job_id=job_id,
-                    job_id=job_id,
-                    request_hash=status.get("request_hash"),
-                    program_spec_json=status.get("program_spec_json"),
-                    program_spec_hash=status.get("program_spec_hash"),
-                    requested_by_user_id=int(user_id),
-                    state="running", stage="matching", progress=5,
-                    idempotency_key=status.get("idempotency_key"),
-                )
-                logger.debug("durable claim result job_id=%s claimed=%s", job_id, running is not None)
-                if running is None:
+                try:
+                    result = _claim_and_build(db, row, status, job_id=job_id,
+                                              user_id=user_id, variants=variants)
+                except CapacityBusy:
+                    # Do not create a running attempt while another process owns RAM.
+                    break
+                if result is None:
                     continue
                 claimed = True
-                result = _build_one(
-                    version_id=int(row.project_version_id),
-                    user_id=int(user_id),
-                    variants=variants,
-                    job_id=job_id,
-                    idempotency_key=status.get("idempotency_key"),
-                )
                 if result != 0:
                     # A worker-side exception can occur after claim but before
                     # build_plan persists its terminal state. Do not leave a
@@ -213,6 +228,9 @@ def main() -> int:
     parser.add_argument("--daemon", action="store_true")
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--max-jobs", type=int, default=1)
+    parser.add_argument("--only-job-id", action="append", default=None,
+                        help="Restrict daemon claims to these public job IDs")
+    parser.add_argument("--heartbeat-file", type=Path, default=None)
     parser.add_argument("--version-id", type=int)
     parser.add_argument("--user-id", type=int)
     parser.add_argument("--variants")
@@ -221,7 +239,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.daemon:
         logging.basicConfig(level=os.environ.get("PLANNER_WORKER_LOG_LEVEL", "INFO"))
-        return _run_daemon(args.poll_seconds, max(1, args.max_jobs))
+        return _run_daemon(args.poll_seconds, max(1, args.max_jobs),
+                           job_ids=args.only_job_id, heartbeat_file=args.heartbeat_file)
     if args.version_id is None or args.user_id is None or args.variants is None or args.job_id is None:
         parser.error("one-shot mode requires --version-id, --user-id, --variants and --job-id")
     try:

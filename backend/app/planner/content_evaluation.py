@@ -11,7 +11,7 @@ import numpy as np
 
 from app.planner.discipline_identity import discipline_identity
 
-EVALUATOR_VERSION = 'local-content-1.6'
+EVALUATOR_VERSION = 'local-content-1.7'
 FIELDS = ('description', 'topics', 'learning_outcomes', 'assessment_methods')
 
 
@@ -44,7 +44,10 @@ def _terms(text):
              'различные', 'профессиональный', 'применять', 'знания', 'процессы', 'продукция',
              'управление', 'решение', 'основы', 'проектировать', 'контроль', 'изделия')}
     return {word[:7] for word in re.findall(r'[^\W\d_]+', normalise(text), re.UNICODE)
-            if len(word) >= 4 and word[:7] not in stops}
+            if len(word) >= 4 and word[:7] not in stops
+            # Russian case endings must not bypass the existing generic-product
+            # stop word: изделие/изделий/изделиями are the same weak anchor.
+            and not word.startswith('издел')}
 
 
 def _level(title):

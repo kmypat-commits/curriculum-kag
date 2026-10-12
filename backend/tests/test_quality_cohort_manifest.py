@@ -108,6 +108,11 @@ def test_retry_classifier_does_not_retry_a_content_failure_but_retries_known_inf
     assert is_retryable_infrastructure_failure(None, "", timed_out=True) is True
 
 
+def test_capacity_busy_exit_is_retryable_without_stderr():
+    assert is_retryable_infrastructure_failure(75, "") is True
+    assert is_retryable_infrastructure_failure(1, "capacity_busy") is False
+
+
 def test_run_lock_rejects_a_live_owner_and_recovers_a_stale_owner(tmp_path: Path):
     path = tmp_path / "quality.json.lock"
     owner = process_identity(os.getpid()) or {"pid": os.getpid()}

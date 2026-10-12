@@ -341,6 +341,17 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             assert wrong_level.id not in problem.candidates_by_id
             assert foreign.id not in problem.candidates_by_id
             assert problem.exclusions["goso_duplicate"] == 1
+            # Priority changes utility, never the underlying admission evidence.
+            base_utility = problem.candidates_by_id[strong.id].utility
+            lo.weight = 2.0
+            db.flush()
+            weighted = build_joint_frontier(version, db, limit=10)
+            assert weighted.candidates_by_id[strong.id].utility > base_utility
+            assert weighted.candidates_by_id[strong.id].lo_scores["ON1"] == 0.568
+            assert weighted.candidates_by_id[strong.id].item["admission_score"] == 0.568
+            assert foreign.id not in weighted.candidates_by_id
+            lo.weight = 1.0
+            db.flush()
             project.constraints_json = {
                 **project.constraints_json, "excluded_course_ids": [parent.id],
             }

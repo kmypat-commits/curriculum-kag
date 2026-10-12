@@ -223,6 +223,10 @@ def build_joint_frontier(
         for lo in version.learning_outcomes
         if not str(lo.lo_code or "").startswith("LO-GOSO-")
     }
+    # Preference weights affect ranking only; admission and verifier evidence
+    # below remain the original semantic/expert values.
+    lo_weights = {lo.id: float(lo.weight or 1.0)
+                  for lo in version.learning_outcomes}
     evidence: dict[int, dict[str, float]] = {}
     ranking: dict[int, float] = {}
     aggregates: dict[int, dict] = {}
@@ -238,7 +242,8 @@ def build_joint_frontier(
         raw = max(semantic_evidence_score(match), expert)
         score_map = evidence.setdefault(cid, {})
         score_map[code] = max(score_map.get(code, 0.0), raw)
-        ranking[cid] = max(ranking.get(cid, 0.0), float(match.score or 0), raw)
+        weighted_rank = max(float(match.score or 0), raw) * lo_weights.get(match.lo_id, 1.0)
+        ranking[cid] = max(ranking.get(cid, 0.0), weighted_rank)
         aggregate = aggregates.setdefault(cid, {
             "max": 0.0, "expert": 0.0, "professional_lo_codes": set(),
             "lo_scores": {},

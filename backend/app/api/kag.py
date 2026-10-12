@@ -11,6 +11,8 @@ from app.services.access import require_version_access
 from app.services.access import require_project_version_access
 from app.services.language import normalize_language
 from app.kag.scoring import compute_all_matches
+from starlette.concurrency import run_in_threadpool
+from app.services.generation_capacity import generation_slot, CapacityBusy
 from app.kag.gap_detector import detect_gaps
 from app.kag.duplication_detector import detect_duplicates
 from app.kag.bridge_generator import generate_bridge_modules
@@ -95,6 +97,15 @@ def _plan_coverage_for_version(project_version_id: int, db: Session, variant: st
     }
 
 
+def _capacity_checked_matches(project_version_id, db):
+    try:
+        with generation_slot(db.get_bind()):
+            return compute_all_matches(project_version_id, db)
+    except CapacityBusy as exc:
+        raise HTTPException(status_code=503, detail="Ресурс генерации занят. Повторите запрос позже.",
+                            headers={"Retry-After": "2"}) from exc
+
+
 @router.post("/{project_version_id}/match")
 async def compute_matches(
     project_version_id: int,
@@ -103,7 +114,7 @@ async def compute_matches(
 ):
     """Compute course-LO matching scores for a project version"""
     try:
-        result = compute_all_matches(project_version_id, db)
+        result = await run_in_threadpool(_capacity_checked_matches, project_version_id, db)
         return result
     except (SQLAlchemyError, ValueError, KeyError, TypeError, RuntimeError) as e:
         raise _internal_error("Не удалось вычислить связи дисциплин и LO", e) from e
@@ -147,7 +158,7 @@ async def get_coverage(
                 "plan_coverage": plan_coverage,
             }
 
-        matches_result = compute_all_matches(project_version_id, db)
+        matches_result = await run_in_threadpool(_capacity_checked_matches, project_version_id, db)
         gaps_result = detect_gaps(project_version_id, db)
         
         return {
@@ -357,7 +368,7 @@ async def analyze_lo_achievability(
                 "gaps": [],
             }
         else:
-            matches_result = compute_all_matches(project_version_id, db)
+            matches_result = await run_in_threadpool(_capacity_checked_matches, project_version_id, db)
             gaps_result = detect_gaps(project_version_id, db)
 
         lo_coverage = matches_result.get("lo_coverage", {})

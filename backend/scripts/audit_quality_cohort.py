@@ -175,6 +175,10 @@ def is_retryable_infrastructure_failure(returncode: int | None, stderr: str, tim
         return True
     if returncode in (None, 0):
         return False
+    # The isolated generation CLI reserves EX_TEMPFAIL for capacity contention.
+    # Busy is reported in JSON/stdout, so stderr may legitimately be empty.
+    if returncode == 75:
+        return True
     evidence = str(stderr or "").casefold()
     markers = (
         "operationalerror", "connection refused", "connection reset", "connection aborted",

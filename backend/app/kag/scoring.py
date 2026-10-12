@@ -12,6 +12,7 @@ from app.models.embedding import Embedding
 from app.config import settings
 from app.planner.domain_evidence import domain_label_matches
 from app.planner.verifier import REAL_COURSE_LO_THRESHOLD
+from app.planner.epvo_course_links import epvo_code_index, linked_course_id
 
 
 _DOMAIN_FAMILY_TERMS = (
@@ -90,6 +91,57 @@ def _raw_lo_text(payload: dict | None) -> str:
     return " ".join(str(value) for value in payload.values() if isinstance(value, str))
 
 
+def _prefetch_epvo_expert_links(courses: List[Course], db: Session) -> None:
+    """Resolve confirmed normalized aliases once, without fuzzy title matching."""
+    courses_by_id = {int(course.id): course for course in courses}
+    index = epvo_code_index(courses_by_id)
+    aliases = {cid: set() for cid in courses_by_id}
+    for discipline_id, cid in index.items():
+        aliases[cid].add(discipline_id)
+    if courses_by_id:
+        rows = db.query(EpvoDisciplineNormalized).filter(or_(
+            EpvoDisciplineNormalized.id.in_(index),
+            EpvoDisciplineNormalized.approved_course_id.in_(courses_by_id),
+        )).all()
+        for row in rows:
+            cid = linked_course_id(row, index)
+            if cid in aliases:
+                aliases[cid].add(int(row.id))
+    db.info["epvo_course_aliases"] = {
+        cid: tuple(sorted(ids)) for cid, ids in aliases.items()
+    }
+    discipline_ids = sorted({did for ids in aliases.values() for did in ids})
+    links = []
+    if discipline_ids:
+        ranked = db.query(
+            EpvoDisciplineLoLink.id.label("link_id"),
+            func.row_number().over(
+                partition_by=EpvoDisciplineLoLink.discipline_id,
+                order_by=EpvoDisciplineLoLink.id,
+            ).label("discipline_rank"),
+        ).filter(EpvoDisciplineLoLink.discipline_id.in_(discipline_ids)).subquery()
+        links = db.query(EpvoDisciplineLoLink).join(
+            ranked, ranked.c.link_id == EpvoDisciplineLoLink.id,
+        ).filter(ranked.c.discipline_rank <= EPVO_EXPERT_LINK_LIMIT).order_by(
+            EpvoDisciplineLoLink.discipline_id, EpvoDisciplineLoLink.id,
+        ).all()
+    buckets = {did: [] for did in discipline_ids}
+    for link in links:
+        bucket = buckets[link.discipline_id]
+        if len(bucket) < EPVO_EXPERT_LINK_LIMIT:
+            bucket.append(link)
+    db.info["epvo_expert_links_cache"] = buckets
+    db.info.pop("epvo_expert_signal_cache", None)
+
+
+def _course_epvo_ids(course: Course, db: Session) -> tuple[int, ...]:
+    aliases = db.info.get("epvo_course_aliases")
+    if aliases is not None:
+        return aliases.get(getattr(course, "id", None), ())
+    discipline_id = _epvo_id_from_course(course)
+    return (discipline_id,) if discipline_id is not None else ()
+
+
 def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dict:
     """Map EPVO expert discipline-LO labels to the current project LO.
 
@@ -97,12 +149,12 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
     use a conservative text-overlap bridge: expert strength counts only when the
     source LO text is semantically close enough by keywords.
     """
-    discipline_id = _epvo_id_from_course(course)
-    if discipline_id is None:
+    discipline_ids = _course_epvo_ids(course, db)
+    if not discipline_ids:
         return {"score": 0.0}
 
     cache = db.info.setdefault("epvo_expert_signal_cache", {})
-    cache_key = (discipline_id, lo.id)
+    cache_key = (discipline_ids, lo.id)
     if cache_key in cache:
         return cache[cache_key]
 
@@ -121,12 +173,14 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
         })
         db.info["epvo_raw_lo_text_cache_loaded"] = True
     prefetched = db.info.get("epvo_expert_links_cache")
-    if prefetched is not None and discipline_id in prefetched:
-        links = prefetched[discipline_id]
-    else:
-        links = db.query(EpvoDisciplineLoLink).filter(
-            EpvoDisciplineLoLink.discipline_id == discipline_id,
-        ).limit(EPVO_EXPERT_LINK_LIMIT).all()
+    links = []
+    for discipline_id in discipline_ids:
+        if prefetched is not None:
+            links.extend(prefetched.get(discipline_id, ()))
+        else:
+            links.extend(db.query(EpvoDisciplineLoLink).filter(
+                EpvoDisciplineLoLink.discipline_id == discipline_id,
+            ).order_by(EpvoDisciplineLoLink.id).limit(EPVO_EXPERT_LINK_LIMIT).all())
     for link in links:
         raw_key = (str(link.program_source_id), str(link.lo_source_key))
         if raw_key not in raw_cache and str(link.program_source_id).isdigit():
@@ -149,6 +203,7 @@ def _epvo_expert_signal(course: Course, lo: LearningOutcome, db: Session) -> Dic
                 "source": "epvo_expert",
                 "source_lo_text": source_text[:240],
                 "source_program_id": link.program_source_id,
+                "source_discipline_id": link.discipline_id,
                 "lo_overlap": round(overlap, 3),
             }
     cache[cache_key] = best
@@ -161,11 +216,13 @@ def _expert_candidate_rows(
     """Retrieve real courses backed by source LO links, even with weak title overlap."""
     if limit < 1:
         return []
+    if db.info.get("epvo_expert_links_cache") is None:
+        _prefetch_epvo_expert_links(courses, db)
     prefetched = db.info.get("epvo_expert_links_cache")
     ranked = []
     for course in courses:
-        discipline_id = _epvo_id_from_course(course)
-        if discipline_id is None or (prefetched is not None and not prefetched.get(discipline_id)):
+        discipline_ids = _course_epvo_ids(course, db)
+        if not discipline_ids or (prefetched is not None and not any(prefetched.get(did) for did in discipline_ids)):
             continue
         score = float(_epvo_expert_signal(course, lo, db).get("score") or 0.0)
         if score >= REAL_COURSE_LO_THRESHOLD:
@@ -586,22 +643,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
     # and was the dominant latency on medium catalogues.  Keep the same
     # per-discipline limit and ordering, but load the immutable link rows once
     # for this build session.
-    epvo_discipline_ids = sorted({
-        discipline_id
-        for discipline_id in (_epvo_id_from_course(course) for course in project_courses)
-        if discipline_id is not None
-    })
-    if epvo_discipline_ids:
-        prefetched_links = db.query(EpvoDisciplineLoLink).filter(
-            EpvoDisciplineLoLink.discipline_id.in_(epvo_discipline_ids)
-        ).order_by(EpvoDisciplineLoLink.discipline_id, EpvoDisciplineLoLink.id).all()
-        db.info["epvo_expert_links_cache"] = {
-            discipline_id: [] for discipline_id in epvo_discipline_ids
-        }
-        for link in prefetched_links:
-            bucket = db.info["epvo_expert_links_cache"].setdefault(link.discipline_id, [])
-            if len(bucket) < EPVO_EXPERT_LINK_LIMIT:
-                bucket.append(link)
+    _prefetch_epvo_expert_links(project_courses, db)
 
     def apply_feedback_score(course_id: int, lo_id: int, score: float, evidence: Dict) -> float:
         feedback = feedback_by_pair.get((course_id, lo_id))

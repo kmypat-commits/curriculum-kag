@@ -1,13 +1,53 @@
 from types import SimpleNamespace as NS
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from app.kag.scoring import _lightweight_candidate_courses, _extend_with_prerequisites, LARGE_CATALOG_RETRIEVAL_LIMIT
+
+
+def test_expert_prefetch_limits_materialized_rows_per_discipline_without_changing_evidence():
+    from sqlalchemy import event
+    from app.kag.scoring import _prefetch_epvo_expert_links
+    from app.models.epvo import EpvoDisciplineNormalized, EpvoDisciplineLoLink
+
+    engine = create_engine("sqlite://")
+    for model in (EpvoDisciplineNormalized, EpvoDisciplineLoLink):
+        model.__table__.create(engine)
+    loaded = []
+
+    def record_load(link, _context):
+        loaded.append(link.id)
+
+    event.listen(EpvoDisciplineLoLink, "load", record_load)
+    try:
+        with Session(engine) as db:
+            db.add_all([
+                EpvoDisciplineNormalized(id=11, canonical_title="Первый", dedup_fingerprint="one"),
+                EpvoDisciplineNormalized(id=12, canonical_title="Второй", dedup_fingerprint="two"),
+            ])
+            for discipline in (11, 12):
+                for number in reversed(range(1, 41)):
+                    db.add(EpvoDisciplineLoLink(id=discipline * 100 + number,
+                        discipline_id=discipline, program_source_id="fixture",
+                        lo_source_key=str(number), strength=1.0))
+            db.commit()
+            db.expunge_all()
+            _prefetch_epvo_expert_links([
+                NS(id=101, course_id="EPVO-11"), NS(id=102, course_id="EPVO-12"),
+            ], db)
+            assert [row.id for row in db.info["epvo_expert_links_cache"][11]] == list(range(1101, 1133))
+            assert [row.id for row in db.info["epvo_expert_links_cache"][12]] == list(range(1201, 1233))
+            assert len(loaded) == 64, "Discarded expert links must not be materialized by the ORM"
+    finally:
+        event.remove(EpvoDisciplineLoLink, "load", record_load)
+        engine.dispose()
 
 
 def test_expert_signal_reads_source_lo_with_string_program_id():
     from app.kag.scoring import _epvo_expert_signal
 
     source_text = "Проектирует информационные системы для здравоохранения"
-    link = NS(program_source_id="14547", lo_source_key="64613",
+    link = NS(discipline_id=7704, program_source_id="14547", lo_source_key="64613",
               expert_level="strong", strength=1.0)
     db = NS(info={
         "epvo_raw_lo_text_cache": {(14547, "64613"): source_text},
@@ -23,7 +63,7 @@ def test_expert_retrieval_recovers_source_link_missed_by_lexical_search():
     from app.kag.scoring import _expert_candidate_rows
 
     source_text = "Производит расчеты при проектировании производственных процессов"
-    link = NS(program_source_id="14547", lo_source_key="64606",
+    link = NS(discipline_id=22, program_source_id="14547", lo_source_key="64606",
               expert_level="strong", strength=1.0)
     db = NS(info={
         "epvo_raw_lo_text_cache": {("14547", "64606"): source_text},
@@ -35,6 +75,63 @@ def test_expert_retrieval_recovers_source_link_missed_by_lexical_search():
     rows = _expert_candidate_rows(lo, courses, db, limit=10)
     assert [row["course_id"] for row in rows] == [505]
     assert rows[0]["retrieval_score"] >= 0.5
+
+
+def test_expert_retrieval_keeps_approved_alias_source_evidence():
+    """An approved older normalized row must not lose its LO on deduplication."""
+    from app.models.epvo import EpvoDisciplineNormalized, EpvoDisciplineLoLink, RawEpvoLearningOutcome
+    from app.kag.scoring import _expert_candidate_rows, _epvo_expert_signal
+
+    engine = create_engine("sqlite://")
+    for model in (EpvoDisciplineNormalized, EpvoDisciplineLoLink, RawEpvoLearningOutcome):
+        model.__table__.create(engine)
+    text = "Стандарты производства бетона составы строительных растворов свойства железобетона"
+    courses = [NS(id=31302, course_id="EPVO-162857")]
+    lo = NS(id=13, lo_text=text)
+    with Session(engine) as db:
+        db.add_all([
+            EpvoDisciplineNormalized(id=1247, canonical_title="Строительные растворы",
+                                     dedup_fingerprint="older", approved_course_id=31302),
+            EpvoDisciplineNormalized(id=162857, canonical_title="Строительные растворы",
+                                     dedup_fingerprint="canonical", approved_course_id=31302),
+            RawEpvoLearningOutcome(program_source_id="2124", source_key="12278",
+                                   payload_json={"learningOutcomeNameRu": text}, checksum="fixture"),
+            EpvoDisciplineLoLink(discipline_id=1247, program_source_id="2124",
+                                 lo_source_key="12278", strength=1.0),
+        ])
+        db.commit()
+        rows = _expert_candidate_rows(lo, courses, db, limit=10)
+        assert [row["course_id"] for row in rows] == [31302]
+        signal = _epvo_expert_signal(courses[0], lo, db)
+        assert signal["score"] == 1.0
+        assert signal["source_program_id"] == "2124"
+        assert signal["source_discipline_id"] == 1247
+    engine.dispose()
+
+
+def test_expert_alias_does_not_override_another_canonical_course():
+    """A conflicting approval cannot donate another canonical course's evidence."""
+    from app.models.epvo import EpvoDisciplineNormalized, EpvoDisciplineLoLink, RawEpvoLearningOutcome
+    from app.kag.scoring import _expert_candidate_rows
+
+    engine = create_engine("sqlite://")
+    for model in (EpvoDisciplineNormalized, EpvoDisciplineLoLink, RawEpvoLearningOutcome):
+        model.__table__.create(engine)
+    text = "Concrete manufacturing standards and reinforced concrete properties"
+    courses = [NS(id=31302, course_id="EPVO-162857"), NS(id=40000, course_id="EPVO-1247")]
+    with Session(engine) as db:
+        db.add_all([
+            EpvoDisciplineNormalized(id=1247, canonical_title="Concrete",
+                                     dedup_fingerprint="conflict", approved_course_id=31302),
+            RawEpvoLearningOutcome(program_source_id="2124", source_key="12278",
+                                   payload_json={"text": text}, checksum="fixture"),
+            EpvoDisciplineLoLink(discipline_id=1247, program_source_id="2124",
+                                 lo_source_key="12278", strength=1.0),
+        ])
+        db.commit()
+        rows = _expert_candidate_rows(NS(id=13, lo_text=text), courses, db, limit=10)
+        assert [row["course_id"] for row in rows] == [40000]
+    engine.dispose()
 
 
 def course(i, title):

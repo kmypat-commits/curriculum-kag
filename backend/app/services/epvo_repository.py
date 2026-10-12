@@ -330,58 +330,15 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
 
 
 def _assign_epvo_prerequisites(courses: list[Course], replace_existing: bool = False) -> int:
-    """Assign only explainable prerequisites from earlier EPVO semesters.
+    """Compatibility hook: imports must not infer mandatory preparation.
 
-    Semester order alone is not evidence: an arbitrary earlier course must not
-    become a prerequisite.  A link is created only when the course texts share
-    subject terms, with a small preference for explicit foundation courses.
+    Shared title tokens, global domains and earlier semesters do not confirm
+    an AND prerequisite. The old heuristic wrote such guesses straight into
+    the mandatory graph. Preserve every existing relationship, including when
+    a legacy caller passes replace_existing=True. Reviewed corrections belong
+    in a snapshot-backed migration, not in catalogue approval/import.
+
+    No advisory proposals are persisted by this hook. A future proposal flow
+    must retain provenance and obtain confirmation before creating hard edges.
     """
-    exempt_marker = "__prerequisite_exempt__"
-    stopwords = {
-        "дисциплина", "изучение", "основные", "современные", "методы",
-        "технологии", "системы", "модуль", "course", "methods", "systems",
-        "technology", "technologies", "introduction", "введение", "основы",
-    }
-
-    def subject_tokens(course: Course) -> set[str]:
-        # A catalogue description may be generic or inherited from another
-        # programme after deduplication. It cannot establish a prerequisite
-        # between two otherwise unrelated discipline titles.
-        return _tokens(course.title or "") - stopwords
-
-    def is_foundation(course: Course) -> bool:
-        title = _key(course.title)
-        return title.startswith(("основы ", "введение ", "fundamentals ", "introduction "))
-
-    by_domain: dict[str, list[Course]] = {}
-    for course in courses:
-        if replace_existing:
-            course.prerequisites = []
-        by_domain.setdefault(course.domain or "general", []).append(course)
-
-    updated = 0
-    for domain_courses in by_domain.values():
-        ordered = sorted(
-            domain_courses,
-            key=lambda course: (course.recommended_semester or 1, course.credits or 5, course.id or 0),
-        )
-        for course in ordered:
-            semester = int(course.recommended_semester or 1)
-            if semester <= 1 or course.prerequisites or exempt_marker in set(course.topics or []):
-                continue
-            target_tokens = subject_tokens(course)
-            ranked = []
-            for candidate in ordered:
-                if candidate.id == course.id or int(candidate.recommended_semester or 1) >= semester:
-                    continue
-                shared = target_tokens & subject_tokens(candidate)
-                if len(shared) < 2:
-                    continue
-                score = len(shared) + (1.0 if is_foundation(candidate) else 0.0)
-                score += 0.2 * int(candidate.recommended_semester or 1)
-                ranked.append((score, candidate))
-            if ranked:
-                ranked.sort(key=lambda pair: (pair[0], pair[1].id or 0), reverse=True)
-                course.prerequisites = [candidate for _, candidate in ranked[:2]]
-                updated += 1
-    return updated
+    return 0

@@ -32,6 +32,7 @@ from app.planner.evidence_preflight import assess_professional_evidence
 from app.planner.selection_evidence import build_selection_evidence_snapshot
 from app.services.auth import get_current_user
 from app.services.rbac import require_permission
+from app.services.generation_capacity import generation_slot, CapacityBusy
 from app.services.access import require_plan_access, require_plan_object_access, require_version_access
 from app.services.planner_drafts import (
     build_rejected_draft_payloads,
@@ -178,6 +179,17 @@ def get_rejected_draft(
 
 class BuildTimedOut(TimeoutError):
     """The logical job reached its absolute deadline before publication."""
+
+
+def _saved_variant_course_ids(db: Session, plans, variant_type: str) -> frozenset[int]:
+    """Read the latest saved alternative from this command's version snapshot."""
+    previous = max((plan for plan in plans if plan.variant_type == variant_type),
+                   key=lambda plan: plan.id, default=None)
+    if previous is None:
+        return frozenset()
+    return frozenset(int(row.course_id) for row in db.query(PlanItem).filter(
+        PlanItem.plan_id == previous.id, PlanItem.course_id.is_not(None),
+    ).all())
 
 
 def _assert_build_is_live(project_version_id: int, deadline_at: str | None) -> None:
@@ -481,6 +493,25 @@ def build_plan(
     current_user: User = Depends(get_current_user),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    """Queue freely; synchronous heavy execution requires resource ownership."""
+    if settings.ASYNC_BUILDS and os.environ.get("CURRICULUM_KAG_WORKER") != "1":
+        return _build_plan_owned(project_version_id, payload, db, current_user, idempotency_key)
+    try:
+        with generation_slot(db.get_bind()):
+            return _build_plan_owned(project_version_id, payload, db, current_user, idempotency_key)
+    except CapacityBusy as exc:
+        raise HTTPException(status_code=503,
+                            detail="Ресурс генерации занят. Повторите запрос позже.",
+                            headers={"Retry-After": "2"}) from exc
+
+
+def _build_plan_owned(
+    project_version_id: int,
+    payload: PlannerBuildRequest = Body(default_factory=PlannerBuildRequest),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     """Build all three curriculum plan variants"""
     request_hash = _build_request_hash(project_version_id, payload.variants)
     program_spec_json, spec_hash = _load_program_spec_for_command(db, project_version_id)
@@ -759,12 +790,17 @@ def build_plan(
                         "message": "Сначала постройте вариант A или запросите A вместе с альтернативами.",
                     })
             other_references = ()
-            if variant_type == "C" and variants.get("B"):
-                other_references = (frozenset(
-                    int(item["course_id"])
-                    for items in (variants["B"].get("schedule") or {}).values()
-                    for item in items if item.get("course_id") is not None
-                ),)
+            if variant_type == "C":
+                if variants.get("B"):
+                    b_reference = frozenset(
+                        int(item["course_id"])
+                        for items in (variants["B"].get("schedule") or {}).values()
+                        for item in items if item.get("course_id") is not None
+                    )
+                else:
+                    b_reference = _saved_variant_course_ids(db, old_plans, "B")
+                if b_reference:
+                    other_references = (b_reference,)
             return build_curriculum_plan(
                 project_version_id,
                 db,
@@ -1309,6 +1345,21 @@ def get_planner_observability_summary(
 
 @router.post("/{project_version_id}/recompute-matches", dependencies=[Depends(require_permission("planner", "write"))])
 def recompute_matches(
+    project_version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admit resources before creating a running recomputation attempt."""
+    try:
+        with generation_slot(db.get_bind()):
+            return _recompute_matches_owned(project_version_id, db, current_user)
+    except CapacityBusy as exc:
+        raise HTTPException(status_code=503,
+                            detail="Ресурс генерации занят. Повторите запрос позже.",
+                            headers={"Retry-After": "2"}) from exc
+
+
+def _recompute_matches_owned(
     project_version_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

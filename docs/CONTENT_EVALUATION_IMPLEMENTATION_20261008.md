@@ -541,3 +541,278 @@ Ruling: работа в существующей feature-ветке и теку�
 - Live API2216/worker20816 не перезапускались, поэтому live rollout и новый
   PostgreSQL crash recovery с исправлением ещё не подтверждены. Не исправлять
   старые исторические rows задним числом без отдельной migration policy.
+
+### 2026-10-11 — независимая проверка нового recovery и граница нагрузки
+
+- Предыдущее замечание о непроверенном PostgreSQL recovery выше относится к
+  моменту записи, а не текущему результату. Новый isolated ledger
+  `.runtime/crash-recovery-attemptfix-20261010.json` уже terminal passed.
+- Read-only проверка `.runtime/check-crash-recovery-20261010.py` с
+  `CRASH_PILOT_NAME=crash-recovery-attemptfix-20261010` завершилась exit0.
+  Только БД `curriculum_kag_restore_pilot_20261010`, persisted plan4423:
+  244 кредита, фактические нагрузки33/31/33/28/30/30/31/28;
+  11 prerequisite pairs, structural_issues[].
+  SHA256 f933a4f04128dd75315a65b6fdee7438f582f130b328d6f86ffc8cab4900d8e4
+  совпал с recovery ledger. Попытки [timed_out,complete], первая
+  failure_code=lease_expired; обе имеют finished_at и очищенный lease.
+  Evidence `.runtime/crash-recovery-attemptfix-20261010-structural.json`.
+  Старое evidence не переписано, live планы/история не менялись.
+- На текущем ноутбуке свободно1551904KiB (~1.48GiB) физической памяти;
+  python20348 занимает WorkingSet1655MiB. Это разовый снимок, НЕ измерение
+  пика генерации и НЕ доказательство требуемой конфигурации сервера.
+  Два новых тяжёлых worker сейчас не запущены: сначала требуется ресурсный
+  бюджет/изолированный стенд, чтобы нагрузочная проверка не мешала live.
+- Подтверждён источник риска: `_assign_epvo_prerequisites` выбирает до двух
+  более ранних курсов по совпадению >=2 токенов названия в глобальном domain.
+  Это не подтверждение реального AND-требования подготовки. Точное происхождение
+  трёх конкретных новых edges пока не установлено; для изменения сохранённых
+  языковых chains нужен предметный review, не молчаливое удаление.
+- Frozen20 всё ещё не принят; 40 не запускались. Recovery-проверка не заменяет
+  содержательную приёмку, throughput benchmark или проверку графа в браузере.
+
+### 2026-10-11 — конкурентный захват одного задания без загрузки моделей
+
+- В isolated restored DB четыре отдельных процесса одновременно вызвали
+  штатный claim_build_status для одного нового scratch job версии1613.
+  Ровно один admitted, остальные три получили отказ; одна execution attempt.
+  После проверки job/attempt cancelled, прежний активный plan4419 сохранён.
+- Evidence `.runtime/concurrent-claim-20261011-3efca0fc.json`, exit0.
+  Время четырёх claim вызовов45.7–53.5мс, всего probe2.96с, без стоимости
+  загрузки моделей/подбора. Это НЕ четыре одновременные генерации, НЕ
+  пропускная способность генератора и НЕ проверка нескольких владельцев.
+- Первый scratch запуск остановился на защитной проверке URL в дочерних
+  процессах: они наследуют уже переключённый isolated DATABASE_URL.
+  Исправлен только launcher, разрешены ровно live source и named isolated
+  destination на5433; current_database по-прежнему обязан быть isolated.
+  Созданный до отказа scratch queued job явно закрыт как cancelled при
+  повторе, actual jobs/планы live DB не затронуты. Это не продуктовый defect.
+- Код worker сейчас ограничивает число выбранных строк --max-jobs, но
+  исполняет их последовательно в процессе. Значение2 само по себе не даёт
+  двух параллельных генераций и не задаёт глобальный лимит исполнителей.
+
+### 2026-10-11 — клавиатурный просмотр данных узлов карты
+
+- Подтверждён пробел: Cytoscape tap показывал detail результата обучения,
+  но text alternative содержала лишь названия курсов, без просмотра РО.
+  Новый тест на реальном component/hook/graph builder воспроизвёл RED:
+  отсутствует кнопка ON1. Axios замещает только HTTP источник событий.
+- Text alternative теперь содержит нативные кнопки РО и курсов, Enter/Space
+  открывают тот же inspected detail; результат объявляется через role=status.
+  На desktop текстовый просмотр доступен в details вместе с графом. Палитра,
+  реальный источник событий и существующие guards анимации сохранены.
+- Полный frontend suite50/50 и Vite build exit0. Это component keyboard check,
+  НЕ screen-reader/browser accessibility certificate. Fresh browser context
+  направлен на login/session_expired; auth не обходили.
+- Сборка создана в frontend/dist; live .runtime/dist НЕ обновлён этим шагом.
+  Desktop/mobile visual pass нового состояния пока не выполнен.
+
+### 2026-10-11 — расширенный read-only review цепочек2124
+
+- Замыкание восьми ON2 кандидатов содержит44 курса; linked normalized
+  EpvoPrerequisite provenance записей0. Найдены явно разнопредметные цепочки:
+  английский→регулирование ЕАЭС/биотехнология растений, образовательные
+  ресурсы→ремонт машин/1С/финансовое моделирование. Это требует review,
+  не позволяет объявить все44 курса или все edges ошибочными.
+- Описания двух B1 НЕ полностью идентичны, topics/learning_outcomes совпадают;
+  эквивалентность не утверждена. Текущий title-token алгоритм не объясняет
+  происхождение всех разнопредметных исторических связей.
+- Evidence `.runtime/language-prerequisite-review-20261011.json`, read-only
+  launcher exit0 после исправления печати detached ORM objects в scratch.
+  Полный review/границы миграции `docs/PREREQUISITE_REVIEW_2124_20261011_RU.md`.
+  Никаких edges/gates/курсов/планов не изменено. Data review ожидает согласования.
+
+### 2026-10-11 — разрешённый review, ограниченный карантин и новый контроль2124
+
+- Пользователь явно разрешил предметный review/обратимый карантин только
+  доказанно ошибочных связей. По текстам734/742 не требуется517 как
+  обязательная подготовка другого языка; скопированное описание не доказательство.
+  Только (734,517),(742,517) перенесены в карантин:74162→74160 edges.
+  Snapshot всех рёбер `.runtime/prerequisite-quarantine-language-20261011.json`,
+  exact rollback `.runtime/quarantine-reviewed-language-20261011.py --restore`.
+  Сохранены517→5029→3542/3667 и все остальные связи. Нет active queued/running
+  build во время миграции; explicit EPVO relations0. Статья/чужойstart.ps1 не менялись.
+- Предотвращение повторения: import compatibility hook больше не создаёт
+  hard prerequisite по title-token overlap и не удаляет существующие связи
+  через replace_existing. Никаких новых advisory proposals в нём не сохраняется;
+  это прекращение недоказанной обязательности, НЕ готовый workflow предложений.
+  Два RED теста: guessed edge1 вместо0; existing relationship удалена.
+  После fix полный backend suite exit0 из repo root; dependency warnings остаются.
+  Первая попытка suite из backend cwd ошиблась на import backend; это исправлено
+  запуском из root, не правкой продуктовых импортов.
+- Новый неизменённый frozen2124 prioritise контроль:
+  `.runtime/diag-2124-reviewed-language-20261011.json`, terminal failed exit1,
+ 55.13с, infeasible_with_complete_frontier. ON2 теперь admitted2 (было0).
+  Новый конкретный blocker ON13:scored1,scoped0,admitted0,max_scored0.5.
+  Это частичное исправление, НЕ успешный2124; полный20 ещё не запущен.
+- В контрольном процессе были CUDA OOM warnings, но он продолжил scoring и
+  завершился штатным PlanningFailure, не native crash. Параллельный необязательный
+  collect-only получил MemoryError в test_auth_transport.py; не повторять suite
+  одновременно с загрузкой модели. Ранее полный suite уже завершился exit0.
+- Пользователь уточнил новый внешний вид: полностью иная научная визуализация
+  процесса, а не текущая карта с фоновыми переливами. До реализации требуется
+  короткое согласование конкретной композиции; уже выполненные keyboard fixes
+  не объявляются выполнением нового визуального требования.
+
+### 2026-10-11 — подтверждённые EPVO aliases и аварийный контроль2124
+
+- ON13 источника2124 связан с normalized1247; normalized1247 и162857
+  подтверждённо указывают на локальный курс31302 (EPVO-162857).
+  Старый scoring читал только запись из EPVO-кода, теряя исходную связь.
+- TDD: SQLite регрессия вернула [] вместо кандидата31302 (RED). Исправлен
+  единый bounded prefetch normalized aliases через canonical linked_course_id:
+  канонический EPVO-код имеет приоритет при конфликте approved_course_id.
+  Не используются fuzzy titles; курсы/описания/пороги не менялись. Сохраняется
+  лимит32 links на normalized запись, кеш сигнала сбрасывается при prefetch,
+  evidence содержит source_discipline_id. Второй тест защищает от переноса
+  связи на чужой канонический курс. Target10/10, полный backend477passed,
+  16dependency warnings,23.48с,exit0. Suite выполнялся отдельно от модели.
+- Read-only live проверка `.runtime/check-approved-lo-alias-20261011.py`
+  exit0: aliases[1247,162857], исходная ON13-связь1247/2124 даёт score1.0,
+  кандидат31302 восстановлен. Evidence
+  `.runtime/approved-lo-alias-live-20261011.json`. Это НЕ full generation
+  acceptance, structural audit или содержательная экспертная оценка.
+- Единственный новый frozen2124 prioritise контроль exec94585 создал
+  temporaryproject/version1637, repositorycreated0/linked500, затем исчез
+  после scoring1/20; report `.runtime/diag-2124-approved-lo-alias-20261011.json`
+  отсутствует, exec terminalexit1. Windows Application event1000 в20:17:13
+  (локальное время) зафиксировал python process0x2624, torch_cpu.dll,
+  accessviolation0xc0000005; event1001 report
+  cf12a5bf-37e8-4a5b-a03d-f389be2f0fb2. Точное внутреннее основание native
+  crash пока не установлено; нельзя приписывать его MILP/gate или уверенно OOM.
+  Процесс контроля отсутствует; автоматический дубль не запущен.
+  Cleanup finally при native crash мог не исполниться: temporary1637 требует
+  отдельной проверки. Старые планы и live API/worker не изменялись.
+- Далее bounded диагностика PyTorch/runtime/ресурсных лимитов с фиксацией
+  returncode/child identity; затем2124 и лишь при успехе все frozen20 заново.
+  Массовые20/40 ещё НЕ разрешены результатом этого контроля. Новый дизайн
+  «Лаборатория построения плана» предложен пользователю; композиция пока
+  не согласована, редизайн продуктового UI в этом шаге не реализован.
+
+### 2026-10-11 — bounded2124 прошёл; новая серия20
+
+- Выявлено отличие от штатного cohort runner: прямой CLI контроль не задавал
+  OMP/MKL/OPENBLAS/TORCH_NUM_THREADS=1 и TOKENIZERS_PARALLELISM=false.
+  Повтор выполнен через существующий audit_quality_cohort.py, count1offset8A,
+  unchanged frozen manifest и CONTENT_EVALUATION_MODE=prioritise; модели,
+  их веса и gate не менялись. Это проверка гипотезы, не доказательство точной
+  внутренней причины access violation и не полноценная защита от crash.
+- `.runtime/diag-2124-threadbounded-20261011.json` statuspassed1/1exit0,
+  одна child попытка,64.49с child/75.05с runner; credits244,hard0,ГОСОtrue,
+  wrong_semester0/wrong_level0. Independent check_variant target240/8,
+  load27–33:issues[]. Live процесс контроля завершён, не дублировать.
+- Advisory evaluator из отчёта local-content-1.6:17supportedprofessional,
+  profilemismatch0,coregaps0,needsreview24,duplicate_groups2. Предполагаемые
+  пары734/742 и31308/31310 требуют отдельного content review; одинаковое
+  описание НЕ подтверждает эквивалентность. Не объявлять качество окончательным.
+- Запущена новая полная неизменённая серия первых20offset0A prioritise:
+  `.runtime/system-20-approvedaliases-20261011.json`, timeout900,
+  stop-on-failure. Штатный runner сохраняет identity/attempts/logs и ограничивает
+  native потоки. Продуктовый код во время серии не менять. После internal20/20
+  нужны independent identity/file+canonicalSHA/credits/load/prerequisites/required
+  и честный content review; только затем разрешены40offset20.
+  Concurrent users/throughput/cost и новый визуальный дизайн ещё не завершены.
+- Новый runner identity PID17084/created_at1791732145.426 подтверждён живым
+  процессом; exec87211. Попытка создать штатный heartbeat каждые30мин через
+  automation_update завершилась MCP -32000; создание расписания не подтверждено.
+  Не заявлять мониторинг включённым и не создавать дубли вслепую.
+
+### 2026-10-11 — прерывание серии20 перезагрузкой Windows
+
+- `.runtime/system-20-approvedaliases-20261011.json` успел завершить10251:
+  passed,71.3с успешный child; две попытки, первая returncode3221225727
+  (0xC00000FF), втораяexit0. Ограничение потоков НЕ доказано как достаточная
+  защита от всех native отказов. Первый stderr содержит60с faulthandler
+  snapshot, сам по себе не доказывает причину ошибки. Content indicators
+  первого успешного плана:duplicates0,coregaps0,needsreview9.
+- На следующем продолжении exec87211 стал недоступен. Проверены процессы:
+  старый runner17084 и его child отсутствуют; иных cohort/audit генераций нет.
+  OS LastBootUpTime11окт20:32:45, System6005 в20:33:12. Подтверждена
+  перезагрузка, её причина не установлена. Не выдавать исчезновение runner
+  за terminal PlanningFailure и не повторять живой процесс по stale-файлу.
+- Штатным reconcile_running_report состояние устаревшего отчёта переведено
+  изrunning вstale, completed1/reports1 сохранены. Повторную серию автоматически
+  не запустили: после загрузки свободно426604KiB RAM, API/worker/frontend
+  уже перезапущены автозапуском (actual23440/25196/24972 на момент проверки).
+  Существующий API отвечает на8000, DBport5433 доступен. Это доступность,
+  не подтверждение сохранности каждого пользовательского плана.
+- Подготовлен `docs/CONTENT_PAIR_REVIEW_2124_20261011_RU.md`:734/742 возможные
+  каталоговые версии,31308/31310 различное назначение с копированным описанием
+  на трёх языках. Hard equivalence не утверждалась; каталог/план не менялись.
+- Следующий шаг: восстановить достаточный измеренный ресурсный запас, проверить
+  отсутствие активного job, затем новый полный20 с начала в новом отчёте.
+  Не запускать heavy multiuser stress на0.4GiB freeRAM; чужие приложения
+  автоматически не завершать.20→40/content acceptance/нагрузка/новый UI открыты.
+
+### 2026-10-11 — четыре различных durable claims, без моделей
+
+- При freeRAM766028KiB тяжёлая серия20 не возобновлялась. Выполнен bounded
+  лёгкий PostgreSQL probe в curriculum_kag_restore_pilot_20261010, НЕliveDB:
+  четыре разные версии одновременно queued→running через штатный claim.
+  Evidence `.runtime/distinct-job-claims-20261011-a13daab4.json`, exit0:
+  simultaneous_running_observed4, все scratchjobscancelled, все прежние
+  planid/is_active сохранены. Это проверка admission, НЕ генерация нескольких
+  пользователей, модельная нагрузка, throughput или cost benchmark.
+- Практическая граница масштабирования: per-version ownership предотвращает
+  дубли одного задания, но не ограничивает глобальное число разных running
+  задач. --max-jobs ограничивает выборку отдельного worker, не все workers
+  вместе. На текущем малом запасе RAM четыре heavy worker небезопасны;
+  нужна отдельная подтверждённая политика общей ёмкости/ресурсного допуска.
+- Две ранние попытки самого scratchprobe не засчитываются: coordinating
+  thread cleanup не совпадал с owner context (stale updates были корректно
+  отклонены), затем JSON writer получил SQLAlchemyRow вместо serializablelist.
+  Исправлен только тестовый probe; чужие/пользовательские jobs не трогались.
+  Наши оставшиеся scratchjobs с точным prefix/hash в isolatedDB завершены,
+  успешная попытка проверилаterminalstates и сохранность всех планов.
+  Частично написанный JSON предыдущей попытки не является evidence успеха.
+- После probe freeRAM620016KiB. Автоматически завершать браузеры/чужие
+  приложения или начинать memory stress нельзя. Ресурсный blocker остаётся;
+  серия20stale, restart только с начала в новом report после восстановления
+  измеренного запаса. Новый UI также ждёт согласования композиции.
+
+### 2026-10-11 — продолжение: графический макет перед кодом
+
+- Пользователь подтвердил продолжение. Предложенная «Лаборатория построения
+  плана» и направление общего лимита одной тяжёлой генерации приняты для
+  дальнейшей работы. Лимит пока не реализован: он должен охватывать scoring
+  и planning, а не только отдельный worker claim.
+- В отдельном ответе пользователь выбрал «Сначала графический макет».
+  Подготавливаются три композиции одной панели; действующий интерфейс не
+  изменён в этом шаге. PRODUCT.md фиксирует подтверждённые продуктовые
+  ограничения, docs/BUILD_LAB_DIRECTION_20261011_RU.md — порядок реализации.
+- Свежая проверка: FreePhysicalMemory3049344KiB, тяжёлых cohort/audit
+  процессов нет. Это улучшение запаса, не измерение безопасной ёмкости
+  модельной генерации. system-20-approvedaliases остаётся stale/completed1.
+- Подготовительные две RED регрессии семестровой раскладки подтвердили,
+  что нового представления ещё нет; после выбора макета вместо кода они
+  отложены. Существующий тестовый файл возвращён к предыдущему состоянию,
+  повторный тест BuildMapPanel:8/8 passed, exit0. Прочие пользовательские
+  изменения сохранены. Приёмка новой панели и 20→40 остаются открытыми.
+
+### 2026-10-12 — новый Build Laboratory и проверка всей цели
+
+- Comp1 перенесён в живой UI: Exo2 self-hosted, граф actual nodes/edges,
+  пунктирный gold selected path/cold neon, optional actual-edge trails,
+  pending/verified check circles, published green nodes. Motion paused
+  terminal/hidden/offscreen/reduced-motion/mobile, no fake MILPiterations.
+- RED/GREEN и fullfrontend59passed+buildexit0; полный backend suiteexit0
+  после правильного PYTHONPATH, opt-in2skipped. Fresh UI review: сначала4fixes,
+  после batch все4resolved SHIP atfixscope. Desktop1586/mobile390/user871
+  evidence `.impeccable/review/`. Не industrial acceptance.
+- Actual project1603 A/B/C jobscomplete~8.11/7.42/8.15с, warmed same-input
+  controls неthroughput/costbenchmark. Running scoring виден, но candidates
+  появились с complete между polling2с: визуальное движение заполненных
+  realpaths пока не засвидетельствовано. Не имитировать события.
+- После контролей freeRAM5245616KiB, нет active recent userjobs/другого
+  cohort. Новый full20offset0A prioritise с начала:
+  `.runtime/system-20-labreview-20261012.json`, runner11744
+  created_at1791755598.479, wrapper7820. Первый10251passed244hard0,
+  completed1/20, второй в работе на момент проверки. Во время серии код
+  не менять.20→40 только independent identities/hashes/credits/load/prereq/
+  required и честный content review. Старый stale1/completed сохранён.
+- Heartbeat `curriculum-kag-20-40` ACTIVE30мин подтверждён приложением.
+  Остатки цели и source fingerprint: `docs/GOAL_VERIFICATION_20261012_RU.md`.
+  Global capacity интегрирована частично со scoringAPI, не всеentrances;
+  heavyconcurrent/RSS/throughput/cost/overhead остаются открытыми.
+# 2026-10-12 — полный20 нового прогона
+
+system-20-labreview-20261012.json terminalpassed20/20, runner11744 завершён. Независимый structural/identity/hash audit CLI exit0,acceptedtrue,findings[],distinct20/structural20. Не дублировать20. Содержательная приёмка ещё не завершена: см.CONTENT_REVIEW_LABRUN_20261012_RU.md. Не переходитьк40 по одному internal/structuralpassing. Globalheavycapacity/concurrency/стоимость и livefilledmotion остаются открытыми; цель не закрыта.

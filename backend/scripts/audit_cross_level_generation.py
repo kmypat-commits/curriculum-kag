@@ -40,6 +40,8 @@ def freeze_content_report(metrics):
     return deepcopy(metrics.get('content_evaluation'))
 
 from app.database import SessionLocal
+from contextlib import ExitStack
+from app.services.generation_capacity import generation_slot, CapacityBusy
 from app.kag.scoring import compute_all_matches
 from app.planner.match_aggregation import semantic_evidence_score
 from app.planner.course_policy import project_domain_terms
@@ -312,7 +314,9 @@ def main() -> None:
     project_id = None
     started = time.perf_counter()
     report = {"level": args.level, "status": "running"}
+    capacity_scope = ExitStack()
     try:
+        capacity_scope.enter_context(generation_slot(db.get_bind()))
         project = Project(
             title=project_title,
             domain1=domain1,
@@ -697,6 +701,11 @@ def main() -> None:
                 for row in variants.values()
             ),
         })
+    except CapacityBusy:
+        report.update({"status": "capacity_busy", "passed": False,
+                       "retryable": True, "retry_after_seconds": 2,
+                       "elapsed_seconds": round(time.perf_counter() - started, 2)})
+        raise SystemExit(75)
     except Exception as error:
         from app.planner.joint_contract import PlanningFailure
         if isinstance(error, PlanningFailure):
@@ -716,16 +725,21 @@ def main() -> None:
         # ``--keep`` is an explicit debugging option: retain the generated
         # temporary project so its schedule can be inspected after a failed
         # control run.  The default remains rollback + cleanup.
-        if args.keep and report.get("status") == "complete":
-            db.commit()
-        else:
-            db.rollback()
-        if project_id is not None and not args.keep:
-            temporary = db.get(Project, project_id)
-            if temporary is not None:
-                db.delete(temporary)
+        try:
+            if args.keep and report.get("status") == "complete":
                 db.commit()
-        db.close()
+            else:
+                db.rollback()
+            if project_id is not None and not args.keep:
+                temporary = db.get(Project, project_id)
+                if temporary is not None:
+                    db.delete(temporary)
+                    db.commit()
+        finally:
+            try:
+                db.close()
+            finally:
+                capacity_scope.close()
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
