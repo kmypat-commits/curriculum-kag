@@ -346,6 +346,7 @@ def test_database_frontier_uses_raw_evidence_and_closes_parents():
             lo.weight = 2.0
             db.flush()
             weighted = build_joint_frontier(version, db, limit=10)
+            assert weighted.lo_weights["ON1"] == 2.0
             assert weighted.candidates_by_id[strong.id].utility > base_utility
             assert weighted.candidates_by_id[strong.id].lo_scores["ON1"] == 0.568
             assert weighted.candidates_by_id[strong.id].item["admission_score"] == 0.568

@@ -73,6 +73,8 @@ def _frontier_fingerprint(problem) -> str:
         ],
         "target": getattr(problem, "target_credits", None),
         "domain_minima": getattr(problem, "domain_minima", ()),
+        "variant_strategy": getattr(problem, "variant_strategy", None),
+        "lo_weights": getattr(problem, "lo_weights", {}),
     }
     return hashlib.sha256(json.dumps(
         payload, ensure_ascii=False, sort_keys=True,
@@ -100,7 +102,8 @@ def build_verified_joint_schedule(
     last_frontier_hash = ""
     for limit in FRONTIER_LIMITS:
         frontier_started = time.perf_counter()
-        problem = build_joint_frontier(version, db, limit=limit)
+        problem = build_joint_frontier(version, db, limit=limit,
+                                       variant_strategy="A" if variant_type == "A" else None)
         from app.config import settings
         if settings.BUILD_TELEMETRY_ENABLED:
             from app.services.build_events import emit_build_event
@@ -223,6 +226,8 @@ def build_verified_joint_schedule(
                     "name": "joint_milp",
                     "variant": variant_type,
                     "frontier_limit": limit,
+                    "objective_version": ("weighted-max-lo-1" if variant_type == "A" else "legacy-utility"),
+                    "lo_weights": getattr(problem, "lo_weights", {}),
                     "frontier_count": len(getattr(problem, "candidates", ())),
                     "frontier_hash": last_frontier_hash,
                     "frontier_truncated": problem.frontier_truncated,

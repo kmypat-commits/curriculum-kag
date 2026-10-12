@@ -90,3 +90,15 @@ added IDs/count, solver bounds/optimality, frontier hash и причины от�
 
 Полный backend suite80892 завершёнexit0,100%,двеopt-in skipped; предупреждения
 upstreamdeprecations сохранены. Массовые генерации и liveперезапуск не выполнялись.
+
+## Подключение A в исходном коде
+
+joint_planner передаёт variant_strategy=A в build_joint_frontier только для A;
+frontier передаёт веса профессиональных РО в PlanningProblem без усиления сырых
+admission scores. Регрессия обычного orchestration сначала выбрала1+2 вместо1+3,
+затем прошла с реальным MILP. Второй RED: хэш frontier не изменялся при смене
+LO weights; теперь он включает strategy/weights. Evidence planner содержит
+objective_version=weighted-max-lo-1 для A; B/C честно помечены legacy-utility.
+Три focused файла прошли74tests; последующий fullbackend83913 exit0,двеskipped.
+Live rollout/реальный контроль после подключения ещё НЕ выполнены. Новый этап
+не заменяет baselinecapture и B/C, не подтверждает содержательную пригодность.

@@ -8,6 +8,42 @@ import pytest
 from app.planner.joint_contract import PlanningFailure
 
 
+def test_frontier_fingerprint_changes_when_lo_objective_changes():
+    from dataclasses import replace
+    from app.planner.joint_planner import _frontier_fingerprint
+    from backend.tests.test_joint_solver import candidate, problem
+    base = replace(problem([candidate(1, 10, (1,), {"ON1": .9})]),
+                   variant_strategy="A", lo_weights={"ON1": 1.0})
+    assert _frontier_fingerprint(base) != _frontier_fingerprint(
+        replace(base, lo_weights={"ON1": 2.0}))
+
+
+def test_generation_a_uses_weighted_max_coverage_solver(monkeypatch):
+    from dataclasses import replace
+    from app.planner import joint_planner
+    from backend.tests.test_joint_solver import candidate, problem
+
+    version = SimpleNamespace(id=15, project=SimpleNamespace(
+        domain1="IT", domain2="", constraints_json={}), learning_outcomes=[])
+    setup = problem([
+        candidate(1, 10, (1,), {"ON1": .9, "ON2": .7}, utility=1),
+        candidate(2, 10, (2,), {"ON1": .9}, utility=3),
+        candidate(3, 10, (2,), {"ON2": .9}, utility=.1),
+    ])
+    monkeypatch.setattr(joint_planner, "build_joint_frontier", lambda *_a, **kw:
+                        replace(setup, variant_strategy=kw.get("variant_strategy")))
+    monkeypatch.setattr(joint_planner, "audit_final_course_admission",
+                        lambda *_a, **_kw: {"passed": True, "violations": []})
+    monkeypatch.setattr(joint_planner, "verify_curriculum_plan",
+                        lambda *_a, **_kw: {"feasible": True, "quality_passed": True})
+    monkeypatch.setattr(joint_planner, "project_domain_terms", lambda *_a: ("IT",))
+    monkeypatch.setattr(joint_planner, "audit_final_schedule_boundary", lambda *_a, **_kw:
+                        {"invalid_domain_courses": [], "admission": {"passed": True}})
+    schedule, metadata = joint_planner.build_verified_joint_schedule(version, MagicMock(), "A")
+    chosen = {item["course_id"] for items in schedule.values() for item in items}
+    assert chosen == {1, 3, 91, 92}
+
+
 @pytest.mark.parametrize("variant_type", ["A", "B", "C"])
 def test_joint_planner_never_accepts_excluded_course(variant_type, monkeypatch):
     from app.planner import joint_planner
