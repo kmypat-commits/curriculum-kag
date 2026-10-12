@@ -3,6 +3,28 @@
 import pytest
 
 
+@pytest.mark.parametrize('strategy', ['B', 'C'])
+def test_comparison_strategy_requires_original_university_baseline(strategy):
+    from dataclasses import replace
+    from app.planner.joint_solver import solve_joint
+    setup = replace(problem([candidate(1, 10, (1,), {'ON1': .8}),
+                             candidate(2, 10, (2,), {'ON2': .8})]), variant_strategy=strategy)
+    with pytest.raises(PlanningFailure) as exc:
+        solve_joint(setup, time_limit_seconds=5)
+    assert exc.value.status == 'baseline_missing'
+
+
+@pytest.mark.parametrize('strategy', ['B', 'C'])
+def test_comparison_strategy_prefers_original_courses_over_generic_utility(strategy):
+    from dataclasses import replace
+    from app.planner.joint_solver import solve_joint
+    setup = problem([candidate(1, 10, (1,), {'ON1': .8}, utility=.1),
+                     candidate(2, 10, (2,), {'ON2': .8}),
+                     candidate(3, 10, (1,), {'ON1': .9}, utility=100)])
+    setup = replace(setup, variant_strategy=strategy, baseline_course_ids=(1, 2, 91, 92))
+    assert solve_joint(setup, time_limit_seconds=5).selected_course_ids == frozenset({1, 2})
+
+
 def test_strategy_a_does_not_reward_repeated_coverage_over_another_lo():
     from dataclasses import replace
     from app.planner.joint_solver import solve_joint

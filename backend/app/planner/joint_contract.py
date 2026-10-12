@@ -46,6 +46,7 @@ class PlanningProblem:
     preferred_core_blocks: tuple[PreferredCoreBlock, ...] = ()
     variant_strategy: str | None = None
     lo_weights: dict[str, float] = field(default_factory=dict)
+    baseline_course_ids: tuple[int, ...] | None = None
 
     @property
     def candidates_by_id(self) -> dict[int, Candidate]:

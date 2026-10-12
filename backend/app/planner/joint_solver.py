@@ -29,6 +29,9 @@ def solve_joint(
     started = time.perf_counter()
     if time_limit_seconds <= 0:
         raise ValueError("time_limit_seconds must be positive")
+    strategy = problem.variant_strategy
+    if strategy in ('B', 'C') and not problem.baseline_course_ids:
+        raise PlanningFailure('baseline_missing', {'reason': 'original_university_plan_required'})
     candidates = tuple(sorted(problem.candidates, key=lambda course: course.course_id))
     by_id = {course.course_id: course for course in candidates}
     if len(by_id) != len(candidates):
@@ -63,7 +66,7 @@ def solve_joint(
     z_index = {block.block_id: len(candidates) + len(y_index) + index
                for index, block in enumerate(problem.preferred_core_blocks)}
     coverage_markers = {}
-    if problem.variant_strategy == "A":
+    if strategy in ('A', 'B', 'C'):
         for code in problem.required_los:
             previous = 0.0
             levels = sorted({min(1.0, score) for course in candidates
@@ -272,17 +275,26 @@ def solve_joint(
     objective = np.zeros(nvars, dtype=float)
     for index, course in enumerate(candidates):
         objective[index] = (-float(course.utility) + 1e-5 + index * 1e-9
-                            if problem.variant_strategy != "A" else 0.0)
+                            if strategy not in ('A', 'B', 'C') else 0.0)
         recommended = int(course.item.get("recommended_semester") or 0)
         for semester in course.allowed_semesters:
             objective[y_index[course.course_id, semester]] = (
                 1e-4 * abs(semester - recommended)
-                if recommended and problem.variant_strategy != "A" else 0.0
+                if recommended and strategy not in ('A', 'B', 'C') else 0.0
             )
     if coverage_markers:
         total_weight = sum(float(problem.lo_weights.get(code, 1.0)) for code in problem.required_los)
         for marker, benefit in coverage_markers.values():
-            objective[marker] = -benefit / total_weight
+            objective[marker] = -benefit / total_weight * (0.5 if strategy == 'C' else 1.0)
+    if strategy in ('B', 'C'):
+        baseline = set(problem.baseline_course_ids)
+        nonbaseline = (set(by_id) | set(fixed_semester)) - baseline
+        # Coverage is bounded by one: an integer addition costing two always
+        # dominates any coverage improvement for B, without utility tie-breaks.
+        cost = 2.0 if strategy == 'B' else 0.5 / max(1, len(nonbaseline))
+        for cid, index in x_index.items():
+            if cid not in baseline:
+                objective[index] = cost
     lower_bounds = np.asarray(lower)
     upper_bounds = np.asarray(upper)
 

@@ -102,3 +102,18 @@ objective_version=weighted-max-lo-1 для A; B/C честно помечены 
 Три focused файла прошли74tests; последующий fullbackend83913 exit0,двеskipped.
 Live rollout/реальный контроль после подключения ещё НЕ выполнены. Новый этап
 не заменяет baselinecapture и B/C, не подтверждает содержательную пригодность.
+
+## Solver B/C: первый проверенный этап
+
+Четыре RED регрессии подтвердили: сравнение без baseline молча выполнялось,
+а высокая generic utility вытесняла исходный курс в обоих режимах. Добавлен
+baseline_course_ids; для явных B/C без непустой базы возвращается baseline_missing.
+B минимизирует 2*added_variable_count-coverage: поскольку coverage лежит0..1,
+целое добавление всегда важнее выигрыша покрытия. Fixed nonbaseline дают постоянный
+вклад и не меняют оптимум; их фактический счётчик ещё требуется в publication evidence.
+C использует согласованную0.5 нормировку, знаменатель union candidate/fixed IDs
+вне baseline. Все41solver tests прошли; полный backend suite проверяется отдельно.
+Это opt-in solver, НЕ live B/C: immutable подтверждённый baseline/API/UI ещё открыты.
+
+Полный backend suite39555 завершён exit0,100%,две opt-in skipped; предупреждения
+зависимостей сохранены. Массовых генераций и перезапуска live процессов не было.
