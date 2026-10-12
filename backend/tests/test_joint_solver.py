@@ -38,6 +38,29 @@ def test_strategy_a_does_not_reward_repeated_coverage_over_another_lo():
     assert result.selected_course_ids == frozenset({1, 3})
 
 
+def test_strategy_b_addition_minimum_is_not_overridden_by_advisory_block():
+    from dataclasses import replace
+    from app.planner.joint_contract import PreferredCoreBlock
+    from app.planner.joint_solver import solve_joint
+    setup = problem([candidate(1, 10, (1,), {'ON1': .8}),
+                     candidate(2, 10, (2,), {'ON2': .8}),
+                     candidate(3, 10, (1,), {'ON1': .9})])
+    setup = replace(setup, variant_strategy='B', baseline_course_ids=(1, 2, 91, 92),
+                    preferred_core_blocks=(PreferredCoreBlock('suggestion', (3,), 1, 10),))
+    assert solve_joint(setup, time_limit_seconds=5).selected_course_ids == frozenset({1, 2})
+
+
+def test_strategy_c_accepts_coverage_gain_that_outweighs_normalised_addition():
+    from dataclasses import replace
+    from app.planner.joint_solver import solve_joint
+    courses = [candidate(1, 10, (1,), {'ON1': .6}),
+               candidate(2, 10, (2,), {'ON2': .8}),
+               candidate(3, 10, (1,), {'ON1': 1.0})]
+    courses.extend(candidate(cid, 10, (1,), {'ON1': .6}) for cid in range(4, 10))
+    setup = replace(problem(courses), variant_strategy='C', baseline_course_ids=(1, 2, 91, 92))
+    assert solve_joint(setup, time_limit_seconds=5).selected_course_ids == frozenset({2, 3})
+
+
 def test_strategy_a_respects_lo_priority_instead_of_generic_course_utility():
     from dataclasses import replace
     from app.planner.joint_solver import solve_joint

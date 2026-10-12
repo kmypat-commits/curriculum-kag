@@ -324,7 +324,7 @@ def solve_joint(
 
     stage1_seconds = stage2_seconds = 0.0
     preferred_optimality_proven = True
-    if z_index:
+    if z_index and strategy not in ('B', 'C'):
         # One total time budget: maximise distinct confirmed block coverage,
         # then optimise the existing course utility at that coverage level.
         preference_objective = objective * (0.001 / (1.0 + np.sum(np.abs(objective))))
