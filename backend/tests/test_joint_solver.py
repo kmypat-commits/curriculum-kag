@@ -3,6 +3,31 @@
 import pytest
 
 
+def test_strategy_a_does_not_reward_repeated_coverage_over_another_lo():
+    from dataclasses import replace
+    from app.planner.joint_solver import solve_joint
+    setup = problem([
+        candidate(1, 10, (1,), {"ON1": .9, "ON2": .7}, utility=1),
+        candidate(2, 10, (2,), {"ON1": .9}, utility=3),
+        candidate(3, 10, (2,), {"ON2": .9}, utility=.1),
+    ])
+    setup = replace(setup, variant_strategy="A", lo_weights={"ON1": 1, "ON2": 1})
+    result = solve_joint(setup, time_limit_seconds=5)
+    assert result.selected_course_ids == frozenset({1, 3})
+
+
+def test_strategy_a_respects_lo_priority_instead_of_generic_course_utility():
+    from dataclasses import replace
+    from app.planner.joint_solver import solve_joint
+    setup = problem([
+        candidate(1, 10, (1,), {"ON1": .9, "ON2": .7}, utility=10),
+        candidate(2, 10, (2,), {"ON1": .7, "ON2": .7}),
+        candidate(3, 10, (1,), {"ON1": .7, "ON2": .9}, utility=.1),
+    ])
+    setup = replace(setup, variant_strategy="A", lo_weights={"ON1": 1, "ON2": 3})
+    assert solve_joint(setup, time_limit_seconds=5).selected_course_ids == frozenset({2, 3})
+
+
 def test_required_low_ranked_course_is_selected_before_utility():
     from dataclasses import replace
     from app.planner.joint_solver import solve_joint

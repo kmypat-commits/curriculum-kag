@@ -62,7 +62,20 @@ def solve_joint(
             y_index[course.course_id, semester] = len(candidates) + len(y_index)
     z_index = {block.block_id: len(candidates) + len(y_index) + index
                for index, block in enumerate(problem.preferred_core_blocks)}
-    nvars = len(candidates) + len(y_index) + len(z_index)
+    coverage_markers = {}
+    if problem.variant_strategy == "A":
+        for code in problem.required_los:
+            previous = 0.0
+            levels = sorted({min(1.0, score) for course in candidates
+                             if (score := course.lo_scores.get(code, 0.0)) >= REAL_COURSE_LO_THRESHOLD})
+            weight = float(problem.lo_weights.get(code, 1.0))
+            if not math.isfinite(weight) or weight <= 0:
+                raise PlanningFailure("invalid_candidate_data", {"reason": "invalid_lo_weight", "lo": code})
+            for level in levels:
+                index = len(candidates) + len(y_index) + len(z_index) + len(coverage_markers)
+                coverage_markers[code, level] = (index, weight * (level - previous))
+                previous = level
+    nvars = len(candidates) + len(y_index) + len(z_index) + len(coverage_markers)
     if nvars == 0:
         raise PlanningFailure(
             "no_solution_in_bounded_frontier" if problem.frontier_truncated
@@ -78,6 +91,12 @@ def solve_joint(
         sparse_rows.append(coefficients)
         lower.append(minimum)
         upper.append(maximum)
+
+    for (code, level), (marker, _benefit) in coverage_markers.items():
+        coefficients = {x_index[course.course_id]: 1.0 for course in candidates
+                        if course.lo_scores.get(code, 0.0) >= level}
+        coefficients[marker] = -1.0
+        add(coefficients, 0.0, np.inf)
 
     for cid in problem.required_course_ids:
         if cid in fixed_semester:
@@ -252,12 +271,18 @@ def solve_joint(
     ).tocsr()
     objective = np.zeros(nvars, dtype=float)
     for index, course in enumerate(candidates):
-        objective[index] = -float(course.utility) + 1e-5 + index * 1e-9
+        objective[index] = (-float(course.utility) + 1e-5 + index * 1e-9
+                            if problem.variant_strategy != "A" else 0.0)
         recommended = int(course.item.get("recommended_semester") or 0)
         for semester in course.allowed_semesters:
             objective[y_index[course.course_id, semester]] = (
-                1e-4 * abs(semester - recommended) if recommended else 0.0
+                1e-4 * abs(semester - recommended)
+                if recommended and problem.variant_strategy != "A" else 0.0
             )
+    if coverage_markers:
+        total_weight = sum(float(problem.lo_weights.get(code, 1.0)) for code in problem.required_los)
+        for marker, benefit in coverage_markers.values():
+            objective[marker] = -benefit / total_weight
     lower_bounds = np.asarray(lower)
     upper_bounds = np.asarray(upper)
 

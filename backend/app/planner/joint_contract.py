@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,8 @@ class PlanningProblem:
     required_course_ids: tuple[int, ...] = ()
     required_core_blocks: tuple[RequiredCoreBlock, ...] = ()
     preferred_core_blocks: tuple[PreferredCoreBlock, ...] = ()
+    variant_strategy: str | None = None
+    lo_weights: dict[str, float] = field(default_factory=dict)
 
     @property
     def candidates_by_id(self) -> dict[int, Candidate]:
