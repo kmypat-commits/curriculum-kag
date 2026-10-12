@@ -239,6 +239,7 @@ def build_verified_joint_schedule(
                                                  round(result.stage2_seconds, 3)],
                     "total_seconds": round(time.perf_counter() - started, 3),
                     "objective": result.objective,
+                    "strategy_evidence": result.strategy_evidence,
                     "optimality_proven": result.optimality_proven,
                     "fingerprint": fingerprint,
                     "selected_course_ids": sorted(result.selected_course_ids),

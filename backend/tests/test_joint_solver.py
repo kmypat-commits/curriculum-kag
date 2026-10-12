@@ -2,6 +2,23 @@
 
 import pytest
 
+@pytest.mark.parametrize('strategy', ['B', 'C'])
+def test_strategy_evidence_counts_fixed_additions_and_preserves_actual_coverage(strategy):
+    from dataclasses import replace
+    from app.planner.joint_solver import solve_joint
+    setup = replace(problem([candidate(1, 10, (1,), {'ON1': .8}),
+                             candidate(2, 10, (2,), {'ON2': .9})]),
+                    variant_strategy=strategy, baseline_course_ids=(1, 2, 91),
+                    lo_weights={'ON1': 1, 'ON2': 3})
+    result = solve_joint(setup, time_limit_seconds=5)
+    evidence = result.strategy_evidence
+    assert evidence['strategy'] == strategy
+    assert evidence['added_course_ids'] == [92]
+    assert evidence['added_count'] == 1
+    assert evidence['eligible_nonbaseline_count'] == 1
+    assert evidence['weighted_max_lo_coverage'] == pytest.approx(.875)
+    assert evidence['per_lo_max_scores'] == {'ON1': .8, 'ON2': .9}
+
 
 @pytest.mark.parametrize('strategy', ['B', 'C'])
 def test_comparison_strategy_requires_original_university_baseline(strategy):
@@ -36,6 +53,9 @@ def test_strategy_a_does_not_reward_repeated_coverage_over_another_lo():
     setup = replace(setup, variant_strategy="A", lo_weights={"ON1": 1, "ON2": 1})
     result = solve_joint(setup, time_limit_seconds=5)
     assert result.selected_course_ids == frozenset({1, 3})
+    assert result.strategy_evidence['weighted_max_lo_coverage'] == pytest.approx(.9)
+    assert result.strategy_evidence['added_count'] is None
+    assert result.strategy_evidence['baseline_course_ids'] is None
 
 
 def test_strategy_b_addition_minimum_is_not_overridden_by_advisory_block():

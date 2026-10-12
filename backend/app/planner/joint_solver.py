@@ -413,10 +413,32 @@ def solve_joint(
                 for cid in set(block.course_ids) & chosen_ids) >= block.min_credits
         for block in problem.preferred_core_blocks
     )
+    strategy_evidence = {}
+    if strategy in ('A', 'B', 'C'):
+        weights = {code: float(problem.lo_weights.get(code, 1.0)) for code in problem.required_los}
+        per_lo = {
+            code: max((min(1.0, by_id[cid].lo_scores.get(code, 0.0))
+                       for cid in selected
+                       if by_id[cid].lo_scores.get(code, 0.0) >= REAL_COURSE_LO_THRESHOLD), default=0.0)
+            for code in problem.required_los
+        }
+        weighted_coverage = sum(weights[code] * per_lo[code] for code in per_lo) / max(sum(weights.values()), 1e-12)
+        baseline = set(problem.baseline_course_ids) if problem.baseline_course_ids is not None else None
+        added = sorted(chosen_ids - baseline) if baseline is not None else None
+        strategy_evidence = {
+            'strategy': strategy, 'lo_weights': weights, 'per_lo_max_scores': per_lo,
+            'weighted_max_lo_coverage': weighted_coverage,
+            'coverage_scope': 'accepted_variable_candidate_evidence',
+            'baseline_course_ids': sorted(baseline) if baseline is not None else None,
+            'added_course_ids': added, 'added_count': len(added) if added is not None else None,
+            'eligible_nonbaseline_count': len((set(by_id) | set(fixed_semester)) - baseline) if baseline is not None else None,
+            'balance_coefficient': 0.5 if strategy == 'C' else None,
+        }
     return PlanningResult(
         schedule=schedule, selected_course_ids=frozenset(selected),
         objective=float(objective @ values), solver_seconds=time.perf_counter() - started,
         optimality_proven=result.status == 0 and preferred_optimality_proven,
         preferred_blocks_covered=int(preferred_covered),
         stage1_seconds=stage1_seconds, stage2_seconds=stage2_seconds,
+        strategy_evidence=strategy_evidence,
     )

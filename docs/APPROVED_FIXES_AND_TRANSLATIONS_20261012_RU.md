@@ -217,6 +217,13 @@ Guarded transaction исправила только2слова в Course44751,no
 Существующие score/vector caches и course chunks не удалялись; перерасчёт/проверка
 актуальности содержания остаётся отдельной задачей до содержательной приёмки.
 
+PR44751 новые KK/EN title+description Luna полностью прочитаны основным агентом,
+сверены с source_after snapshot, guarded prepared2/updated2/skipped0, отдельный
+snapshot05-pr и exactcommittedreadback2. «Пререквизиты отсутствуют» сохранено как
+текст описания, prerequisite graph не менялся. Userlist45/46 полностью переведённых
+карточек,92языковые правки;35002 имеет правильный RUtitle, полное описание ещё
+не восстановлено. Машинные переводы остаются needs_review, не human approval.
+
 Прочитаны все30KK/EN title+description и15точных исходников пакет03; guarded apply
 prepared31/updated31/skipped0 exit0, snapshot userlist-translation-snapshot-20261013-03.json.
 ДобавленRUtitle35009 Продукт, ориентированный на сообщество и KKtitle Қауымдастыққа

@@ -63,6 +63,7 @@ class PlanningResult:
     preferred_blocks_covered: int = 0
     stage1_seconds: float = 0.0
     stage2_seconds: float = 0.0
+    strategy_evidence: dict[str, object] = field(default_factory=dict)
 
 
 class PlanningFailure(RuntimeError):

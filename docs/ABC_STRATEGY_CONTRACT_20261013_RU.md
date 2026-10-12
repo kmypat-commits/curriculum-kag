@@ -130,3 +130,16 @@ C выбирает более сильное покрытие, когда его
 добавление; это characterization существующей формулы, не новый RED для неё.
 
 Полный suite34835 завершён exit0,две opt-in skipped. Изменение ещё не rollout.
+
+## Воспроизводимая отчётность критериев
+
+Две RED регрессии B/C подтвердили отсутствие strategy_evidence. Теперь результат
+содержит per-LO максимальные принятые scores, веса и взвешенное покрытие без
+двойного счёта; added_course_ids/count учитывают и fixed nonbaseline дисциплины.
+Сохраняются eligible_nonbaseline_count и коэффициент C0.5. Scope покрытия явно
+accepted_variable_candidate_evidence: нормативные fixed курсы не получают
+придуманного semantic evidence. A без baseline показывает null, не zero additions.
+Joint planner сохраняет evidence в metadata.45solver tests green; fullbackend
+10339 exit0,двеopt-in skipped. Первое выполнение с системным python не имело scipy
+и не считается RED функции; правильный RED/проверки выполнены backend/venv.
+Live API/worker не перезапускались, B/C baselinecapture и rollout ещё открыты.
