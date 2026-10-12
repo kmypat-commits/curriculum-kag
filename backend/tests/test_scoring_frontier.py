@@ -5,6 +5,20 @@ from sqlalchemy.orm import Session
 from app.kag.scoring import _lightweight_candidate_courses, _extend_with_prerequisites, LARGE_CATALOG_RETRIEVAL_LIMIT
 
 
+def test_hash_scoring_records_lexical_provenance(monkeypatch):
+    from app.kag import scoring
+    from app.kag.embedding_service import EmbeddingService
+    service = EmbeddingService()
+    service._load_attempted = True
+    monkeypatch.setattr(scoring, 'embedding_service', service)
+    result = scoring.calculate_match_score(
+        NS(title='Data analysis', description='Data analysis methods', topics=[], learning_outcomes=[], domain=None),
+        NS(lo_text='Data analysis methods'), None, include_expert_signal=False)
+    assert result['evidence']['similarity_kind'] == 'lexical_hash'
+    assert result['evidence']['embedding_model'] == 'feature-hash-v2'
+    assert 'High semantic similarity' not in result['evidence']['reasoning']
+
+
 def test_lo_and_candidates_are_reencoded_together_after_encoder_failure(monkeypatch):
     import numpy as np
     from app.config import settings

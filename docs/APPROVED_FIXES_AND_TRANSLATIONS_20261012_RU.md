@@ -176,6 +176,21 @@ courses57392→57392.26782kk требует проверки термина rein
 26785en использует polygraphy вместо printing для полиграфии — эти2 не применены.
 Recovery всего21/100, остальные не считаются завершёнными; machine needs_review.
 
+13 октября повторный read-only committed readback пакетов02/03 подтвердил
+точные9+8 языковых записей, count courses57392. Luna Aristotle получил следующие
+20 ещё не применённых пар из оставшихся79; PR44751 не повторять, snapshots01–03
+исключить. Только новый artifact без DB writes, затем полная проверка main и
+guarded snapshot-backed apply. Предыдущий completed ответ касался PR, не79пар;
+новое поручение отправлено отдельно. Переводы каталога ещё не завершены.
+
+Пакет luna-epvo-recovery-revised-20261013-02 полностью прочитан:15переводов,
+5holds. Main сверил exact exportsource и отсутствие overlap21; guardedupdated15,
+skipped0, exclusive snapshot epvo-recovery-revised-snapshot-20261013-02 до записи,
+отдельный committed readback15. Recovery теперь36/100 needs_review, неhumanapproved.
+Hold26776kk неверно относил повреждение старого target к целому source: передан
+на отдельный перевод без угадывания. Другие4holds требуют восстановления source.
+Агенту поручены следующие20 вне уже рассмотренных41, безDBwrites.
+
 ### Пользовательский список: пакет04 применён
 
 Полностью прочитаны16карточек source+30KK/EN targets, включая последнюю

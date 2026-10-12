@@ -837,3 +837,12 @@ description vector. Физические chunks и пользовательск�
 семантических дублей и выдаёт non_semantic_embedding с фактической моделью.
 Полный backend exit0, 2 skipped; live rollout ещё не выполнен. Полная аттестация
 encoder/schema provenance, интерфейс coverage и fresh20/40 остаются открытыми.
+
+Следующие2 RED регрессии: scoring не сохранял тип feature-hash similarity,
+а aggregate трактовал .9 lexical_hash как semantic evidence .9. Теперь evidence
+содержит similarity_kind и embedding_model; lexical_hash/unavailable не дают
+semantic admission coverage, экспертный EPVO сигнал не менялся. Retrieval/rank
+сохранены; это усиление честности gates, не их ослабление. Старые записи без
+provenance пока совместимы и требуют отдельной проверки, не считаются доказанно
+semantic. Полный backend exit0, 2 skipped; live не обновлён. Fresh cohort после
+rollout требует новых расчётов, исторические20/20 не переименовывать в приёмку1.8.

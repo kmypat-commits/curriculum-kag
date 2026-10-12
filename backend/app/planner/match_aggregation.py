@@ -15,6 +15,8 @@ def semantic_evidence_score(match) -> float:
     of evidence.
     """
     evidence = getattr(match, "evidence_json", None) or {}
+    if evidence.get('similarity_kind') in {'lexical_hash', 'unavailable'}:
+        return 0.0
     if evidence.get("semantic_score") is not None:
         return float(evidence.get("semantic_score") or 0.0)
     return float(getattr(match, "score", 0.0) or 0.0)

@@ -396,6 +396,8 @@ def calculate_match_score(
         final_score = max(final_score, min(1.0, 0.65 * heuristic_score + 0.35 * expert_score))
 
     evidence = {
+        "similarity_kind": "semantic" if embedding_service.model is not None else "lexical_hash",
+        "embedding_model": embedding_service.get_model_version(),
         "semantic_score": round(semantic_score, 3),
         "heuristic_score": round(heuristic_score, 3),
         "epvo_expert_score": round(expert_score, 3),
@@ -415,7 +417,7 @@ def calculate_match_score(
         "decision_threshold": settings.EPVO_AI_THRESHOLD if ai_mode else None,
         "predicted_link": semantic_score >= settings.EPVO_AI_THRESHOLD if ai_mode else None,
     }
-    if semantic_score > 0.65:
+    if semantic_score > 0.65 and evidence['similarity_kind'] == 'semantic':
         evidence["reasoning"].append("High semantic similarity")
     if keyword_boost > 0:
         evidence["reasoning"].append(f"Keyword match boost ({keyword_hits} hits)")

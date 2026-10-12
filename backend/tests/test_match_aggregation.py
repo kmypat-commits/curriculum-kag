@@ -3,6 +3,14 @@ from types import SimpleNamespace
 from app.planner.match_aggregation import aggregate_match_scores, semantic_evidence_score
 
 
+def test_lexical_hash_similarity_is_not_professional_semantic_evidence():
+    match = SimpleNamespace(score=.95, evidence_json={
+        'semantic_score': .9, 'similarity_kind': 'lexical_hash',
+        'embedding_model': 'feature-hash-v2',
+    })
+    assert semantic_evidence_score(match) == 0.0
+
+
 class _Query:
     def __init__(self, rows):
         self.rows = rows
