@@ -88,7 +88,11 @@ class EmbeddingService:
                     while len(self._cache) > self._cache_limit:
                         self._cache.popitem(last=False)
                 return vector
-            except (RuntimeError, ValueError, TypeError, OSError) as exc: self.load_error = str(exc)
+            except (RuntimeError, ValueError, TypeError, OSError) as exc:
+                self.load_error = str(exc)
+                self.model = None
+                # Fallback vectors belong to a different feature space.
+                cache_key = self._cache_key(text)
         vector = np.zeros(settings.EMBEDDING_DIMENSION, dtype=np.float32)
         tokens = re.findall(r"[\w-]+", text.lower(), flags=re.UNICODE)
         for token in tokens:
@@ -166,7 +170,11 @@ class EmbeddingService:
                     for duplicate_index in duplicate_indices.get(index, []):
                         vectors[duplicate_index] = vector
                 return np.vstack(vectors).astype(np.float32)
-            except (RuntimeError, ValueError, TypeError, OSError) as exc: self.load_error = str(exc)
+            except (RuntimeError, ValueError, TypeError, OSError) as exc:
+                self.load_error = str(exc)
+                self.model = None
+                # Re-encode cached rows too: never return a hybrid matrix.
+                return np.vstack([self.encode(text) for text in texts]).astype(np.float32)
         for index in missing_indices:
             vectors[index] = self.encode(texts[index])
         return np.vstack(vectors).astype(np.float32)

@@ -4,6 +4,41 @@ from types import SimpleNamespace
 from app.kag.embedding_service import _resolve_sbert_device
 from app.kag.embedding_service import EmbeddingService
 import numpy as np
+import pytest
+
+@pytest.mark.parametrize('batch', [False, True])
+def test_failed_transformer_is_not_reported_or_cached_as_semantic(batch):
+    class FailedModel:
+        device = 'cpu'
+        def encode(self, *_args, **_kwargs):
+            raise RuntimeError('controlled encoder failure')
+    service = EmbeddingService()
+    service._load_attempted = True
+    service.model = FailedModel()
+    vector = service.encode_batch(['actual text'])[0] if batch else service.encode('actual text')
+    assert service.get_model_version() == 'feature-hash-v2'
+    assert service.get_status()['mode'] == 'feature_hash_fallback'
+    assert np.array_equal(service._cache[service._cache_key('actual text')], vector)
+
+def test_failed_batch_does_not_mix_cached_transformer_and_hash_vectors():
+    from app.config import settings
+    class Model:
+        device = 'cpu'
+        fail = False
+        def encode(self, text, **_kwargs):
+            if self.fail:
+                raise RuntimeError('controlled batch failure')
+            return np.ones(settings.EMBEDDING_DIMENSION, dtype=np.float32)
+    service = EmbeddingService()
+    service._load_attempted = True
+    service.model = Model()
+    service.encode('cached text')
+    service.model.fail = True
+    vectors = service.encode_batch(['cached text', 'new text'])
+    fallback = EmbeddingService()
+    fallback._load_attempted = True
+    assert np.array_equal(vectors[0], fallback.encode('cached text'))
+    assert service.get_model_version() == 'feature-hash-v2'
 
 
 def test_cuda_request_falls_back_on_cpu_only_torch(monkeypatch):

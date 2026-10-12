@@ -5,6 +5,33 @@ from sqlalchemy.orm import Session
 from app.kag.scoring import _lightweight_candidate_courses, _extend_with_prerequisites, LARGE_CATALOG_RETRIEVAL_LIMIT
 
 
+def test_lo_and_candidates_are_reencoded_together_after_encoder_failure(monkeypatch):
+    import numpy as np
+    from app.config import settings
+    from app.kag.embedding_service import EmbeddingService
+    from app.kag import scoring
+
+    class Model:
+        device = 'cpu'
+
+        def encode(self, text, **kwargs):
+            if isinstance(text, list):
+                raise RuntimeError('candidate batch failure')
+            return np.ones(settings.EMBEDDING_DIMENSION, dtype=np.float32)
+
+    service = EmbeddingService()
+    service._load_attempted = True
+    service.model = Model()
+    previous_lo = service.encode('learning outcome')
+    monkeypatch.setattr(scoring, 'embedding_service', service)
+    lo_vector, candidates = scoring._encode_match_frontier('learning outcome', ['course text'])
+    fallback = EmbeddingService()
+    fallback._load_attempted = True
+    assert not np.array_equal(lo_vector, previous_lo)
+    assert np.array_equal(lo_vector, fallback.encode('learning outcome'))
+    assert np.array_equal(candidates[0], fallback.encode('course text'))
+
+
 def test_expert_prefetch_limits_materialized_rows_per_discipline_without_changing_evidence():
     from sqlalchemy import event
     from app.kag.scoring import _prefetch_epvo_expert_links

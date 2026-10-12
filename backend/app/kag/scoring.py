@@ -231,6 +231,12 @@ def _expert_candidate_rows(
     return [{"course_id": cid, "retrieval_score": score} for score, cid in ranked[:limit]]
 
 
+def _encode_match_frontier(lo_text: str, candidate_texts: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Encode both sides together so failover cannot mix feature spaces."""
+    vectors = embedding_service.encode_batch([lo_text, *candidate_texts])
+    return vectors[0], vectors[1:]
+
+
 def calculate_semantic_similarity(
     course_text: str,
     lo_text: str,
@@ -238,8 +244,8 @@ def calculate_semantic_similarity(
     lo_embedding: np.ndarray | None = None,
 ) -> float:
     """Cosine similarity between two text strings via the embedding model."""
-    course_emb = embedding_service.encode(course_text)
-    lo_emb = lo_embedding if lo_embedding is not None else embedding_service.encode(lo_text)
+    lo_emb, course_vectors = _encode_match_frontier(lo_text, [course_text])
+    course_emb = course_vectors[0]
     denom = np.linalg.norm(course_emb) * np.linalg.norm(lo_emb)
     if denom < 1e-9:
         return 0.0
@@ -735,7 +741,7 @@ def compute_all_matches(project_version_id: int, db: Session, progress_callback:
             progress_callback({"stage": "candidate_texts_ready", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(candidate_texts)})
             progress_callback({"stage": "embedding_start", "lo_index": index, "lo_total": total_los, "lo_code": lo.lo_code, "candidate_count": len(candidate_texts)})
         embedding_started = time.perf_counter()
-        candidate_embeddings = embedding_service.encode_batch(candidate_texts)
+        lo_embedding, candidate_embeddings = _encode_match_frontier(lo.lo_text, candidate_texts)
         if progress_callback:
             progress_callback({
                 "stage": "embedding",

@@ -816,3 +816,15 @@ Ruling: работа в существующей feature-ветке и теку�
 # 2026-10-12 — полный20 нового прогона
 
 system-20-labreview-20261012.json terminalpassed20/20, runner11744 завершён. Независимый structural/identity/hash audit CLI exit0,acceptedtrue,findings[],distinct20/structural20. Не дублировать20. Содержательная приёмка ещё не завершена: см.CONTENT_REVIEW_LABRUN_20261012_RU.md. Не переходитьк40 по одному internal/structuralpassing. Globalheavycapacity/concurrency/стоимость и livefilledmotion остаются открытыми; цель не закрыта.
+# 2026-10-13: резервный encoder — проверка честности
+
+Три RED регрессии в test_embedding_device.py подтвердили: ошибка encode оставляла
+маркировку SBERT, hash-вектор попадал в semantic cache, а batch смешивал старые
+semantic и новые hash-векторы. Исправлено переключение actual model в fallback,
+cache key после отказа и пересчёт всего batch. Все8 embedding tests GREEN;
+полный backend pytest завершён exit0 (2 skipped, dependency deprecation warnings).
+Затем RED→GREEN проверен LO-вектор, рассчитанный до отказа candidate batch:
+scoring теперь кодирует обе стороны сравнения одним batch, включая одиночное
+сравнение текстов. Все20 embedding/scoring frontier tests GREEN; полный backend
+повторно exit0 (2 skipped). Изменение пока не развёрнуто в live; это не завершение
+честного semantic/lexical coverage, description cache или содержательной приёмки.
