@@ -15,6 +15,13 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
     const [visible, setVisible] = useState(!document.hidden)
     const [inViewport, setInViewport] = useState(false)
     const panel = useRef(null)
+    const opener = useRef(null)
+    const expandButton = useRef(null)
+    const closePanel = () => {
+        setOpened(false)
+        setExpanded(false)
+        opener.current?.focus()
+    }
     const publishedJob = useRef(null)
     const { events, error, noJob, state: eventState, job: eventJob } = useBuildEvents(versionId, status?.job_id, opened)
     useEffect(() => {
@@ -69,18 +76,37 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
         if (!expanded || !opened) return
         const previousOverflow = document.body.style.overflow
         document.body.style.overflow = 'hidden'
-        const close = e => { if (e.key === 'Escape') setExpanded(false) }
+        const root = panel.current
+        const close = e => {
+            if (e.key === 'Escape') { e.preventDefault(); setExpanded(false); return }
+            if (e.key !== 'Tab') return
+            const controls = [...root.querySelectorAll('button, input, select, textarea, a[href], summary, [tabindex]')]
+                .filter(el => !el.disabled && el.tabIndex >= 0 && !el.closest('[hidden], [inert]')
+                    && !el.closest('details:not([open]) :not(summary)'))
+            const first = controls[0], last = controls.at(-1)
+            if (!first) { e.preventDefault(); root.focus(); return }
+            if (!root.contains(document.activeElement) || document.activeElement === root
+                || (e.shiftKey && document.activeElement === first)
+                || (!e.shiftKey && document.activeElement === last)) {
+                e.preventDefault()
+                ;(e.shiftKey ? last : first).focus()
+            }
+        }
         window.addEventListener('keydown', close)
         panel.current?.focus()
-        return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', close) }
+        return () => {
+            document.body.style.overflow = previousOverflow
+            window.removeEventListener('keydown', close)
+            if (expandButton.current?.isConnected) expandButton.current.focus()
+        }
     }, [expanded, opened])
     return <div className="build-map-wrapper">
-        <button className="btn btn-secondary" type="button" aria-expanded={opened} onClick={() => setOpened(v => !v)}>{t(opened ? 'build_map_close' : 'build_map_open')}</button>
-        {opened && <section ref={panel} tabIndex={-1} className={`build-map-panel${expanded ? ' is-expanded' : ''}${motion && visible && inViewport && !textOnly ? ' has-reveal' : ''}${animate ? ' has-motion' : ''}`} aria-label={t('build_map_open')}>
+        <button ref={opener} className="btn btn-secondary" type="button" aria-expanded={opened} onClick={() => opened ? closePanel() : setOpened(true)}>{t(opened ? 'build_map_close' : 'build_map_open')}</button>
+        {opened && <section ref={panel} tabIndex={-1} role={expanded ? 'dialog' : undefined} aria-modal={expanded ? true : undefined} className={`build-map-panel${expanded ? ' is-expanded' : ''}${motion && visible && inViewport && !textOnly ? ' has-reveal' : ''}${animate ? ' has-motion' : ''}`} aria-label={t('build_map_open')}>
             <div className="build-map-toolbar"><div className="build-map-heading"><h3>{t('build_map_lab')}</h3><p>{title}</p></div>
                 <label className="build-lab-motion"><input type="checkbox" checked={motion} disabled={textOnly} onChange={e => setMotion(e.target.checked)} /> {t('build_map_motion')}</label>
-                <button type="button" onClick={() => setExpanded(v => !v)}>{t(expanded ? 'build_map_restore' : 'build_map_expand')}</button>
-                <button type="button" onClick={() => { setOpened(false); setExpanded(false) }}>{t('build_map_close')}</button>
+                <button ref={expandButton} type="button" onClick={() => setExpanded(v => !v)}>{t(expanded ? 'build_map_restore' : 'build_map_expand')}</button>
+                <button type="button" onClick={closePanel}>{t('build_map_close')}</button>
             </div>
             <div className="build-map-facts" aria-live="polite">
                 <span><small>{t('build_map_candidates')}</small><strong>{candidate?.count ?? '—'}</strong></span>

@@ -6,6 +6,31 @@ import userEvent from '@testing-library/user-event'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
 
+it('traps fullscreen keyboard focus and restores it on escape and close', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'complete', events: [], next_cursor: 0, has_more: false } })
+    const user = userEvent.setup()
+    render(<BuildMapPanel versionId={3} status={{ state: 'complete', job_id: 'real' }} title="Programme" t={x => x} />)
+    const opener = screen.getByRole('button', { name: 'build_map_open' })
+    await user.click(opener)
+    const expand = screen.getByRole('button', { name: 'build_map_expand' })
+    await user.click(expand)
+    const dialog = screen.getByRole('dialog', { name: 'build_map_open' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    await user.tab()
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    await user.keyboard('{Escape}')
+    expect(expand).toHaveFocus()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(expand)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'build_map_close' }))
+    expect(opener).toHaveFocus()
+    vi.unstubAllGlobals()
+})
+
 it('shows passed gate marks only for a verified solution and does not imply publication', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     axios.get.mockResolvedValue({ data: { state: 'running', next_cursor: 1, has_more: false, events: [
