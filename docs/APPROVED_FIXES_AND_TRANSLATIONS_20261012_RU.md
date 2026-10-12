@@ -47,3 +47,9 @@ Luna Hegel01a1310d-744a-7382-86bb-3acccbc5e69b запущен на batch03,25tar
 ## Batch03: фактическое сохранение
 
 Hegel завершил25 переводов (13EN/12KK,21курс). Главный агент проверил исходные и переведённые тексты; перед импортом убрана завершающая запятая, недопустимая в strict JSON. Guarded apply: prepared25/updated25/skipped0,exit0. Snapshot .runtime/luna-translation-snapshot-20261012-03.json. Read-back:28EN+25KK=53 записи needs_review; courses57392, без создания дисциплин. Перевод26816 сохраняет общий исходный текст дизайна: предметный дефект исходника остаётся. Наличие машинного перевода не означает методическое утверждение. Hegel продолжает batch04 по актуальным sourcecopy строкам; новых массовых генераций не запускали.
+
+## Batch04 и разрешение полной очереди
+
+Пользователь прямо разрешил все недостающие переводы и коммиты/push. Код и отчёты опубликованы f1e7b3d; frontend59/59, backend fullsuite exit0 и Vite build exit0 проверены перед публикацией. start.ps1 и локальные данные не включались.
+
+Batch04:25title+description переводов сверены с исходными текстами; guarded apply prepared25/updated25/skipped0 exit0, snapshot .runtime/luna-translation-snapshot-20261012-04.json. PostgreSQL read-back40EN+38KK=78needs_review, courses57392unchanged. Hegel продолжает batch05 на50 актуальных языковых записей с расширением предметной выборки; полнота каталога не заявляется. A/B/C разные objectives ещё не реализованы: joint_solver пока минимизирует общую отрицательную utility с двухфазным предпочтением покрытия.
