@@ -319,3 +319,13 @@ exclusive .runtime/luna-sourcecopy-snapshot-20261013-07.json, courses57392 uncha
 soil-adjusted index необоснованно уточняет почвенно-вегетационный индекс.
 Два sourceholds26836 содержат склейки терминов; пока не применены. Все записанные
 переводы machine needs_review, защищённые поля/исходники сохранены.
+
+Correction08 полностью прочитан:26834EN сохраняет различие ЦММ/ЦМР буквальными
+терминами и исходными сокращениями;26841EN/KK soil-vegetation без выдуманного
+soil-adjusted. Updated3/readbacks3; exclusive snapshot08. Sourcecopy07 теперь
+22/26applied,26829EN/KK неоднозначное загрязнение и26836EN/KK склейки held.
+Live PID registry изменён внешним запуском: wrappers21252/10512 и frontend2464,
+actual backend8704/worker8784, CreationDate13Oct10:47:08/19 local. Старые PID
+не действуют. DB queued/running0 при проверке; этот агент сервисы не перезапускал.
+Загруженная версия этим наблюдением не подтверждена. Дизайны baseline/model
+запрошены для письменной проверки, цели/разрешённые переводы повторно не согласуем.
