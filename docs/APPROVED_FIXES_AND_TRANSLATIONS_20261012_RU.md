@@ -216,6 +216,21 @@ Snapshot epvo-recovery-revised-snapshot-20261013-03 до записи. Recovery5
 4holds повреждённых source (26761en/kk,26771en/kk), оставшиеся39 ещё не обработаны.
 Следующие20 поручены Luna в revised04, безDBwrites; никакой humanapproval не заявлен.
 
+Revised04 полностью прочитан main:19/20 применены guarded/exclusive snapshot04,
+exact committed readback19.26809kk удержан: airframe/планер был сужен до фюзеляжа;
+агенту поручено отдельное исправление без перезаписи artifact04. Recovery76/100,
+4sourceholds+1translationhold, ещё19 необработанных пар. Luna готовит исправление
+26809kk и remaining19 batch05. Source заявления о prerequisite26803 сохранены
+только текстом; graph edges не создавались.
+
+Свежий полный SQL inventory: automaticdraft EN22487/KK22489/RU22632; все эти
+строки exactsourcecopies (title+description), emptytitles0. Это не число доказанно
+missingtranslations: язык исходника/международныеназвания требуют классификации.
+MachineLuna needs_review EN117/KK121/RU1. Для EN/KK countdistinct fullsourcepair
+равен22487/22489: exactfulltext reuse не сокращает этот остаток. Текущий100pair
+recovery не представляет весь каталог; не объявлять завершение всехпереводов после100.
+НовыеCourse не создавались. Проверки readonly, никаких masswrites/modelruns.
+
 ### Пользовательский список: пакет04 применён
 
 Полностью прочитаны16карточек source+30KK/EN targets, включая последнюю

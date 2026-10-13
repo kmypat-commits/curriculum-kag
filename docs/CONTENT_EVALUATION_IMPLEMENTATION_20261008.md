@@ -863,3 +863,11 @@ non_semantic_embedding. Это реальный CLI контроль, не UIjob
 exit0,2skipped; live пока1.8, реальные freshконтроли1.9 ещё не выполнены.
 Baselinecapture для B/C по проверке моделей/API/UI отсутствует; последнюю A
 нельзя подменять за исходный вузовский план. Нужен подтверждённый immutable source.
+
+Legacy feature-hash guard: регрессионный тест воспроизвёл semantic_score0.9
+для явно указанной feature-hash модели без similarity_kind. Проверка известных
+embedding_model/model_name/model_version теперь возвращает0 для такого сигнала;
+неизвестные старые и ручные оценки сохраняют совместимость. История не переписана.
+Полная backend suite exit0,2 opt-in skipped; deprecation warnings сохранены.
+Последний Luna пакет05 (19 пар) и исправление26809KK подготовлены, не применены:
+проверка содержания/guarded snapshot apply остаются следующим шагом.

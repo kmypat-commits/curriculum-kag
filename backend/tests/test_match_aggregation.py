@@ -11,6 +11,15 @@ def test_lexical_hash_similarity_is_not_professional_semantic_evidence():
     assert semantic_evidence_score(match) == 0.0
 
 
+def test_legacy_explicit_hash_model_is_not_semantic_without_kind():
+    for match in (
+        SimpleNamespace(score=.9, evidence_json={'semantic_score': .9, 'embedding_model': 'feature-hash-v2'}),
+        SimpleNamespace(score=.9, evidence_json={}, model_name='feature-hash-v2'),
+        SimpleNamespace(score=.9, evidence_json={}, model_version='feature-hash-v2'),
+    ):
+        assert semantic_evidence_score(match) == 0.0
+
+
 class _Query:
     def __init__(self, rows):
         self.rows = rows
