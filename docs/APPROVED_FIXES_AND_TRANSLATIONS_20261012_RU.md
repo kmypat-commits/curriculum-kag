@@ -329,3 +329,11 @@ actual backend8704/worker8784, CreationDate13Oct10:47:08/19 local. Старые 
 не действуют. DB queued/running0 при проверке; этот агент сервисы не перезапускал.
 Загруженная версия этим наблюдением не подтверждена. Дизайны baseline/model
 запрошены для письменной проверки, цели/разрешённые переводы повторно не согласуем.
+
+Sourcecopy09 main полностью перечитал длинные тексты boundedchunks:24translations
+guarded applied, exactcommittedreadbacks24, exclusive snapshot09; courses57392
+unchanged. Магистратура, отрасли и пометка26852 «на русском языке» сохранены.
+26848EN/KK held: грамматическая неоднозначность цели «при разработке, анализ»;
+ничего не додумывалось. Машинные записи needs_review, не экспертное одобрение.
+Отдельно: baseline CSV/XLSX design прямо approved, см.ABC_STRATEGY_CONTRACT;
+обучаемая модель ещё ждёт решения после объяснения деталей.
