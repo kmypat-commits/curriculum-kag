@@ -294,3 +294,11 @@ terminalpassed1/1, actualrunner14688 завершён. Report diag-10251-abc-a-2
 fileSHA и canonicalSHA совпадают с frozenmanifest, canonicalSHA с report — true.
 Содержательно46courses/16needs_review/core_definition_missingtrue: это не экспертная
 приёмка и не допуск40. Старый неверный helperoutput сохранён, не подменён.
+
+13октября: последний recovery batch05 полностью прочитан;16пар и исправленный
+26809KK применены guarded prepare/apply с exclusive snapshot
+.runtime/epvo-recovery-final-reviewed-snapshot-20261013.json. Exact committed
+readback17; courses57392 неизменны. Recovery100 теперь93applied,4sourceholds,
+3translationholds:26822EN термин вепольного анализа,26828EN/KK подмена
+«активности» на «эффективность». Эти3 не применены; все переводы needs_review,
+не предметное одобрение. Исходные артефакты и прежние snapshots сохранены.
