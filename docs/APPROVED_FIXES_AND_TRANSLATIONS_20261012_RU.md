@@ -310,3 +310,12 @@ readbacks3; exclusive snapshot .runtime/epvo-recovery-holds-snapshot-20261013-06
 Теперь96/100applied,4повреждённых/неоднозначных исходных записи остаются held.
 Courses57392 unchanged. Это завершение данного пакета, НЕ всех переводов каталога
 и НЕ human approval; source/raw и предыдущие артефакты не менялись.
+
+Sourcecopy07: текущий readonly export26, Luna24translations+2sourceholds26836.
+Main полностью прочитал26source/target;19 guarded applied/readback19,
+exclusive .runtime/luna-sourcecopy-snapshot-20261013-07.json, courses57392 unchanged.
+Пять reviewholds:26829EN/KK неоднозначное «полевое загрязнение» (KK добавляет
+егістік);26834EN различие ЦММ/ЦМР требует точной терминологии;26841EN/KK
+soil-adjusted index необоснованно уточняет почвенно-вегетационный индекс.
+Два sourceholds26836 содержат склейки терминов; пока не применены. Все записанные
+переводы machine needs_review, защищённые поля/исходники сохранены.
