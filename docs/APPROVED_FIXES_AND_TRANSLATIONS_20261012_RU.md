@@ -302,3 +302,11 @@ readback17; courses57392 неизменны. Recovery100 теперь93applied,4
 3translationholds:26822EN термин вепольного анализа,26828EN/KK подмена
 «активности» на «эффективность». Эти3 не применены; все переводы needs_review,
 не предметное одобрение. Исходные артефакты и прежние snapshots сохранены.
+
+Recovery correction06: полностью прочитаны3source/target, термин26822EN исправлен
+на substance-field analysis;26828EN/KK сохраняет activity/белсенділік с явным
+machine review_note о неоднозначности исходника. Guarded updated3, exact committed
+readbacks3; exclusive snapshot .runtime/epvo-recovery-holds-snapshot-20261013-06.json.
+Теперь96/100applied,4повреждённых/неоднозначных исходных записи остаются held.
+Courses57392 unchanged. Это завершение данного пакета, НЕ всех переводов каталога
+и НЕ human approval; source/raw и предыдущие артефакты не менялись.
