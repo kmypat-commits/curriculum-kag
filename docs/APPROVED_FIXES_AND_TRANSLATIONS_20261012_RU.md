@@ -337,3 +337,8 @@ unchanged. Магистратура, отрасли и пометка26852 «н�
 ничего не додумывалось. Машинные записи needs_review, не экспертное одобрение.
 Отдельно: baseline CSV/XLSX design прямо approved, см.ABC_STRATEGY_CONTRACT;
 обучаемая модель ещё ждёт решения после объяснения деталей.
+
+Sourcecopy10: main прочитал все13source и26target без итоговой усечки после
+bounded повторов.24guarded applied/readbacks24,exclusive snapshot10,courses57392.
+26869EN/KK held: потеря указания магистратуры из исходника; остальные темы,
+программные бренды и уровни сохранены. Статус needs_review, не human approval.
