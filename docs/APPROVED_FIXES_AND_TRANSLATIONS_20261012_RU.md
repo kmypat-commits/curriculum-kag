@@ -342,3 +342,8 @@ Sourcecopy10: main прочитал все13source и26target без итого�
 bounded повторов.24guarded applied/readbacks24,exclusive snapshot10,courses57392.
 26869EN/KK held: потеря указания магистратуры из исходника; остальные темы,
 программные бренды и уровни сохранены. Статус needs_review, не human approval.
+
+Correction11:26869EN/KK полные source/targets сверены, master's students/
+магистранттар восстановлено. Guarded updated2, exactcommittedreadbacks2,
+exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
+Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
