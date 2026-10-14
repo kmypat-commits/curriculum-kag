@@ -31,7 +31,8 @@
 
 Create backend/app/services/university_baseline_import.py and backend/tests/test_university_baseline_import.py.
 
-Interfaces: parse_source(data:bytes, filename:str)->list[dict]; validate_mapping(rows:list[dict], mappings:dict[int,int], catalogue:dict[int,dict])->list[dict]; canonical_hash(rows:list[dict])->str.
+Interfaces: parse_source(data:bytes, filename:str, columns:dict[str,str])->list[dict]; validate_mapping(rows:list[dict], mappings:dict[int,int], catalogue:dict[int,dict])->list[dict]; canonical_hash(rows:list[dict])->str.
+`columns` explicitly maps code/title/credits to unique source header names; reject absent, duplicate or unknown headers before parsing rows. CSV/XLSX share this contract; never infer a mapping silently. Reject XLSX archives with more than100MiB total uncompressed members or more than1000 members before openpyxl loads them, in addition to the10MiB upload limit. Test compressed expansion separately from upload size.
 Rows carry source_row, original_code, original_title, credits. Resolved rows additionally carry course_id and content_sha256. Repeated source lines are retained in provenance; solver IDs are deduplicated only after confirmation.
 
 - [ ] Write RED cases for UTF8 CSV/XLSX equivalent values, missing columns, nonpositive/nonfinite credits, empty file, >10MiB, >5000rows, formulas, duplicate row mapping, nonexistent IDs and unresolved mappings.
@@ -72,7 +73,7 @@ Routes under /planner/{project_version_id}/baseline: POST/import (file+column ma
 - [ ] RED integration tests: B/C missing baseline rejects before enqueue/publication; captured revision stays identical across retry; A ignores no implicit baseline; required nonbaseline IDs stay mandatory.
 ```python
 def test_b_does_not_enqueue_without_baseline(owner_client, version_id):
-    response = owner_client.post(f'/planner/{version_id}/build', json={'variant_type': 'B'})
+    response = owner_client.post(f'/planner/{version_id}/build', json={'variants': ['B']})
     assert response.status_code == 409
     assert response.json()['detail']['code'] == 'baseline_missing'
 ```
@@ -98,5 +99,12 @@ it('blocks confirmation while rows are unresolved', () => {
 - [ ] Commit/push code and factual evidence; mark each task only after its checks are verified.
 
 ## Handoff gate
+
+15October self-review against actual source: build request field is `variants`,
+not `variant_type` (backend/app/schemas/planner.py); corrected the rejection test.
+Parser signature now carries the required explicit column mapping. Added bounded
+uncompressed XLSX archive limits so compressed uploads cannot bypass the size gate.
+Migration parent verified against20260914_0011_planner_build_drafts.py. These are
+plan corrections only, not implemented or tested product features.
 
 Design is approved. This implementation plan requires review before execution; no model-training approval is implied. Execute locally task-by-task with TDD and an independent final code review. The overall thread goal remains open after this subsystem ships.
