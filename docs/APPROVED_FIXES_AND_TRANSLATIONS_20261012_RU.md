@@ -348,6 +348,14 @@ Correction11:26869EN/KK полные source/targets сверены, master's stu
 exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
 Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
 
+15 октября, sourcecopy14: полностью сверены13исходников и24перевода,
+correction15 прочитан отдельно после усечённого первого вывода.26887 сохраняет
+электрическую энергию и неполный исходный пункт с review_note. Guarded updated22,
+exact committed readbacks22, courses57392 unchanged. Exclusive snapshot:
+.runtime/luna-sourcecopy-snapshot-20261015-14.json. Четыре строки held:
+26894EN/KK неоднозначное «нанодротики» не заменяем nanowires;26898EN/KK
+оборванный пункт НИР. Статус machine needs_review, не human approval.
+
 15 октября: после восстановления Docker пакет sourcecopy12 с correction13
 применён: updated26, exact committed readbacks26, courses57392 unchanged.
 Все26 source/targets прочитаны; исправлены KK радиус действия робота26875
