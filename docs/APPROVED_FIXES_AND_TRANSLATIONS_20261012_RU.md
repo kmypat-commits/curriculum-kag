@@ -348,6 +348,15 @@ Correction11:26869EN/KK полные source/targets сверены, master's stu
 exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
 Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
 
+15 октября, sourcecopy18+corr19/20/21: все исходники и target тексты прочитаны;
+guarded updated24, exact committed readbacks24, courses57392 unchanged.
+Exclusive snapshot .runtime/luna-sourcecopy-snapshot-20261015-18.json.
+26927 опечатка названия интерпретирована по явному тексту описания, source
+не изменён; review_note correction19 сохранён при замене KK предложения21.
+26920EN scientific вместо необоснованного basic.26929EN/KK остаются held:
+неоднозначное «Квалификация объектов управления» не исправлялось по догадке.
+Все записи machine needs_review, не human/академическое одобрение.
+
 15 октября, sourcecopy17: все12пар source/title/EN/KK прочитаны полностью;
 guarded updated24, exact committed readbacks24, courses57392 unchanged.
 Exclusive snapshot .runtime/luna-sourcecopy-snapshot-20261015-17.json.
