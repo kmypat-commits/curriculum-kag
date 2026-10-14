@@ -348,6 +348,15 @@ Correction11:26869EN/KK полные source/targets сверены, master's stu
 exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
 Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
 
+15 октября, sourcecopy22+corr23:24 guarded applied,24 exact committed readbacks,
+courses57392 unchanged; exclusive .runtime/luna-sourcecopy-snapshot-20261015-22.json.
+Все source/targets прочитаны полностью; EN stability/master's students исправлены.
+26933EN/KK held: неоднозначные категории параллельных/последовательных цепей.
+Первый apply остановлен доDB из-за trailing comma в holds исходного JSON22,
+которую PowerShell принимал. Оригинал сохранён как22.invalid-json, удалена только
+запятая; Python json.tool RED→GREEN, затем exactsource guarded apply/readback.
+Переводы machine needs_review, не предметное одобрение. Каталог не завершён.
+
 15 октября, sourcecopy18+corr19/20/21: все исходники и target тексты прочитаны;
 guarded updated24, exact committed readbacks24, courses57392 unchanged.
 Exclusive snapshot .runtime/luna-sourcecopy-snapshot-20261015-18.json.
