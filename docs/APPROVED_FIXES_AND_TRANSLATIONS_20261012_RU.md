@@ -348,6 +348,13 @@ Correction11:26869EN/KK полные source/targets сверены, master's stu
 exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
 Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
 
+15 октября, sourcecopy17: все12пар source/title/EN/KK прочитаны полностью;
+guarded updated24, exact committed readbacks24, courses57392 unchanged.
+Exclusive snapshot .runtime/luna-sourcecopy-snapshot-20261015-17.json.
+Две26910EN/KK held: повреждённая конструкция «рассмотрены подготовка специалистов»;
+предполагаемый смысл не подставлялся. Все записанные переводы machine needs_review,
+не академическое или human approval. Полный каталог ещё не завершён.
+
 15 октября, sourcecopy14: полностью сверены13исходников и24перевода,
 correction15 прочитан отдельно после усечённого первого вывода.26887 сохраняет
 электрическую энергию и неполный исходный пункт с review_note. Guarded updated22,
