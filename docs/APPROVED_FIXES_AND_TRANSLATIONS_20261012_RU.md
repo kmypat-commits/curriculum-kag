@@ -347,3 +347,12 @@ Correction11:26869EN/KK полные source/targets сверены, master's stu
 магистранттар восстановлено. Guarded updated2, exactcommittedreadbacks2,
 exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
 Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
+
+15 октября: после восстановления Docker пакет sourcecopy12 с correction13
+применён: updated26, exact committed readbacks26, courses57392 unchanged.
+Все26 source/targets прочитаны; исправлены KK радиус действия робота26875
+и сохранена неполнота исходного пункта26886 без выдуманного глагола.
+Exclusive snapshot: .runtime/luna-sourcecopy-snapshot-20261014-12.json,
+с исходными значениями, source hashes и hashes обоих translation artifacts.
+Manual/verified защищены guarded importer; записи machine needs_review,
+не human/академическое одобрение. Это не завершение всех переводов каталога.
