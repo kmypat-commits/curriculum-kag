@@ -412,3 +412,9 @@ snapshot: .runtime/luna-sourcecopy-snapshot-20261015-28.json. Две строк�
 специализированная терминология требует отдельного подтверждения; догадка
 не применялась. Manual/verified защищены, записи machine needs_review, не
 human/академическое одобрение. Это завершение пакета, не всего каталога.
+
+15 октября, sourcecopy30: 24 guarded updates, 2 holds, exact committed
+readbacks24, courses57392 unchanged. Exclusive snapshot:
+.runtime/luna-sourcecopy-snapshot-20261015-30.json. Две пары дисциплины27005
+held из-за повреждённого исходного слова «кожу¬хов»; описание не угадывалось.
+Manual/verified защищены; machine needs_review не является human approval.
