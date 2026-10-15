@@ -404,3 +404,11 @@ Exclusive snapshot: .runtime/luna-sourcecopy-snapshot-20261014-12.json,
 с исходными значениями, source hashes и hashes обоих translation artifacts.
 Manual/verified защищены guarded importer; записи machine needs_review,
 не human/академическое одобрение. Это не завершение всех переводов каталога.
+
+15 октября, sourcecopy28: все26 source/targets прочитаны полностью; guarded
+updated24, exact committed readbacks24, courses57392 unchanged. Exclusive
+snapshot: .runtime/luna-sourcecopy-snapshot-20261015-28.json. Две строки
+26989EN/KK held: термин «грубость» переведён как roughness/дөрекілік, но
+специализированная терминология требует отдельного подтверждения; догадка
+не применялась. Manual/verified защищены, записи machine needs_review, не
+human/академическое одобрение. Это завершение пакета, не всего каталога.
