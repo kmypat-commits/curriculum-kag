@@ -348,6 +348,13 @@ Correction11:26869EN/KK полные source/targets сверены, master's stu
 exclusive snapshot11. Sourcecopy10 теперь26/26applied, courses57392 неизменны.
 Это полнота данного пакета, не всего каталога. Машинный статус needs_review.
 
+15 октября, sourcecopy26+corr27: все13пар source/title/ENKK прочитаны;
+guarded updated26, exact committed readbacks26, courses57392 unchanged.
+Exclusive snapshot .runtime/luna-sourcecopy-snapshot-20261015-26.json.
+26968KK локализация робота исправлена с изоляции на определение положения.
+Manual/verified защищены; все записи machine needs_review, не human approval.
+Это завершение пакета, не переводов всего каталога и не общей цели.
+
 15 октября, sourcecopy24+corr25: все source/targets полностью прочитаны,
 guarded updated24, exact committed readbacks24, courses57392 unchanged.
 Exclusive snapshot .runtime/luna-sourcecopy-snapshot-20261015-24.json.
