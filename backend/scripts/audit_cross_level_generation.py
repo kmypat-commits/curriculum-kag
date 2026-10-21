@@ -55,7 +55,7 @@ from app.planner.scheduler import (
     _has_foreign_professional_title,
     build_curriculum_plan,
 )
-from app.services.epvo_repository import approve_epvo_candidates
+from app.services.epvo_repository import approve_epvo_candidates, fixed_control_catalogue
 
 
 PROFESSIONAL_LOS = [
@@ -317,6 +317,7 @@ def main() -> None:
     capacity_scope = ExitStack()
     try:
         capacity_scope.enter_context(generation_slot(db.get_bind()))
+        capacity_scope.enter_context(fixed_control_catalogue(db))
         project = Project(
             title=project_title,
             domain1=domain1,

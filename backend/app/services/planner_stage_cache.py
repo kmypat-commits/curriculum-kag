@@ -23,7 +23,7 @@ from app.models.epvo import (
 from app.models.project import ProjectVersion
 
 
-EPVO_CACHE_VERSION = "epvo-approval-v2-scoped"
+EPVO_CACHE_VERSION = "epvo-approval-v3-existing-only"
 SCORING_CACHE_VERSION = "course-lo-scoring-v1"
 EPVO_CACHE_ACTION = "cache_epvo_repository"
 SCORING_CACHE_ACTION = "cache_course_lo_matches"

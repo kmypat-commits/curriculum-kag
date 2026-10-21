@@ -9,12 +9,27 @@ primary direction/group -> domain1, secondary direction/group -> domain2.
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
 
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, cast, or_, event
 
 from app.models.course import Course, CourseChunk
 from app.models.epvo import EpvoDisciplineNormalized
 from app.services.language import normalize_language
+
+
+@contextmanager
+def fixed_control_catalogue(db):
+    """Disposable controls must fail on missing courses instead of creating them."""
+    def reject_course_creation(session, _context, _instances):
+        for row in session.new:
+            if isinstance(row, Course):
+                raise RuntimeError(f'control_catalogue_missing_course: {row.course_id}')
+    event.listen(db, 'before_flush', reject_course_creation)
+    try:
+        yield
+    finally:
+        event.remove(db, 'before_flush', reject_course_creation)
 
 
 def _key(value: str | None) -> str:
@@ -138,7 +153,12 @@ def epvo_row_is_relevant(row: EpvoDisciplineNormalized, project_version, group_c
     return epvo_row_relevance_score(row, project_version, group_code, direction_code) >= threshold
 
 
-def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
+def approve_epvo_candidates(project_version, db, limit: int = 2000, *, allow_create: bool = False) -> dict:
+    """Link existing candidates; creation requires an explicit import action.
+
+    Generation and disposable acceptance controls share this entry point.
+    Neither may grow the global catalogue as a side effect of a build.
+    """
     constraints = project_version.project.constraints_json or {}
     primary_group = str(constraints.get("group_code") or "")
     primary_direction = str(constraints.get("direction_code") or "")
@@ -264,6 +284,8 @@ def approve_epvo_candidates(project_version, db, limit: int = 2000) -> dict:
 
         course = by_code.get(f"EPVO-{row.id}") or by_title.get(_key(title)) or by_title.get(_key(row.canonical_title))
         if course is None:
+            if not allow_create:
+                continue
             credits = int(round(float(row.typical_credits or 5)))
             credits = min(10, max(2, credits))
             suffix = "kk" if language in {"kk", "kz"} else language
