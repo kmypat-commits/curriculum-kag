@@ -31,6 +31,7 @@ from app.planner.scheduler_domain_rules import has_foreign_professional_title
 from app.planner.variant_scope import build_epvo_scope_index
 from app.planner.verifier import LOAD_TOLERANCE, MATCH_THRESHOLD, REAL_COURSE_LO_THRESHOLD, TOTAL_CREDIT_TOLERANCE
 from app.services.epvo_repository import epvo_row_matches_education_level
+from app.planner.content_evaluation import _terms
 
 
 def prioritize_required_seeds(ranked_ids, required_ids, *, cap):
@@ -59,6 +60,31 @@ def reserve_preferred_seeds(block_candidates, ranking, *, budget):
             if len(chosen) >= budget:
                 break
     return chosen
+
+
+def profile_advisory_seed_ids(ranked_ids, titles, profile_title, ranking, *, budget):
+    """Reserve bounded profile-title candidates before the generic frontier cap."""
+    profile_terms = _terms(profile_title)
+    if any(term.startswith(("дерево", "древес", "мебел", "wood", "furnit", "timber")) for term in profile_terms):
+        profile_terms |= _terms("древесина деревообработка мебель лесопиление пиломатериалы woodworking furniture timber")
+    if not profile_terms:
+        return []
+    scored = []
+    for course_id in ranked_ids:
+        course_terms = _terms(titles.get(course_id, ""))
+        overlap = sum(
+            1 for course_term in course_terms
+            if any(
+                course_term == profile_term
+                or course_term.startswith(profile_term[:5])
+                or profile_term.startswith(course_term[:5])
+                for profile_term in profile_terms
+            )
+        )
+        if overlap:
+            scored.append((overlap, float(ranking.get(course_id, 0.0)), course_id))
+    scored.sort(key=lambda row: (-row[0], -row[1], row[2]))
+    return [course_id for _overlap, _score, course_id in scored[:max(0, budget)]]
 
 
 def lo_pipeline_counts(
@@ -291,9 +317,19 @@ def build_joint_frontier(
     preferred_seed_ids = reserve_preferred_seeds(
         preferred_candidates, ranking, budget=max(1, limit // 2),
     ) if preferred_blocks else []
+    candidate_titles = {
+        int(course_id): str(title or "")
+        for course_id, title in db.query(Course.id, Course.title).filter(
+            Course.id.in_(tuple(ranking) or (-1,))
+        ).all()
+    }
+    profile_seed_ids = profile_advisory_seed_ids(
+        ranking, candidate_titles, version.project.title, ranking,
+        budget=max(1, limit // 2),
+    )
     seed_cap = max(limit * 4, limit + len(professional))
     ranked_ids, omitted_seed_count = prioritize_required_seeds(
-        [*preferred_seed_ids, *ranked_ids], methodist_required_ids | block_seed_ids,
+        [*preferred_seed_ids, *profile_seed_ids, *ranked_ids], methodist_required_ids | block_seed_ids,
         cap=seed_cap,
     )
 

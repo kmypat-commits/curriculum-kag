@@ -9,6 +9,19 @@ def test_required_seed_precedes_higher_ranked_electives_without_losing_it_to_cap
     assert omitted == 1
 
 
+def test_profile_advisory_seeds_are_reserved_before_generic_cap():
+    from app.planner.joint_frontier import profile_advisory_seed_ids
+
+    ids = profile_advisory_seed_ids(
+        [1, 2, 3],
+        {1: "Общие основы", 2: "Проектирование мебели", 3: "Экономика"},
+        "Проектирование изделий из древесины",
+        {1: .99, 2: .4, 3: .98},
+        budget=1,
+    )
+    assert ids == [2]
+
+
 def test_preferred_seeds_share_a_bounded_budget_across_profile_blocks():
     from app.planner.joint_frontier import reserve_preferred_seeds
 
