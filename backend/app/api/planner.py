@@ -17,6 +17,7 @@ from app.api.planner_state import plan_build_status as _plan_build_status
 from app.api.planner_state import set_build_status as _set_build_status
 from app.api.planner_syllabus import router as syllabus_router
 from app.api.planner_content import router as content_router
+from app.api.planner_baseline import router as baseline_router
 from app.services.access import require_project_version_access
 
 
@@ -28,6 +29,7 @@ router.include_router(coverage_router)
 router.include_router(replacements_router)
 router.include_router(course_replacements_router)
 router.include_router(content_router)
+router.include_router(baseline_router)
 
 
 __all__ = ["router", "_plan_build_status", "_set_build_status"]
