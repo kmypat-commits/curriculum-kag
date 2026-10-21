@@ -53,7 +53,18 @@ export default function ContentEvaluationPanel({ versionId, planId, t, mode = 's
                     <p>{t(`content_role_${course.role}`)} · ID {course.course_id}</p>
                     {course.evidence.map((e, i) => <blockquote key={i}><p>{e.excerpt}</p><cite>{e.source_reference} · {e.source_field}</cite></blockquote>)}
                 </details>)}</div>
-                {report.duplicate_groups.map((group, i) => <p key={i}>{t('content_possible_duplicates')}: {group.course_ids.join(', ')}</p>)}
+                {report.duplicate_groups.map((group, i) => <p key={i}>
+                    {t('content_possible_duplicates')}: {group.course_ids.join(', ')}
+                    {group.reason && <> · {t('content_duplicate_reason')}: {group.reason}</>}
+                    {group.similarity != null && <> · {t('content_duplicate_similarity')}: {group.similarity}</>}
+                    {group.embedding_model && <> · {t('content_duplicate_model')}: {group.embedding_model}</>}
+                </p>)}
+                {!!report.embedding_findings?.length && <div className="content-evaluation-embedding-findings">
+                    <h4>{t('content_embedding_findings')}</h4>
+                    <ul>{report.embedding_findings.map((item, i) => <li key={`${item.course_id}-${i}`}>
+                        ID {item.course_id} · {item.reason}{item.model && <> · {item.model}</>}
+                    </li>)}</ul>
+                </div>}
                 {report.sequence_findings.map((item, i) => <p key={i}>{t(`content_sequence_${item.reason}`)}: ID {item.course_id} → ID {item.prerequisite_id}</p>)}
                 <small>{report.evaluator_version}</small>
             </>}

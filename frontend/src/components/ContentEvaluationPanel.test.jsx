@@ -31,3 +31,22 @@ it('discards an old plan response after navigation to another plan', async () =>
     expect(screen.queryByText('OLD')).not.toBeInTheDocument()
     expect(axios.get).toHaveBeenLastCalledWith('/api/planner/4/content-evaluation', expect.objectContaining({params: {plan_id: 10}}))
 })
+
+it('shows evidence diagnostics needed for substantive review', async () => {
+    axios.get.mockReset().mockResolvedValue({data: {report: {
+        indicators: {reviewed_courses: 1},
+        core_coverage: [],
+        courses: [],
+        duplicate_groups: [{course_ids: [11, 12], reason: 'similar_content_embedding', similarity: 0.9471, embedding_model: 'model-v1'}],
+        sequence_findings: [],
+        embedding_findings: [{course_id: 11, reason: 'non_semantic_embedding', model: 'feature-hash-v1'}],
+        evaluator_version: 'v1'
+    }}})
+    render(<ContentEvaluationPanel versionId={3} planId={9} t={x => x} />)
+    fireEvent.click(screen.getByRole('button', {name: 'content_evaluation_open'}))
+    await screen.findAllByText((_, node) => node?.textContent?.includes('similar_content_embedding'))
+    expect(screen.getByText(/0\.9471/)).toBeInTheDocument()
+    expect(screen.getByText(/model-v1/)).toBeInTheDocument()
+    expect(screen.getByText(/non_semantic_embedding/)).toBeInTheDocument()
+    expect(screen.getByText(/feature-hash-v1/)).toBeInTheDocument()
+})

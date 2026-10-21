@@ -555,6 +555,10 @@ const contentAndMapCopy = {
     content_indicator_duplicate_groups: ['Возможные группы дублей', 'Мүмкін қайталану топтары', 'Possible duplicate groups'],
     content_indicator_sequence_findings: ['Замечания к последовательности', 'Реттілікке ескертулер', 'Sequence findings'],
     content_possible_duplicates: ['Проверьте эквивалентность дисциплин', 'Пәндердің баламалылығын тексеріңіз', 'Review course equivalence'],
+    content_embedding_findings: ['Проблемы семантических признаков', 'Семантикалық белгілер мәселелері', 'Embedding findings'],
+    content_duplicate_reason: ['Причина', 'Себеп', 'Reason'],
+    content_duplicate_similarity: ['Сходство', 'Ұқсастық', 'Similarity'],
+    content_duplicate_model: ['Модель', 'Модель', 'Model'],
     content_sequence_missing_prerequisite: ['Не найден пререквизит', 'Пререквизит табылмады', 'Missing prerequisite'],
     content_sequence_prerequisite_order: ['Пререквизит должен предшествовать дисциплине', 'Пререквизит пәннен бұрын болуы керек', 'Prerequisite must precede the course'],
 }
