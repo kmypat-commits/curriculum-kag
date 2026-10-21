@@ -169,10 +169,12 @@ def attempt_output_path(output: Path, cohort_index: int, attempt_id: str) -> Pat
     return directory / f"case-{cohort_index:02d}-{attempt_id}.json"
 
 
-def is_retryable_infrastructure_failure(returncode: int | None, stderr: str, timed_out: bool = False) -> bool:
+def is_retryable_infrastructure_failure(returncode: int | None, stderr: str, timed_out: bool = False, *, failure_details: dict | None = None) -> bool:
     """Retry known transient infrastructure faults, never a content rejection."""
     if timed_out:
         return True
+    if (failure_details or {}).get("status") == "baseline_missing":
+        return False
     if returncode in (None, 0):
         return False
     # The isolated generation CLI reserves EX_TEMPFAIL for capacity contention.
@@ -554,7 +556,10 @@ def main() -> int:
                 attempts.append(attempt_record)
                 if report is not None:
                     break
-                if not is_retryable_infrastructure_failure(completed.returncode, completed.stderr, timed_out=timed_out):
+                if not is_retryable_infrastructure_failure(
+                    completed.returncode, completed.stderr, timed_out=timed_out,
+                    failure_details=failed_child_details(child_output),
+                ):
                     break
             if report is None:
                 report = {

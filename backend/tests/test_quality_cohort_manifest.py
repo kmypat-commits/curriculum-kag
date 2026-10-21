@@ -113,6 +113,13 @@ def test_capacity_busy_exit_is_retryable_without_stderr():
     assert is_retryable_infrastructure_failure(1, "capacity_busy") is False
 
 
+def test_completed_baseline_rejection_is_not_retried_after_model_loading():
+    assert not is_retryable_infrastructure_failure(
+        1, 'Loading weights: 100%',
+        failure_details={'status': 'baseline_missing', 'passed': False},
+    )
+
+
 def test_run_lock_rejects_a_live_owner_and_recovers_a_stale_owner(tmp_path: Path):
     path = tmp_path / "quality.json.lock"
     owner = process_identity(os.getpid()) or {"pid": os.getpid()}
