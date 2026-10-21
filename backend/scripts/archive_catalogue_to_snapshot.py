@@ -143,6 +143,20 @@ def archive(connection, plan, schema):
         connection.execute(text(f'CREATE TABLE {schema}.{table} AS SELECT * FROM public.{table} WHERE {condition}'))
         counts[table] = connection.execute(text(f'SELECT count(*) FROM {schema}.{table}')).scalar_one()
     assert counts['courses'] == plan['archived']
+    # Legacy databases lack several referencing-side FK indexes. Without
+    # these, each cascade scans the whole child table for every course.
+    # Keep the indexes local to this maintenance transaction and drop them
+    # afterwards, preserving the original public schema.
+    maintenance_indexes = []
+    for table, column in (
+        ('course_chunks', 'course_id'), ('match_scores', 'course_id'),
+        ('match_scores', 'chunk_id'), ('plan_items', 'course_id'),
+        ('course_prerequisites', 'course_id'), ('course_prerequisites', 'prerequisite_id'),
+        ('match_feedback', 'course_id'), ('epvo_disciplines_normalized', 'approved_course_id'),
+    ):
+        name = f'ix_archive_{table}_{column}'
+        connection.execute(text(f'CREATE INDEX {name} ON public.{table}({column})'))
+        maintenance_indexes.append(name)
     # Chunk references may have NO ACTION constraints: remove the archived
     # score rows explicitly before the course -> chunks cascade.
     connection.execute(text(f'DELETE FROM public.match_scores WHERE {conditions["match_scores"]}'))
@@ -153,6 +167,8 @@ def archive(connection, plan, schema):
     assert protected_snapshot(connection) == plan['protected_sha256']
     for table in ('course_chunks', 'course_localizations'):
         assert connection.execute(text(f'SELECT count(*) FROM public.{table} WHERE {conditions[table]}')).scalar_one() == 0
+    for name in maintenance_indexes:
+        connection.execute(text(f'DROP INDEX public.{name}'))
     return counts
 
 

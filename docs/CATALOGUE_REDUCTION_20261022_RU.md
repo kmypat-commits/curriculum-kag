@@ -23,6 +23,13 @@ course_prerequisites, graph_edges, epvo_disciplines_normalized. Связи appro
 изменении проверенного плана; hashes пользовательских таблиц проверяются
 до commit и повторно после него. Новые schema создаются без перезаписи.
 
+Первый перенос безопасно отменён на cascade delete: в legacy public schema
+отсутствовали referencing-side индексы course_chunks/course_id и ряда других
+FK. Rollback подтверждён: courses=57392, архивная схема не создана. Повторный
+вариант создаёт временные индексы в той же транзакции и удаляет их после
+проверок. Интеграционный тест PostgreSQL повторно подтвердил rollback,
+восстановление и отсутствие оставшихся maintenance indexes.
+
 Причина роста исправлена: approve_epvo_candidates по умолчанию только связывает
 существующие курсы. Добавление карточек требует явного импорта. Контрольный CLI
 дополнительно ставит session-level before_flush guard против создания Course
