@@ -178,6 +178,7 @@ def build_curriculum_plan(
     selected_courses_override: List[Dict] | None = None,
     diversity_reference: frozenset[int] | None = None,
     diversity_references: tuple[frozenset[int], ...] = (),
+    baseline_course_ids: tuple[int, ...] | None = None,
 ) -> Dict:
     trace = PlannerTimer(f"[planner-timing] variant={variant_type}").trace
 
@@ -193,6 +194,7 @@ def build_curriculum_plan(
         )
         schedule, joint = build_verified_joint_schedule(
             project_version, db, variant_type, forbidden_sets=forbidden,
+            baseline_course_ids=baseline_course_ids,
         )
         verification = joint["verification"]
         selected_courses = [item for items in schedule.values() for item in items]

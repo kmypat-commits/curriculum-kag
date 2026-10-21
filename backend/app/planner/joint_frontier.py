@@ -184,7 +184,8 @@ def admit_candidate_chains(
 
 
 def build_joint_frontier(
-    version: ProjectVersion, db: Session, *, limit: int, variant_strategy: str | None = None
+    version: ProjectVersion, db: Session, *, limit: int, variant_strategy: str | None = None,
+    baseline_course_ids: tuple[int, ...] | None = None,
 ) -> PlanningProblem:
     """Retrieve programme-specific evidence and close each admissible chain.
 
@@ -521,6 +522,7 @@ def build_joint_frontier(
         required_core_blocks=core_blocks,
         preferred_core_blocks=preferred_core_blocks,
         variant_strategy=variant_strategy,
+        baseline_course_ids=baseline_course_ids,
         lo_weights={str(lo.lo_code): float(lo.weight if lo.weight is not None else 1.0)
                     for lo in version.learning_outcomes if lo.id in professional},
     )

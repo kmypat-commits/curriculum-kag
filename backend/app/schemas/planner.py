@@ -11,6 +11,7 @@ class PlannerBuildRequest(BaseModel):
     """
 
     variants: str | list[str] | None = Field(default="A", description="A by default; B/C are optional comparison variants")
+    baseline_revision_id: int | None = Field(default=None, ge=1, description="Confirmed university baseline required for B/C")
 
 
 class SyllabusWeekRow(BaseModel):

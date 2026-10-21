@@ -87,6 +87,7 @@ def build_verified_joint_schedule(
     db: Session,
     variant_type: str,
     forbidden_sets: tuple[frozenset[int], ...] = (),
+    baseline_course_ids: tuple[int, ...] | None = None,
 ) -> tuple[dict[int, list[dict]], dict]:
     """Return only a schedule passing both admission and independent verifier.
 
@@ -103,7 +104,8 @@ def build_verified_joint_schedule(
     for limit in FRONTIER_LIMITS:
         frontier_started = time.perf_counter()
         problem = build_joint_frontier(version, db, limit=limit,
-                                       variant_strategy="A" if variant_type == "A" else None)
+                                       variant_strategy="A" if variant_type == "A" else variant_type,
+                                       baseline_course_ids=baseline_course_ids)
         from app.config import settings
         if settings.BUILD_TELEMETRY_ENABLED:
             from app.services.build_events import emit_build_event
