@@ -22,6 +22,7 @@ from app.models.course import Course
 from app.models.embedding import MatchFeedback, MatchScore
 from app.models.epvo import EpvoDisciplineLoLink, EpvoDisciplineNormalized
 from app.models.project import ProjectVersion
+from app.models.university_baseline import UniversityBaselineRevision
 from app.models.plan import Plan, PlanItem
 from app.models.plan_build_status import PlanBuildStatus
 from app.models.user import User
@@ -42,6 +43,7 @@ from app.services.planner_drafts import (
 from app.services.plan_reporting import build_change_report as _build_change_report
 from app.services.plan_reporting import plan_snapshot as _plan_snapshot
 from app.services.program_spec_snapshot import build_program_spec_snapshot, program_spec_hash
+from app.services.university_baseline import load_revision
 from app.api.planner_state import (
     claim_build_status as _claim_build_status,
     get_build_status as _get_build_status,
@@ -513,7 +515,26 @@ def _build_plan_owned(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Build all three curriculum plan variants"""
-    request_hash = _build_request_hash(project_version_id, payload.variants)
+    requested_variants_for_gate = normalize_requested_variants(payload.variants)
+    baseline_revision = None
+    baseline_course_ids: tuple[int, ...] | None = None
+    if any(variant in {"B", "C"} for variant in requested_variants_for_gate):
+        if payload.baseline_revision_id is None:
+            raise HTTPException(status_code=409, detail={"code": "baseline_missing", "message": "B/C требуют подтверждённой baseline revision."})
+        try:
+            baseline_revision = load_revision(db, project_version_id, payload.baseline_revision_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"code": "baseline_revision_invalid", "message": str(exc)}) from exc
+        baseline_course_ids = tuple(sorted({int(row["course_id"]) for row in (baseline_revision.resolved_rows_json or []) if row.get("course_id") is not None}))
+        if not baseline_course_ids:
+            raise HTTPException(status_code=409, detail={"code": "baseline_empty", "message": "Подтверждённая baseline revision пуста."})
+    request_hash = _build_request_hash(
+        project_version_id,
+        payload.variants if payload.baseline_revision_id is None else {
+            "variants": payload.variants,
+            "baseline_revision_id": payload.baseline_revision_id,
+        },
+    )
     program_spec_json, spec_hash = _load_program_spec_for_command(db, project_version_id)
     conflicting_courses = required_exclusion_conflicts(program_spec_json.get("constraints"))
     if conflicting_courses:
@@ -562,6 +583,8 @@ def _build_plan_owned(
             # API/worker restart without reconstructing the request from an
             # OS process command line.
             requested_variants=payload.variants,
+            baseline_revision_id=payload.baseline_revision_id,
+            baseline_canonical_sha256=baseline_revision.canonical_sha256 if baseline_revision else None,
             state="queued",
             stage="queued",
             progress=0,
@@ -580,6 +603,8 @@ def _build_plan_owned(
             "--variants", json.dumps(payload.variants, ensure_ascii=False),
             "--job-id", queued["job_id"],
         ]
+        if payload.baseline_revision_id:
+            command.extend(["--baseline-revision-id", str(payload.baseline_revision_id)])
         if idempotency_key:
             command.extend(["--idempotency-key", idempotency_key])
         # In production a dedicated daemon owns the queue.  The legacy
@@ -808,6 +833,7 @@ def _build_plan_owned(
                 commit=False,
                 diversity_reference=reference,
                 diversity_references=other_references,
+                baseline_course_ids=baseline_course_ids,
             )
 
         variants: dict[str, dict] = {}

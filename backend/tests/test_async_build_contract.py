@@ -223,7 +223,7 @@ def test_async_build_enqueues_worker_without_recursive_spawn():
          patch.object(module.subprocess, "Popen", lambda *args, **kwargs: FakeProcess()):
         response = module.build_plan(
             project_version_id=77,
-            payload=PlannerBuildRequest(variants=["A", "B"]),
+            payload=PlannerBuildRequest(variants=["A"]),
             db=None,
             current_user=SimpleNamespace(id=12),
         )
@@ -235,7 +235,23 @@ def test_async_build_enqueues_worker_without_recursive_spawn():
     assert "4242" not in body["job_id"]
     assert claims[0][0] == 77
     assert claims[0][1]["state"] == "queued"
-    assert claims[0][1]["requested_variants"] == ["A", "B"]
+    assert claims[0][1]["requested_variants"] == ["A"]
+
+
+def test_async_build_rejects_b_without_confirmed_baseline():
+    import app.api.planner_build as module
+    from fastapi import HTTPException
+    from app.schemas.planner import PlannerBuildRequest
+
+    with patch.object(module.settings, "ASYNC_BUILDS", True), pytest.raises(HTTPException) as error:
+        module.build_plan(
+            project_version_id=77,
+            payload=PlannerBuildRequest(variants=["B"]),
+            db=None,
+            current_user=SimpleNamespace(id=12),
+        )
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "baseline_missing"
 
 
 def test_idempotency_replays_terminal_job_without_spawning_worker():

@@ -48,7 +48,7 @@ def _normalise_requested_variants(value):
     return "A" if value is None else value
 
 
-def _build_one(*, version_id: int, user_id: int, variants, job_id: str, idempotency_key: str | None) -> int:
+def _build_one(*, version_id: int, user_id: int, variants, job_id: str, idempotency_key: str | None, baseline_revision_id: int | None = None) -> int:
     db = SessionLocal()
     try:
         with generation_slot(db.get_bind()):
@@ -58,7 +58,7 @@ def _build_one(*, version_id: int, user_id: int, variants, job_id: str, idempote
                 raise RuntimeError("Build owner no longer exists")
             build_plan(
                 project_version_id=version_id,
-                payload=PlannerBuildRequest(variants=variants),
+                payload=PlannerBuildRequest(variants=variants, baseline_revision_id=baseline_revision_id),
                 db=db,
                 current_user=user,
                 idempotency_key=idempotency_key,
@@ -89,7 +89,8 @@ def _claim_and_build(db, row, status, *, job_id, user_id, variants):
             return None
         return _build_one(version_id=int(row.project_version_id), user_id=int(user_id),
                           variants=variants, job_id=job_id,
-                          idempotency_key=status.get("idempotency_key"))
+                          idempotency_key=status.get("idempotency_key"),
+                          baseline_revision_id=status.get("baseline_revision_id"))
 
 
 def _run_daemon(poll_seconds: float, max_jobs: int, *, job_ids=None, heartbeat_file=None) -> int:
@@ -236,6 +237,7 @@ def main() -> int:
     parser.add_argument("--variants")
     parser.add_argument("--job-id")
     parser.add_argument("--idempotency-key")
+    parser.add_argument("--baseline-revision-id", type=int)
     args = parser.parse_args()
     if args.daemon:
         logging.basicConfig(level=os.environ.get("PLANNER_WORKER_LOG_LEVEL", "INFO"))
@@ -254,6 +256,7 @@ def main() -> int:
         variants=variants,
         job_id=args.job_id,
         idempotency_key=args.idempotency_key,
+        baseline_revision_id=args.baseline_revision_id,
     )
 
 
