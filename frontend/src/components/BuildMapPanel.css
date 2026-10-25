@@ -105,27 +105,26 @@
 @media (max-width: 1100px) { .build-lab-workspace { grid-template-columns: 160px minmax(0, 1fr) 185px; } .build-map-panel { padding: 10px; } .build-lab-pipeline li { padding: 10px 8px; gap: 7px; } .build-map-panel h4 { font-size: 13px; } .build-lab-step-number { flex-basis: 24px; height: 24px; font-size: 14px; } }
 @media (max-width: 1050px) { .build-lab-workspace { grid-template-columns: 145px minmax(0, 1fr); } .build-lab-evidence { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); } .build-map-toolbar { flex-wrap: wrap; } .build-map-heading { flex-basis: 100%; } }
 @media (max-width: 600px) { .build-map-panel.is-expanded { inset: 4px; max-width: calc(100vw - 8px); max-height: calc(100vh - 8px); } .build-lab-workspace { grid-template-columns: minmax(0, 1fr); } .build-lab-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; } .build-lab-source { display: none; } .build-lab-evidence { grid-template-columns: minmax(0, 1fr); } .build-map-facts { gap: 8px; } .build-lab-semesters { max-height: 210px; } .build-map-controls { flex-wrap: wrap; } .build-lab-motion { flex-basis: 100%; } }
-/* Entrance presents received data; continuous light flow still requires a running job. */
-.has-reveal .lab-node { animation: lab-data-enter .65s ease-out backwards; }
-.has-reveal [data-reveal-step="1"] { animation-delay: .3s; }
-.has-reveal [data-reveal-step="2"] { animation-delay: .75s; }
-.has-reveal [data-reveal-step="3"] { animation-delay: 1.2s; }
+/* Reveal real received nodes; the sequence is bounded regardless of graph size. */
+.has-reveal .lab-node { animation: lab-data-enter .65s ease-out backwards; animation-delay: var(--lab-enter-delay, 0ms); }
+.has-reveal .build-lab-course { animation: lab-data-enter .45s ease-out backwards; }
 .has-reveal .build-lab-pipeline li, .has-reveal .build-lab-evidence > section { animation: lab-data-enter .6s ease-out backwards; }
 .has-reveal .build-lab-pipeline li:nth-child(2), .has-reveal .build-lab-evidence > section:nth-child(1) { animation-delay: .3s; }
 .has-reveal .build-lab-pipeline li:nth-child(3), .has-reveal .build-lab-evidence > section:nth-child(2) { animation-delay: .75s; }
 .has-reveal .build-lab-pipeline li:nth-child(4), .has-reveal .build-lab-evidence > section:nth-child(3) { animation-delay: 1.2s; }
 @keyframes lab-data-enter { from { opacity: 0; } }
-/* Activity is gated by the actual running job, viewport and motion preference.
-   A travelling light is activity feedback, never a simulated check/result. */
-.build-map-panel.has-motion .build-lab-pipeline li.is-current {
-    animation: lab-monitor-beat 2.8s cubic-bezier(.16, 1, .3, 1) infinite;
-}
+/* Only the active build step has a travelling perimeter; relationship flow
+   remains available in the completed plan while the panel is visible. */
+.build-lab-step-outline { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.build-lab-step-outline rect { width: calc(100% - 2px); height: calc(100% - 2px); fill: none; stroke: transparent; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.has-motion.is-building .is-current .build-lab-step-outline rect { stroke: var(--lab-blue); animation: lab-step-perimeter 7s linear infinite; }
+@keyframes lab-step-perimeter { to { stroke-dashoffset: -108; } }
 .build-lab-source, .build-lab-evidence > section, .build-lab-schedule {
     position: relative;
 }
-.build-map-panel.has-motion .build-lab-source::after,
-.build-map-panel.has-motion .build-lab-evidence > section::after,
-.build-map-panel.has-motion .build-lab-schedule::after {
+.build-map-panel.has-motion.is-building .build-lab-source::after,
+.build-map-panel.has-motion.is-building .build-lab-evidence > section::after,
+.build-map-panel.has-motion.is-building .build-lab-schedule::after {
     content: ''; position: absolute; pointer-events: none;
     top: 0; left: 12%; width: 28%; height: 1px;
     background: linear-gradient(90deg, transparent, var(--lab-blue), transparent);

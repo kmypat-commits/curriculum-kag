@@ -40,7 +40,7 @@ export default function BuildLabGraph({ elements, t, onInspect, motion }) {
                     <animateMotion path={p.d} dur={`${3.2 + i % 4 * .45}s`} begin={`${-(i * .23 + j * .09)}s`} repeatCount="indefinite"/>
                 </circle>)}
             </g>)}</g>}
-            {nodes.map(n => {
+            {nodes.map((n, index) => {
                 const profile = n.state === 'profile', outcome = n.state === 'outcome', semester = n.state === 'semester'
                 const color = profile ? 'core' : n.state === 'published' ? 'saved' : n.selected ? 'gold' : 'point'
                 const radius = profile ? 21 : outcome ? 8 : n.selected ? 6 : 4
@@ -50,7 +50,7 @@ export default function BuildLabGraph({ elements, t, onInspect, motion }) {
                     onKeyDown={e => { if (['Enter', ' '].includes(e.key)) { e.preventDefault(); onInspect(n) } }}
                     onMouseEnter={() => setFocused(n.id)} onMouseLeave={() => setFocused(null)}
                     onFocus={() => setFocused(n.id)} onBlur={() => setFocused(null)}
-                    style={{ opacity: focused && focused !== n.id && !linked.has(n.id) ? .25 : 1 }}>
+                    style={{ '--lab-enter-delay': `${Math.min(1800, n.state === 'profile' ? 0 : n.state === 'outcome' ? 180 + index * 110 : 650 + index * 20)}ms`, opacity: focused && focused !== n.id && !linked.has(n.id) ? .25 : 1 }}>
                     <title>{profile ? t('build_map_goal') : n.label}{n.detail ? ` — ${n.detail}` : ''}</title>
                     {profile ? <><circle r="33" fill="#2ccd9e12"/><circle r="27" fill="none" stroke="#54eab4" strokeWidth="1"/>
                         <circle r={radius} fill={`url(#${prefix}-${color})`}/>

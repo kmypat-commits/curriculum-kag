@@ -6,6 +6,38 @@ import userEvent from '@testing-library/user-event'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
 
+it('opens a new build immediately with the actual outcomes before candidates arrive', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'running', events: [], next_cursor: 0, has_more: false } })
+    const { container, rerender } = render(<BuildMapPanel autoOpen versionId={3}
+        status={{ job_id: 'new', state: 'queued', stage: 'epvo_repository' }} title="Programme" t={x => x}
+        learningOutcomes={[{ lo_code: 'LO1', lo_text: 'Design safe structures' }, { lo_code: 'LO2', lo_text: 'Assess materials' }]} />)
+    const region = await screen.findByRole('region')
+    expect(within(screen.getByRole('img')).getByRole('button', { name: 'LO1' })).toBeInTheDocument()
+    expect(within(screen.getByRole('img')).getByRole('button', { name: 'LO2' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.lab-node[data-reveal-step="2"]')).toHaveLength(0)
+    expect(container.querySelector('.is-current')).toHaveAttribute('aria-current', 'step')
+    fireEvent.click(within(region).getByRole('button', { name: 'build_map_close' }))
+    rerender(<BuildMapPanel autoOpen versionId={3} status={{ job_id: 'new', state: 'running' }} title="Programme" t={x => x} />)
+    expect(screen.queryByRole('region')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+})
+
+it('keeps relationship flow on completion but stops the active-stage outline', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    axios.get.mockResolvedValue({ data: { state: 'complete', next_cursor: 2, has_more: false, events: [
+        { sequence: 1, type: 'candidates', data: { count: 1, nodes: [{ course_id: 42, title: 'Materials' }] } },
+        { sequence: 2, type: 'stage', data: { state: 'complete', stage: 'complete' } },
+    ] } })
+    render(<BuildMapPanel versionId={3} status={{ state: 'running', job_id: 'done' }} title="Programme" t={x => x} />)
+    fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
+    await waitFor(() => expect(screen.getByRole('region')).not.toHaveClass('is-building'))
+    expect(screen.getByRole('region')).toHaveClass('has-motion')
+    fireEvent.click(within(screen.getByRole('img')).getByRole('button', { name: 'Materials' }))
+    expect(screen.getByRole('status')).toHaveTextContent('ID 42')
+    vi.unstubAllGlobals()
+})
+
 it('traps fullscreen keyboard focus and restores it on escape and close', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     axios.get.mockResolvedValue({ data: { state: 'complete', events: [], next_cursor: 0, has_more: false } })
@@ -55,8 +87,6 @@ it('renders recorded course relationships as inspectable geometry with bounded l
     fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
     const graphCourse = await within(screen.getByRole('img')).findByRole('button', { name: 'Timber design', hidden: false })
     expect(graphCourse.closest('svg')).not.toBeNull()
-    expect(view.container.querySelectorAll('animateMotion')).toHaveLength(0)
-    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_motion' }))
     await waitFor(() => expect(view.container.querySelectorAll('animateMotion')).toHaveLength(6))
     fireEvent.click(graphCourse)
     expect(screen.getByRole('status')).toHaveTextContent('ID 8087')
@@ -127,13 +157,12 @@ it('uses the actual event stream state while the slower status poll still says q
     axios.get.mockResolvedValue({ data: { state: 'running', events: [], next_cursor: 0, has_more: false } })
     render(<BuildMapPanel versionId={3} status={{ state: 'queued', job_id: 'real' }} title="Programme" t={x => x} />)
     fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_show_graph' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_motion' }))
     await waitFor(() => expect(screen.getByRole('region')).toHaveClass('has-motion'))
+    expect(screen.getByRole('region')).toHaveClass('is-building')
     vi.unstubAllGlobals()
 })
 
-it('pauses opted-in light flow outside the viewport and after completion', async () => {
+it('pauses light flow outside the viewport and keeps it after completion', async () => {
     let observeVisibility
     vi.stubGlobal('IntersectionObserver', class {
         constructor(callback) { observeVisibility = callback }
@@ -143,7 +172,6 @@ it('pauses opted-in light flow outside the viewport and after completion', async
     axios.get.mockResolvedValue({ data: { state: 'idle' } })
     const { rerender } = render(<BuildMapPanel versionId={3} status={{ state: 'running' }} title="Programme" t={x => x} />)
     fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'build_map_motion' }))
     expect(screen.getByRole('region')).not.toHaveClass('has-motion')
     const { act } = await import('@testing-library/react')
     act(() => observeVisibility([{ isIntersecting: true }]))
@@ -152,19 +180,20 @@ it('pauses opted-in light flow outside the viewport and after completion', async
     expect(screen.getByRole('region')).not.toHaveClass('has-motion')
     act(() => observeVisibility([{ isIntersecting: true }]))
     rerender(<BuildMapPanel versionId={3} status={{ state: 'complete' }} title="Programme" t={x => x} />)
-    expect(screen.getByRole('region')).not.toHaveClass('has-motion')
+    expect(screen.getByRole('region')).toHaveClass('has-motion')
+    expect(screen.getByRole('region')).not.toHaveClass('is-building')
     vi.unstubAllGlobals()
 })
 
-it('shows the programme identity with motion off until explicitly enabled', async () => {
+it('shows the programme identity with motion enabled and allows pausing', async () => {
     axios.get.mockResolvedValue({ data: { state: 'idle' } })
     render(<BuildMapPanel versionId={3} status={{ state: 'idle' }} title="Wood engineering" t={x => x} />)
     fireEvent.click(screen.getByRole('button', { name: 'build_map_open' }))
     expect(screen.getByText('Wood engineering')).toBeInTheDocument()
     const motion = screen.getByRole('checkbox', { name: 'build_map_motion' })
-    expect(motion).not.toBeChecked()
-    fireEvent.click(motion)
     expect(motion).toBeChecked()
+    fireEvent.click(motion)
+    expect(motion).not.toBeChecked()
 })
 
 it('does not fetch telemetry until opened and explains a missing live job', async () => {

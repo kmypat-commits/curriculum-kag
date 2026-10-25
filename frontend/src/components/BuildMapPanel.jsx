@@ -5,13 +5,13 @@ import BuildLabGraph from './BuildLabGraph'
 import './BuildMapPanel.css'
 
 
-export default function BuildMapPanel({ versionId, status, title, t, stageLabel = stage => stage, onPublished }) {
+export default function BuildMapPanel({ versionId, status, title, learningOutcomes = [], autoOpen = false, t, stageLabel = stage => stage, onPublished }) {
     const [opened, setOpened] = useState(false)
     const [expanded, setExpanded] = useState(false)
     const [inspected, setInspected] = useState(null)
     const [graphEnabled, setGraphEnabled] = useState(true)
     const [textOnly, setTextOnly] = useState(false)
-    const [motion, setMotion] = useState(false)
+    const [motion, setMotion] = useState(true)
     const [visible, setVisible] = useState(!document.hidden)
     const [inViewport, setInViewport] = useState(false)
     const panel = useRef(null)
@@ -23,6 +23,13 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
         opener.current?.focus()
     }
     const publishedJob = useRef(null)
+    const openedJob = useRef(null)
+    useEffect(() => {
+        if (!autoOpen || !status?.job_id || !['queued', 'running'].includes(status?.state)) return
+        if (openedJob.current === `${versionId}:${status.job_id}`) return
+        openedJob.current = `${versionId}:${status.job_id}`
+        setOpened(true)
+    }, [autoOpen, versionId, status?.job_id, status?.state])
     const { events, error, noJob, state: eventState, job: eventJob } = useBuildEvents(versionId, status?.job_id, opened)
     useEffect(() => {
         if (eventState !== 'complete' || eventJob?.versionId !== versionId
@@ -33,20 +40,26 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
         publishedJob.current = key
         onPublished(versionId)
     }, [eventState, eventJob, versionId, status?.job_id, status?.state, onPublished])
-    const elements = useMemo(() => buildEventGraph(events, title, t('build_map_aggregate')), [events, title, t])
+    const initialOutcomes = useMemo(() => (status?.program_spec_json?.learning_outcomes || learningOutcomes)
+        .map(lo => ({ code: lo.code || lo.lo_code, text: lo.text || lo.lo_text }))
+        .filter(lo => lo.code), [status?.program_spec_json, learningOutcomes])
+    const elements = useMemo(() => buildEventGraph(events, title, t('build_map_aggregate'), initialOutcomes), [events, title, t, initialOutcomes])
     const candidate = [...events].reverse().find(e => e.type === 'candidates')?.data
     const lastStage = [...events].reverse().find(e => e.type === 'stage')?.data
     const selection = [...events].reverse().find(e => e.type === 'selected' && (!candidate?.variant || e.data.variant === candidate.variant))?.data
     const schedule = selection?.schedule || {}
     const credits = Object.values(schedule).flat().reduce((sum, c) => sum + (Number(c.credits) || 0), 0)
     const chosenCount = Object.values(schedule).flat().length
-    const stage = lastStage?.stage || status?.stage || 'idle'
+    const stage = ['queued', 'running'].includes(status?.state)
+        ? lastStage?.stage || status?.stage || 'idle' : status?.stage || lastStage?.stage || 'idle'
     const steps = ['build_map_step_candidates', 'build_map_step_verify', 'build_map_step_schedule', 'build_map_step_save']
     const descriptions = ['build_map_step_candidates_detail', 'build_map_step_verify_detail', 'build_map_step_schedule_detail', 'build_map_step_save_detail']
     const currentStep = stage === 'complete' || stage === 'saving' ? 3 : selection ? 2
         : stage === 'variants' || stage === 'planning' ? 1 : 0
-    const terminal = ['complete', 'cancelled', 'failed', 'rejected', 'timed_out', 'infeasible', 'superseded'].includes(status?.state)
-    const animate = motion && visible && inViewport && !textOnly && !terminal && (eventState || status?.state) === 'running'
+    const terminal = ['complete', 'cancelled', 'failed', 'rejected', 'timed_out', 'infeasible', 'superseded']
+        .some(value => value === status?.state || value === eventState)
+    const animate = motion && visible && inViewport && !textOnly && graphEnabled
+    const active = !terminal && ['queued', 'running'].includes(eventState || status?.state)
     const nodeList = <ul className="build-map-node-list">
         {elements.filter(e => e.data.courseId || e.data.state === 'outcome').map(e => <li key={e.data.id}>
             <button type="button" onClick={() => setInspected(e.data)}>{e.data.label}</button>
@@ -102,7 +115,7 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
     }, [expanded, opened])
     return <div className="build-map-wrapper">
         <button ref={opener} className="btn btn-secondary" type="button" aria-expanded={opened} onClick={() => opened ? closePanel() : setOpened(true)}>{t(opened ? 'build_map_close' : 'build_map_open')}</button>
-        {opened && <section ref={panel} tabIndex={-1} role={expanded ? 'dialog' : undefined} aria-modal={expanded ? true : undefined} className={`build-map-panel${expanded ? ' is-expanded' : ''}${motion && visible && inViewport && !textOnly ? ' has-reveal' : ''}${animate ? ' has-motion' : ''}`} aria-label={t('build_map_open')}>
+        {opened && <section ref={panel} tabIndex={-1} role={expanded ? 'dialog' : undefined} aria-modal={expanded ? true : undefined} className={`build-map-panel${expanded ? ' is-expanded' : ''}${motion && visible && inViewport && !textOnly ? ' has-reveal' : ''}${animate ? ' has-motion' : ''}${active ? ' is-building' : ''}`} aria-label={t('build_map_open')}>
             <div className="build-map-toolbar"><div className="build-map-heading"><h3>{t('build_map_lab')}</h3><p>{title}</p></div>
                 <label className="build-lab-motion"><input type="checkbox" checked={motion} disabled={textOnly} onChange={e => setMotion(e.target.checked)} /> {t('build_map_motion')}</label>
                 <button ref={expandButton} type="button" onClick={() => setExpanded(v => !v)}>{t(expanded ? 'build_map_restore' : 'build_map_expand')}</button>
@@ -110,7 +123,7 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
             </div>
             <div className="build-map-facts" aria-live="polite">
                 <span><small>{t('build_map_candidates')}</small><strong>{candidate?.count ?? '—'}</strong></span>
-                <span><small>{t('build_map_stage')}</small><strong>{stageLabel(lastStage?.stage || status?.stage || 'idle')}</strong></span>
+                <span><small>{t('build_map_stage')}</small><strong>{stageLabel(stage)}</strong></span>
                 <span><small>{t('build_map_variant')}</small><strong>{candidate?.variant || '—'}</strong></span>
             </div>
             {error && <p role="status">{t('build_map_connection_error')}</p>}
@@ -118,11 +131,12 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
             <div className="build-lab-workspace">
             <aside className="build-lab-stages"><ol className="build-lab-pipeline">
                 {steps.map((key, i) => <li key={key} className={i === currentStep ? 'is-current' : ''} aria-current={i === currentStep ? 'step' : undefined}>
+                    <svg className="build-lab-step-outline" aria-hidden="true"><rect x="1" y="1" rx="5" pathLength="100" /></svg>
                     <span className="build-lab-step-number">{i + 1}</span><div><h4>{t(key)}</h4><p>{t(descriptions[i])}</p></div>
                 </li>)}
             </ol><div className="build-lab-source"><h4>{t('build_map_source')}</h4><p>{t('build_map_explanation')}</p>
                 <dl><div><dt>{t('build_map_candidates')}</dt><dd>{candidate?.count ?? '—'}</dd></div>
-                    <div><dt>{t('build_map_outcomes')}</dt><dd>{candidate?.learning_outcomes?.length ?? '—'}</dd></div>
+                    <div><dt>{t('build_map_outcomes')}</dt><dd>{candidate?.learning_outcomes?.length ?? (initialOutcomes.length || '—')}</dd></div>
                     <div><dt>{t('build_map_visible_nodes')}</dt><dd>{elements.filter(e => !e.data.source).length}</dd></div></dl>
             </div></aside>
             <div className="build-lab-canvas">
@@ -137,7 +151,7 @@ export default function BuildMapPanel({ versionId, status, title, t, stageLabel 
             {textOnly || !graphEnabled ? <>
                 <p>{t('build_map_text_alternative')}</p>
                 {nodeList}
-            </> : !noJob && <BuildLabGraph elements={elements} t={t} onInspect={setInspected} motion={animate} />}
+            </> : <BuildLabGraph key={`${versionId}:${status?.job_id || 'preview'}`} elements={elements} t={t} onInspect={setInspected} motion={animate} />}
             {!textOnly && graphEnabled && !noJob && <details><summary>{t('build_map_text_alternative')}</summary>{nodeList}</details>}
             <div className="build-map-legend"><span>{t('build_map_candidates')}</span><span>{t('build_map_selected')}</span><span>{t('build_map_published')}</span></div>
             </div>

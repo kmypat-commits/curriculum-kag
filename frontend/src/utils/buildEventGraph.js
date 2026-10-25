@@ -1,4 +1,4 @@
-export function buildEventGraph(events, title, aggregateLabel = '…') {
+export function buildEventGraph(events, title, aggregateLabel = '…', initialOutcomes = []) {
     const latestCandidates = [...events].reverse().find(e => e.type === 'candidates')
     const variant = latestCandidates?.data?.variant
     const selection = [...events].reverse().find(e => e.type === 'selected' && (!variant || e.data.variant === variant))
@@ -9,7 +9,7 @@ export function buildEventGraph(events, title, aggregateLabel = '…') {
             ? publication.published_variants.includes(selection?.data?.variant)
             : publication.publication_status !== 'partial')
     const candidateData = latestCandidates?.data || {}
-    const los = (candidateData.learning_outcomes || []).slice(0, 12)
+    const los = (candidateData.learning_outcomes || initialOutcomes).slice(0, 12)
     const schedule = selection?.data?.schedule || {}
     const semesters = Object.keys(schedule).slice(0, 16)
     const selectedIds = new Set(selection?.data?.course_ids || [])

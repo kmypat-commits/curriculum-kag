@@ -947,7 +947,7 @@ export default function PlanBuilder() {
                     elapsedLabel={buildElapsedLabel()}
                     longRunningHint={buildLongRunningHint()}
                 />
-                <BuildMapPanel versionId={project?.latest_version?.id} status={buildStatus} title={project?.title || ''} t={t} stageLabel={buildStageLabel} onPublished={refreshPublishedBuild} />
+                <BuildMapPanel versionId={project?.latest_version?.id} status={buildStatus} title={project?.title || ''} learningOutcomes={project?.latest_version?.learning_outcomes || []} autoOpen t={t} stageLabel={buildStageLabel} onPublished={refreshPublishedBuild} />
                 <ContentEvaluationPanel versionId={project?.latest_version?.id} planId={currentPlan?.plan_id} t={t}
                     unavailable={building || applyingQuality}
                     mode={project?.constraints?.content_evaluation_mode || 'shadow'} onModeChange={saveContentEvaluationMode} />
