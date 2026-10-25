@@ -9,11 +9,12 @@
 ссылки планов/ручного feedback/черновиков/baseline/силлабусов и замыкание
 обязательных пререквизитов. Равенство названий не используется для удаления.
 
-Архив пользователя на внешнем диске:
-`E:\curriculum-kag-archive\20261022-before-catalog-reduction`.
-Там сохраняются workspace, полный PostgreSQL dump с SHA256, точный план с IDs,
-отчёт применения и отдельный dump архивной схемы. Исходный frozen manifest
-и прежние translation snapshots не изменяются.
+Текущий обратимый архив создан на `D:` по прямому указанию пользователя:
+`D:\curriculum-kag-archive\20261025-before-catalog-reduction`.
+Он будет перенесён на новый внешний диск `E:` после проверки. В нём хранятся
+полный PostgreSQL dump с SHA256, точный план с IDs, отчёт применения и
+отдельный dump архивной схемы. Полная копия workspace локально не создавалась;
+исходный frozen manifest и прежние translation snapshots не изменялись.
 
 Архивирование переносит точные строки в отдельную PostgreSQL schema:
 courses, course_chunks, course_localizations, embeddings, match_scores,
@@ -48,9 +49,28 @@ FK/cascade, rollback DDL/данных при ошибке, восстановл�
 Точечное восстановление архивированных строк при отсутствии конфликтов:
 
 ```powershell
-backend/venv/Scripts/python.exe backend/scripts/archive_catalogue_to_snapshot.py --restore --archive-dir E:/curriculum-kag-archive/20261022-before-catalog-reduction
+backend/venv/Scripts/python.exe backend/scripts/archive_catalogue_to_snapshot.py --restore --archive-dir D:/curriculum-kag-archive/20261025-before-catalog-reduction
 ```
 
 Команда восстановления не запускалась в рабочей БД. При конфликте Course IDs,
 кодов или переназначенных EPVO mappings она отменяет транзакцию. Полный dump
 служит отдельной точкой восстановления всей БД до сокращения.
+
+## Применение 25 октября 2026
+
+Fresh dry-run перед транзакцией подтвердил прежний exact plan:
+`before=57 392`, `retained=21 495`, `archived=35 897`,
+`plan_sha256=d1e45b7edc46577a79b446097fbed60e6ced4c68d2813ab74fda860766a48724`.
+
+Перед переносом создан и проверен полный dump
+`database-before.dump`: 2 369 005 615 байт,
+SHA-256 `5918c5ed2f1d356816fd130e3567d9fc2d4c0dd51d5661f74512a76db1ffc4ac`.
+`pg_restore --list` подтвердил наличие `public.courses`.
+
+Транзакция завершилась с committed readback: активный каталог — 21 495,
+схема `catalogue_archive_20261022` — 35 897. Независимая SQL-проверка
+подтвердила ноль отсутствующих Course в plan_items, пререквизитах и
+localizations. Отдельный архив схемы `catalogue-archive.dump` сохранён рядом:
+74 818 164 байта, SHA-256
+`b3533b8bb1ba11306369cb12ad5eca5823f76fb00aa06ec0c1f59a78e83b0476`;
+его TOC содержит archived `courses`.
