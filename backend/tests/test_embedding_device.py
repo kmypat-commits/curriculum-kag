@@ -6,6 +6,40 @@ from app.kag.embedding_service import EmbeddingService
 import numpy as np
 import pytest
 
+
+def test_cuda_memory_pressure_retries_smaller_batches_without_hash_fallback():
+    class LimitedModel:
+        device = 'cuda:0'
+        def __init__(self): self.sizes = []
+        def encode(self, texts, **kwargs):
+            self.sizes.append(kwargs['batch_size'])
+            if kwargs['batch_size'] > 2:
+                raise RuntimeError('CUDA out of memory')
+            return np.ones((len(texts), 384), dtype=np.float32)
+    service = EmbeddingService()
+    service._load_attempted = True
+    model = service.model = LimitedModel()
+    assert service.encode_batch(['a', 'b', 'c']).shape == (3, 384)
+    assert model.sizes[-1] == 2
+    assert service.model is model
+    assert service.get_model_version() != 'feature-hash-v2'
+
+
+def test_exhausted_cuda_memory_aborts_without_replacing_semantic_evidence():
+    class ExhaustedModel:
+        device = 'cuda:0'
+        def encode(self, *args, **kwargs):
+            raise RuntimeError('CUDA out of memory')
+    service = EmbeddingService()
+    service._load_attempted = True
+    model = service.model = ExhaustedModel()
+    with pytest.raises(RuntimeError, match='out of memory'):
+        service.encode_batch(['a'])
+    assert service.model is model
+    assert not service._cache
+    with pytest.raises(RuntimeError, match='out of memory'):
+        service.encode('a')
+
 @pytest.mark.parametrize('batch', [False, True])
 def test_failed_transformer_is_not_reported_or_cached_as_semantic(batch):
     class FailedModel:

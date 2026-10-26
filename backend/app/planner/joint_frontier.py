@@ -209,6 +209,21 @@ def admit_candidate_chains(
     return tuple(selected.values()), exclusions
 
 
+def ict_competency_blocks(titles: dict[int, str], constraints: dict) -> tuple[RequiredCoreBlock, ...]:
+    """Use the final verifier's existing ICT ontology during course choice."""
+    from app.planner.verifier import _ict_competency_requirements
+    return tuple(
+        RequiredCoreBlock(
+            block_id=f"ict:{code}",
+            course_ids=tuple(sorted(cid for cid, title in titles.items()
+                                    if any(all(stem in str(title or '').casefold() for stem in stems)
+                                           for stems in alternatives))),
+            min_courses=1, min_credits=0,
+        )
+        for code, alternatives in _ict_competency_requirements(constraints).items()
+    )
+
+
 def build_joint_frontier(
     version: ProjectVersion, db: Session, *, limit: int, variant_strategy: str | None = None,
     baseline_course_ids: tuple[int, ...] | None = None,
@@ -327,9 +342,17 @@ def build_joint_frontier(
         ranking, candidate_titles, version.project.title, ranking,
         budget=max(1, limit // 2),
     )
+    # Reserve a small balanced set before truncation, but keep all existing
+    # domain, evidence, duplicate and prerequisite admission checks below.
+    ict_seeds = reserve_preferred_seeds(
+        {block.block_id: {cid for cid in block.course_ids
+                          if max(evidence.get(cid, {}).values(), default=0) >= MATCH_THRESHOLD}
+         for block in ict_competency_blocks(candidate_titles, constraints)},
+        ranking, budget=min(30, max(1, limit // 3)),
+    )
     seed_cap = max(limit * 4, limit + len(professional))
     ranked_ids, omitted_seed_count = prioritize_required_seeds(
-        [*preferred_seed_ids, *profile_seed_ids, *ranked_ids], methodist_required_ids | block_seed_ids,
+        [*ict_seeds, *preferred_seed_ids, *profile_seed_ids, *ranked_ids], methodist_required_ids | block_seed_ids,
         cap=seed_cap,
     )
 
@@ -516,6 +539,16 @@ def build_joint_frontier(
             min_courses=block["min_courses"], min_credits=block["min_credits"],
         )
         for block in required_blocks
+    )
+    # Match canonical Course titles, as the independent final verifier does.
+    # Missing coverage is a real constraint failure, never a waived gate.
+    fixed_ids = usable_ids.difference(candidate_titles)
+    canonical_titles = dict(candidate_titles)
+    if fixed_ids:
+        canonical_titles.update({int(cid): str(title or '') for cid, title in db.query(
+            Course.id, Course.title).filter(Course.id.in_(sorted(fixed_ids))).all()})
+    core_blocks += ict_competency_blocks(
+        {cid: title for cid, title in canonical_titles.items() if cid in usable_ids}, constraints,
     )
     preferred_core_blocks = tuple(
         PreferredCoreBlock(

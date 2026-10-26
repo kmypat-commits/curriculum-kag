@@ -75,6 +75,10 @@ def _frontier_fingerprint(problem) -> str:
         "domain_minima": getattr(problem, "domain_minima", ()),
         "variant_strategy": getattr(problem, "variant_strategy", None),
         "lo_weights": getattr(problem, "lo_weights", {}),
+        "required_core_blocks": [
+            (block.block_id, block.course_ids, block.min_courses, block.min_credits)
+            for block in getattr(problem, "required_core_blocks", ())
+        ],
     }
     return hashlib.sha256(json.dumps(
         payload, ensure_ascii=False, sort_keys=True,

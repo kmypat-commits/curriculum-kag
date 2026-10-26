@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import re
+import sys
 from collections import OrderedDict
 from threading import RLock
 import numpy as np
@@ -9,6 +10,24 @@ from app.config import settings
 SentenceTransformer = None
 SBERT_INSTALLED = importlib.util.find_spec("sentence_transformers") is not None
 HAS_TRANSFORMERS = False
+
+
+def _memory_failure(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return isinstance(exc, MemoryError) or any(term in message for term in (
+        'out of memory', 'memory allocation failed', 'defaultcpuallocator',
+    ))
+
+
+def _release_cuda_cache() -> None:
+    # Torch is already loaded by a real transformer; don't import it just
+    # for tests or a lightweight/hash-only runtime.
+    torch = sys.modules.get('torch')
+    if torch is not None:
+        try:
+            torch.cuda.empty_cache()
+        except (AttributeError, RuntimeError):
+            pass
 
 
 def _resolve_sbert_device(requested: str) -> str | None:
@@ -36,6 +55,7 @@ class EmbeddingService:
         self._cache_lock = RLock()
         self._model_lock = RLock()
         self._cache_limit = 8192
+        self._batch_size_limit = 128
 
     def _ensure_model_loaded(self):
         if self._load_attempted or not (SBERT_INSTALLED and settings.ENABLE_SBERT):
@@ -44,7 +64,11 @@ class EmbeddingService:
             if self._load_attempted:
                 return
             self._load_attempted = True
-            self._load_model()
+            try:
+                self._load_model()
+            except BaseException:
+                self._load_attempted = False
+                raise
 
     def _runtime_profile(self) -> str:
         if self.model is not None:
@@ -68,6 +92,8 @@ class EmbeddingService:
                 local_files_only=True,
             )
         except (AssertionError, ImportError, OSError, RuntimeError, ValueError, TypeError) as exc:
+            if _memory_failure(exc):
+                raise
             self.load_error = str(exc)
             self.model = None
     def encode(self, text: str) -> np.ndarray:
@@ -89,6 +115,8 @@ class EmbeddingService:
                         self._cache.popitem(last=False)
                 return vector
             except (RuntimeError, ValueError, TypeError, OSError) as exc:
+                if _memory_failure(exc):
+                    raise
                 self.load_error = str(exc)
                 self.model = None
                 # Fallback vectors belong to a different feature space.
@@ -134,7 +162,9 @@ class EmbeddingService:
                 # internally, but avoids Python/model setup overhead for every
                 # small frontier batch.  The configured bound keeps staging
                 # CPU/RAM usage predictable.
-                batch_size = min(max(int(settings.SBERT_BATCH_SIZE), 1), 128)
+                batch_size = min(max(int(settings.SBERT_BATCH_SIZE), 1), self._batch_size_limit)
+                if str(getattr(self.model, 'device', '')).startswith('cuda'):
+                    batch_size = min(batch_size, 8)
                 # A candidate can occur more than once in the same frontier
                 # (for example through equivalent EPVO records or localized
                 # catalogue entries).  The cache only receives values *after*
@@ -153,13 +183,22 @@ class EmbeddingService:
                         unique_indices.append(index)
                     else:
                         duplicate_indices.setdefault(original, []).append(index)
-                encoded_matrix = self.model.encode(
-                    [texts[index] for index in unique_indices],
-                    batch_size=batch_size,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                    show_progress_bar=False,
-                ).astype(np.float32)
+                while True:
+                    try:
+                        encoded_matrix = self.model.encode(
+                            [texts[index] for index in unique_indices],
+                            batch_size=batch_size,
+                            convert_to_numpy=True,
+                            normalize_embeddings=True,
+                            show_progress_bar=False,
+                        ).astype(np.float32)
+                        break
+                    except RuntimeError as exc:
+                        if not _memory_failure(exc) or batch_size <= 1:
+                            raise
+                        batch_size = max(1, batch_size // 2)
+                        self._batch_size_limit = batch_size
+                        _release_cuda_cache()
                 for index, vector in zip(unique_indices, encoded_matrix):
                     vectors[index] = vector
                     with self._cache_lock:
@@ -171,6 +210,10 @@ class EmbeddingService:
                         vectors[duplicate_index] = vector
                 return np.vstack(vectors).astype(np.float32)
             except (RuntimeError, ValueError, TypeError, OSError) as exc:
+                if _memory_failure(exc):
+                    # Let the transactional scorer keep the previous evidence.
+                    # Resource pressure must not silently replace it with hashes.
+                    raise
                 self.load_error = str(exc)
                 self.model = None
                 # Re-encode cached rows too: never return a hybrid matrix.
